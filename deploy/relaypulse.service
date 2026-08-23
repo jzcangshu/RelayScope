@@ -1,0 +1,23 @@
+[Unit]
+Description=RelayPulse model uptime monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=relaypulse
+Group=relaypulse
+WorkingDirectory=/opt/relaypulse
+ExecStart=/opt/relaypulse/relaypulse
+EnvironmentFile=-/etc/relaypulse/relaypulse.env
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/relaypulse
+
+[Install]
+WantedBy=multi-user.target

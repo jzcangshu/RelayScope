@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RelayPulse 管理</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar"><strong class="brand">RelayPulse 管理</strong><a href="/">公开页面</a></header>
+  <main>
+    <section class="empty" id="login-panel">
+      <h1>管理员登录</h1>
+      <form id="login-form" class="inline-form"><input id="password" type="password" minlength="16" placeholder="管理员密码" autocomplete="current-password"><button type="submit">登录</button></form>
+      <p id="login-message">管理员密码保存在本机运行目录中。</p>
+    </section>
+    <section id="dashboard" hidden>
+      <div class="admin-heading"><div><h1>管理员控制台</h1><p id="dashboard-message" class="muted">正在读取运行状态。</p></div><button id="refresh" type="button">刷新</button></div>
+      <nav class="admin-tabs" aria-label="管理视图">
+        <button type="button" data-tab="sites" aria-pressed="true">站点</button>
+        <button type="button" data-tab="rules" aria-pressed="false">模型规则</button>
+        <button type="button" data-tab="runs" aria-pressed="false">采集记录</button>
+		<button type="button" data-tab="feedback" aria-pressed="false">用户反馈</button>
+      </nav>
+      <section id="sites-panel" class="admin-panel">
+        <div class="section-head"><h2>站点与适配器</h2><div class="actions"><button id="session-sync" type="button">浏览器同步</button><button id="add-site" type="button">新增站点</button></div></div>
+        <div id="site-list" class="rows"></div>
+      </section>
+      <section id="rules-panel" class="admin-panel" hidden>
+        <div class="section-head"><h2>热门模型匹配规则</h2><button id="add-rule" type="button">新增规则</button></div>
+        <div id="rule-list" class="rows"></div>
+        <div class="section-head conflict-head"><h2>匹配冲突</h2></div>
+        <div id="conflict-list" class="rows"></div>
+      </section>
+      <section id="runs-panel" class="admin-panel" hidden>
+        <div class="section-head"><div><h2>站点采集档案</h2><p id="run-summary" class="muted"></p></div></div>
+        <div id="run-list" class="run-archive"></div>
+      </section>
+	  <section id="feedback-panel" class="admin-panel" hidden><div class="section-head"><h2>用户反馈</h2></div><div id="feedback-list" class="rows"></div></section>
+    </section>
+  </main>
+
+  <dialog id="site-dialog" class="admin-dialog">
+    <form id="site-form" method="dialog">
+      <h2 id="site-form-title">编辑站点</h2>
+      <input id="site-id" type="hidden">
+      <label>名称<input id="site-name" required></label>
+      <label>基础地址<input id="site-base-url" type="url" required></label>
+      <label>监测页面<input id="site-source-url" type="url" required></label>
+      <label>适配器<select id="site-adapter"></select></label>
+      <label>采集间隔（分钟）<input id="site-interval" type="number" min="5" max="1440" value="15" required></label>
+      <label>抖动（秒）<input id="site-jitter" type="number" min="0" max="3600" value="120" required></label>
+      <label>适配器配置 JSON<textarea id="site-config" rows="6">{}</textarea></label>
+      <label>公告自定义原因（留空则显示后台报错）<textarea id="site-failure-reason" rows="3" maxlength="500" placeholder="例如：源站暂时限制国内 IP，正在处理中"></textarea></label>
+      <label class="check"><input id="site-enabled" type="checkbox" checked> 启用采集</label>
+      <label class="check"><input id="site-session-required" type="checkbox"> 需要登录态</label>
+      <div class="dialog-actions"><button type="button" data-close="site-dialog">取消</button><button type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+
+  <dialog id="rule-dialog" class="admin-dialog">
+    <form id="rule-form" method="dialog">
+      <h2>编辑匹配规则</h2>
+      <input id="rule-id" type="hidden">
+      <label>供应商<input id="rule-provider" required></label>
+      <label>标准模型名<input id="rule-name" required></label>
+      <label>必选关键词（逗号分隔）<input id="rule-required"></label>
+      <label>任选关键词（逗号分隔）<input id="rule-any"></label>
+      <label>排除关键词（逗号分隔）<input id="rule-excluded"></label>
+      <label>别名（逗号分隔）<input id="rule-aliases"></label>
+      <label>正则表达式<input id="rule-pattern"></label>
+      <label>优先级<input id="rule-priority" type="number" value="100"></label>
+      <label class="check"><input id="rule-enabled" type="checkbox" checked> 启用</label>
+      <button id="preview-rule" type="button">预览命中</button>
+      <div id="rule-preview" class="preview-list muted"></div>
+      <div class="dialog-actions"><button type="button" data-close="rule-dialog">取消</button><button type="submit">保存</button></div>
+    </form>
+  </dialog>
+  <script src="/admin/admin.js" defer></script>
+</body>
+</html>

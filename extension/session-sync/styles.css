@@ -1,0 +1,23 @@
+:root { color-scheme: light; font: 13px/1.45 system-ui, "Microsoft YaHei", sans-serif; color: #171717; background: #f6f7f8; }
+* { box-sizing: border-box; }
+body { min-width: 280px; margin: 0; }
+main { padding: 14px; }
+header, .summary { display: flex; align-items: center; justify-content: space-between; }
+header { margin-bottom: 14px; }
+header strong { font-size: 17px; }
+header span, #message, article span { color: #686d75; }
+label { display: grid; gap: 5px; margin: 10px 0; font-weight: 600; }
+input, button { min-height: 36px; border: 1px solid #cfd3d8; border-radius: 6px; font: inherit; }
+input { width: 100%; padding: 7px 9px; background: white; }
+button { padding: 7px 11px; cursor: pointer; background: white; }
+button:disabled { cursor: default; opacity: .5; }
+#pair, #open, #sync, #reconnect { width: 100%; margin-top: 8px; }
+.primary, #pair { color: white; border-color: #1769aa; background: #1769aa; }
+.icon { width: 34px; min-height: 34px; padding: 0; font-size: 20px; }
+#sites { max-height: calc(100vh - 230px); overflow: auto; margin: 10px 0; border-block: 1px solid #dde0e4; }
+article { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; border-bottom: 1px solid #e5e7ea; }
+article:last-child { border-bottom: 0; }
+article span { flex: 0 0 auto; font-size: 12px; }
+.empty { padding: 20px; color: #686d75; text-align: center; }
+#message { margin: 12px 1px 0; font-size: 12px; }
+#message.error { color: #b42318; }

@@ -1,0 +1,40 @@
+# Local toolchains and package caches
+.tools/
+.cache/
+
+# Build and test output
+/bin/
+/dist/
+/coverage/
+*.test
+
+# Runtime state and secrets
+/data/
+/data-acceptance/
+/data-goal/
+/data-ui-test/
+/.secrets/
+/relaypulse.exe
+/relaypulse-check.exe
+/var/
+.env
+.env.*
+!.env.example
+extension/session-sync/config.js
+*.db
+*.db-shm
+*.db-wal
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local agent/tool residue
+.codex-read-write-test.txt
+relaypulse.exe~
+
+# Vendored frontend libraries (committed intentionally; see web/admin/vendor/)
+!web/admin/vendor/

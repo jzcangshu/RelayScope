@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RelayPulse 访问令牌同步</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header><strong>RelayPulse</strong><span>访问令牌同步</span></header>
+    <section id="sync-panel">
+      <div class="summary"><strong id="count">0 个站点待更新</strong><button id="refresh" class="icon" type="button" title="刷新">↻</button></div>
+      <div id="sites"></div>
+      <label for="backup">All API Hub 账号备份</label>
+      <input id="backup" type="file" accept="application/json,.json">
+      <button id="open" type="button">打开需浏览器登录的页面</button>
+      <button id="sync" class="primary" type="button">同步并逐站验证</button>
+    </section>
+    <button id="reconnect" type="button" hidden>重新连接</button>
+    <p id="message">备份只在本地解析，仅上传当前待更新站点的令牌。</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

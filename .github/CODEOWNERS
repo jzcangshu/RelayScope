@@ -1,0 +1,11 @@
+# These owners are reviewers for pull requests touching these areas.
+# Add yourself here only if you intend to review regularly.
+
+*       @jzcangshu
+
+# Adapter changes touch the primary extension surface.
+internal/adapter/   @jzcangshu
+docs/adapter-authoring.md @jzcangshu
+
+# Schema migrations are high-risk; always get a review.
+internal/store/migrations/ @jzcangshu

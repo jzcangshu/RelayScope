@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>RelayPulse - 公益聚合监测</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/dashboard.css">
+  <script>
+    try {
+      const savedTheme = localStorage.getItem('relaypulse-theme');
+      document.documentElement.dataset.theme = savedTheme === 'light' || savedTheme === 'dark'
+        ? savedTheme
+        : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    } catch (_) {}
+  </script>
+</head>
+<body class="public-dashboard">
+  <div class="expiry-banner" role="status" aria-label="服务器到期提醒">
+    <div class="expiry-marquee">
+      <div class="expiry-track">
+        <span>本站服务器将于 9 月 12 日到期，如有闲置服务器，恳请佬友接力；仅接受服务器捐赠，<a class="expiry-link" href="https://linux.do/u/jzcangshu" target="_blank" rel="noopener noreferrer">请在 Linux Do 联系我</a></span>
+        <span aria-hidden="true">本站服务器将于 9 月 12 日到期，如有闲置服务器，恳请佬友接力；仅接受服务器捐赠，<a class="expiry-link" href="https://linux.do/u/jzcangshu" target="_blank" rel="noopener noreferrer" tabindex="-1">请在 Linux Do 联系我</a></span>
+      </div>
+    </div>
+  </div>
+  <header class="topbar">
+    <div class="brand-lockup">
+      <span class="brand-mark" aria-hidden="true"><i></i></span>
+      <strong class="brand">RelayPulse - 公益聚合监测</strong>
+    </div>
+    <div class="header-actions">
+      <button id="user-action" type="button">LinuxDo 登录</button>
+      <div class="header-tools" role="group" aria-label="页面工具">
+        <button id="announcement-action" class="theme-toggle announcement-action" type="button" aria-label="查看运行通知" title="查看运行通知" aria-haspopup="dialog" aria-controls="announcement-dialog">
+          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8.5 13h5" /></svg>
+        </button>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="主题：跟随系统" title="主题：跟随系统"><span aria-hidden="true">◐</span></button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="toolbar" aria-label="筛选工具">
+      <label class="search-field"><span>搜索</span><input id="search" type="search" placeholder="模型、站点或分组"></label>
+      <label class="check"><input id="healthy-only" type="checkbox"><span class="check-box" aria-hidden="true"></span><span>只看当前可用</span></label>
+      <div class="view-switch" role="group" aria-label="分类方式">
+        <button id="model-view" type="button" aria-pressed="true">按模型分类</button>
+        <button id="site-view" type="button" aria-pressed="false">按站点分类</button>
+      </div>
+    </section>
+    <section class="summary" id="summary" aria-live="polite"></section>
+    <div class="filter-layout">
+      <aside class="filter-sidebar" aria-label="组合筛选">
+        <div class="filter-heading"><div><strong>筛选</strong><span>条件可叠加</span></div><button id="clear-filters" type="button">清空</button></div>
+        <div id="filter-panel" class="filter-panel"></div>
+      </aside>
+      <section class="rows" id="content" aria-live="polite">
+        <div class="empty"><h1>正在读取最新数据</h1><p>稍候即可查看各站点最近 24 小时状态。</p></div>
+      </section>
+    </div>
+    <dialog id="detail-dialog" class="detail-dialog">
+      <div class="detail-head"><div><h2 id="detail-title">模型详情</h2><p id="detail-subtitle" class="muted"></p></div><button id="detail-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <div id="detail-content" class="detail-content"></div>
+    </dialog>
+	<dialog id="feedback-dialog" class="detail-dialog">
+	  <div class="detail-head"><div><h2>反馈问题</h2><p class="muted">请描述异常现象或建议。</p></div><button id="feedback-close" class="icon-button" type="button" aria-label="关闭反馈" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+	  <form id="feedback-form" class="detail-content"><label>反馈内容<textarea id="feedback-content" rows="6" maxlength="2000" required placeholder="例如：某个站点的模型状态与实际不一致"></textarea></label><button type="submit">提交反馈</button><p id="feedback-message" class="muted"></p></form>
+    </dialog>
+    <dialog id="announcement-dialog" class="announcement-dialog">
+      <div class="detail-head announcement-head"><h2>公益监测服务运行状态</h2><button id="announcement-close" class="icon-button" type="button" aria-label="关闭公告" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <div id="announcement-content" class="announcement-content" aria-live="polite"></div>
+    </dialog>
+  </main>
+  <script src="/assets/dashboard.js" defer></script>
+</body>
+</html>
