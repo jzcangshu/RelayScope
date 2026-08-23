@@ -17,23 +17,15 @@ CREATE TABLE sites (
     adapter_key TEXT NOT NULL,
     adapter_config TEXT NOT NULL DEFAULT '{}',
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-    interval_seconds INTEGER NOT NULL DEFAULT 1200 CHECK (interval_seconds >= 300),
+    interval_seconds INTEGER NOT NULL DEFAULT 900 CHECK (interval_seconds >= 300),
     jitter_seconds INTEGER NOT NULL DEFAULT 120 CHECK (jitter_seconds >= 0),
     acquisition_state TEXT NOT NULL DEFAULT 'stale',
+    session_required INTEGER NOT NULL DEFAULT 0 CHECK (session_required IN (0, 1)),
+    custom_failure_reason TEXT NOT NULL DEFAULT '',
     last_success_at INTEGER,
-    next_run_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
-
-CREATE INDEX sites_schedule_idx ON sites(enabled, next_run_at);
-
-CREATE TABLE adapter_catalog (
-    adapter_key TEXT PRIMARY KEY,
-    display_name TEXT NOT NULL,
-    config_schema TEXT NOT NULL,
-    registered_at INTEGER NOT NULL
-) WITHOUT ROWID;
 
 CREATE TABLE model_rules (
     id INTEGER PRIMARY KEY,
@@ -62,6 +54,8 @@ CREATE TABLE raw_models (
     source_extension TEXT,
     first_seen_at INTEGER NOT NULL,
     last_seen_at INTEGER NOT NULL,
+    history_coverage_start INTEGER,
+    history_coverage_end INTEGER,
     absent_complete_runs INTEGER NOT NULL DEFAULT 0,
     removed_at INTEGER,
     UNIQUE(site_id, raw_name)
@@ -157,16 +151,21 @@ CREATE TABLE encrypted_sessions (
     PRIMARY KEY(site_id, purpose)
 ) WITHOUT ROWID;
 
-CREATE TABLE operation_audit (
+CREATE TABLE users (
     id INTEGER PRIMARY KEY,
-    occurred_at INTEGER NOT NULL,
-    actor TEXT NOT NULL,
-    action TEXT NOT NULL,
-    target_type TEXT NOT NULL,
-    target_id TEXT NOT NULL,
-    outcome TEXT NOT NULL,
-    details TEXT
+    linuxdo_id TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX operation_audit_expiry_idx ON operation_audit(occurred_at);
+CREATE TABLE feedback (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
 
+CREATE INDEX feedback_created_idx ON feedback(created_at DESC, id DESC);

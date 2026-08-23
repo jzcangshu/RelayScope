@@ -82,8 +82,8 @@ func TestOpenAppliesSchemaAndPragmas(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "12" {
-		t.Fatalf("schema version = %q, want 12", version)
+	if version != "1" {
+		t.Fatalf("schema version = %q, want 1", version)
 	}
 }
 
@@ -93,8 +93,8 @@ func TestMigrationVersionIsRecordedAndIdempotent(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != "12" {
-		t.Fatalf("version = %q, want 12", version)
+	if version != "1" {
+		t.Fatalf("version = %q, want 1", version)
 	}
 	if err := store.migrate(context.Background()); err != nil {
 		t.Fatalf("second migration: %v", err)
@@ -136,188 +136,6 @@ func TestSiteSessionRequirementRoundTrips(t *testing.T) {
 	}
 	if sites[0].SessionRequired {
 		t.Fatalf("updated session requirement = true, want false")
-	}
-}
-
-func TestPricingSourceMigrationUpdatesOnlyUntouchedSeeds(t *testing.T) {
-	openLegacy := func(t *testing.T, inserts ...string) string {
-		t.Helper()
-		path := filepath.Join(t.TempDir(), "state.db")
-		legacy, err := sql.Open("sqlite", path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, name := range []string{"001_initial.sql", "002_rule_precision.sql", "003_collection_defaults.sql", "004_single_match_rules.sql"} {
-			content, err := migrationFiles.ReadFile("migrations/" + name)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := legacy.Exec(string(content)); err != nil {
-				t.Fatalf("apply %s: %v", name, err)
-			}
-		}
-		for _, statement := range inserts {
-			if _, err := legacy.Exec(statement); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if _, err := legacy.Exec(`UPDATE app_meta SET value = '4' WHERE key = 'schema_version'`); err != nil {
-			t.Fatal(err)
-		}
-		if err := legacy.Close(); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-
-	t.Run("upgrades untouched sources and login requirements", func(t *testing.T) {
-		path := openLegacy(t,
-			`INSERT INTO sites(name,base_url,source_url,adapter_key,adapter_config,enabled,interval_seconds,jitter_seconds,created_at,updated_at) VALUES ('AbrDNS','https://new-api.abrdns.com','https://new-api.abrdns.com/status','newapi-probe','{}',1,900,120,1,1)`,
-			`INSERT INTO sites(name,base_url,source_url,adapter_key,adapter_config,enabled,interval_seconds,jitter_seconds,created_at,updated_at) VALUES ('fengwind','https://api.fengwind.com','https://api.fengwind.com/model-market','model-market','{}',1,900,120,1,1)`,
-			`INSERT INTO sites(name,base_url,source_url,adapter_key,adapter_config,enabled,interval_seconds,jitter_seconds,created_at,updated_at) VALUES ('HXI AI','https://stat.hxi.me','https://stat.hxi.me/status/ai','uptime-kuma','{}',1,900,120,1,1)`,
-		)
-		dbStore, err := Open(context.Background(), path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer dbStore.Close()
-		var abrConfig, fengConfig, hxiBase, hxiConfig string
-		var abrRequired, fengRequired, hxiRequired bool
-		if err := dbStore.DB().QueryRow(`SELECT adapter_config, session_required FROM sites WHERE name = 'AbrDNS'`).Scan(&abrConfig, &abrRequired); err != nil {
-			t.Fatal(err)
-		}
-		if err := dbStore.DB().QueryRow(`SELECT adapter_config, session_required FROM sites WHERE name = 'fengwind'`).Scan(&fengConfig, &fengRequired); err != nil {
-			t.Fatal(err)
-		}
-		if err := dbStore.DB().QueryRow(`SELECT base_url, adapter_config, session_required FROM sites WHERE name = 'HXI AI'`).Scan(&hxiBase, &hxiConfig, &hxiRequired); err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(abrConfig, `"pricingRequiresSession":true`) || !abrRequired || fengConfig != `{"pricingAdapter":"model-market"}` || !fengRequired || hxiBase != "https://runanytime.hxi.me" || !strings.Contains(hxiConfig, `"statusBaseUrl":"https://stat.hxi.me"`) || hxiRequired {
-			t.Fatalf("migrated sources: abr=(%s,%t) feng=(%s,%t) hxi=(%s,%s,%t)", abrConfig, abrRequired, fengConfig, fengRequired, hxiBase, hxiConfig, hxiRequired)
-		}
-	})
-
-	t.Run("preserves custom adapter config", func(t *testing.T) {
-		path := openLegacy(t, `INSERT INTO sites(name,base_url,source_url,adapter_key,adapter_config,enabled,interval_seconds,jitter_seconds,created_at,updated_at) VALUES ('fengwind','https://api.fengwind.com','https://api.fengwind.com/model-market','model-market','{"pricingAdapter":"custom"}',1,900,120,1,1)`)
-		dbStore, err := Open(context.Background(), path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer dbStore.Close()
-		var config string
-		if err := dbStore.DB().QueryRow(`SELECT adapter_config FROM sites WHERE name = 'fengwind'`).Scan(&config); err != nil {
-			t.Fatal(err)
-		}
-		if config != `{"pricingAdapter":"custom"}` {
-			t.Fatalf("custom config overwritten: %s", config)
-		}
-	})
-}
-
-func TestX666ProbeMigrationPreservesIdentityAndCustomRows(t *testing.T) {
-	openSchemaSeven := func(t *testing.T, config string) string {
-		t.Helper()
-		path := filepath.Join(t.TempDir(), "state.db")
-		legacy, err := sql.Open("sqlite", path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, name := range []string{"001_initial.sql", "002_rule_precision.sql", "003_collection_defaults.sql", "004_single_match_rules.sql", "005_pricing_sources.sql", "006_abrdns_pricing_source.sql", "007_site_session_required.sql"} {
-			content, readErr := migrationFiles.ReadFile("migrations/" + name)
-			if readErr != nil {
-				t.Fatal(readErr)
-			}
-			if _, execErr := legacy.Exec(string(content)); execErr != nil {
-				t.Fatalf("apply %s: %v", name, execErr)
-			}
-		}
-		if _, err := legacy.Exec(`INSERT INTO sites(id,name,base_url,source_url,adapter_key,adapter_config,enabled,session_required,interval_seconds,jitter_seconds,created_at,updated_at) VALUES (18,'薄荷 API','https://x666.me','https://x666.me/','newapi-pricing',?,1,0,900,120,1,1)`, config); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := legacy.Exec(`UPDATE app_meta SET value = '7' WHERE key = 'schema_version'`); err != nil {
-			t.Fatal(err)
-		}
-		if err := legacy.Close(); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-
-	t.Run("migrates renamed untouched site in place", func(t *testing.T) {
-		dbStore, err := Open(context.Background(), openSchemaSeven(t, `{"skipDetails":true}`))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer dbStore.Close()
-		var id int64
-		var name, baseURL, sourceURL, adapterKey, config string
-		if err := dbStore.DB().QueryRow(`SELECT id,name,base_url,source_url,adapter_key,adapter_config FROM sites WHERE id = 18`).Scan(&id, &name, &baseURL, &sourceURL, &adapterKey, &config); err != nil {
-			t.Fatal(err)
-		}
-		wantConfig := `{"statusBaseUrl":"https://tool.x666.me","pricingAdapter":"newapi","pricingPath":"/api/pricing","pricingStatusPath":"/api/status","pricingOptional":true}`
-		if id != 18 || name != "薄荷 API" || baseURL != "https://x666.me" || sourceURL != "https://x666.me/" || adapterKey != "newapi-probe" || config != wantConfig {
-			t.Fatalf("migrated site = (%d,%s,%s,%s,%s,%s)", id, name, baseURL, sourceURL, adapterKey, config)
-		}
-	})
-
-	t.Run("preserves customized site", func(t *testing.T) {
-		dbStore, err := Open(context.Background(), openSchemaSeven(t, `{"skipDetails":false}`))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer dbStore.Close()
-		var adapterKey, config string
-		if err := dbStore.DB().QueryRow(`SELECT adapter_key,adapter_config FROM sites WHERE id = 18`).Scan(&adapterKey, &config); err != nil {
-			t.Fatal(err)
-		}
-		if adapterKey != "newapi-pricing" || config != `{"skipDetails":false}` {
-			t.Fatalf("custom site overwritten: adapter=%s config=%s", adapterKey, config)
-		}
-	})
-}
-
-func TestSessionRequirementBackfillPreservesExistingSessionUse(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state.db")
-	legacy, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"001_initial.sql", "002_rule_precision.sql", "003_collection_defaults.sql", "004_single_match_rules.sql", "005_pricing_sources.sql", "006_abrdns_pricing_source.sql", "007_site_session_required.sql", "008_x666_probe_source.sql"} {
-		content, readErr := migrationFiles.ReadFile("migrations/" + name)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		if _, execErr := legacy.Exec(string(content)); execErr != nil {
-			t.Fatalf("apply %s: %v", name, execErr)
-		}
-	}
-	statements := []string{
-		`INSERT INTO sites(id,name,base_url,source_url,adapter_key,adapter_config,enabled,session_required,interval_seconds,jitter_seconds,created_at,updated_at) VALUES (1,'saved','https://saved.example','https://saved.example/pricing','newapi-pricing','{}',1,0,900,120,1,1)`,
-		`INSERT INTO encrypted_sessions(site_id,purpose,key_version,nonce,ciphertext,updated_at) VALUES (1,'site-http',1,X'00',X'00',1)`,
-		`INSERT INTO sites(id,name,base_url,source_url,adapter_key,adapter_config,enabled,session_required,interval_seconds,jitter_seconds,created_at,updated_at) VALUES (2,'known','https://api.42w.shop','https://api.42w.shop/pricing','newapi-pricing','{}',1,0,900,120,1,1)`,
-		`INSERT INTO sites(id,name,base_url,source_url,adapter_key,adapter_config,enabled,session_required,interval_seconds,jitter_seconds,created_at,updated_at) VALUES (3,'public','https://public.example','https://public.example/pricing','newapi-pricing','{}',1,0,900,120,1,1)`,
-		`UPDATE app_meta SET value = '8' WHERE key = 'schema_version'`,
-	}
-	for _, statement := range statements {
-		if _, err := legacy.Exec(statement); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := legacy.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	dbStore, err := Open(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dbStore.Close()
-	sites, err := dbStore.ListAllSites(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(sites) != 3 || !sites[0].SessionRequired || !sites[1].SessionRequired || sites[2].SessionRequired {
-		t.Fatalf("backfilled sites = %+v", sites)
 	}
 }
 

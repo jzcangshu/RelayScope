@@ -972,7 +972,6 @@ func (store *Store) Cleanup(ctx context.Context, cutoff time.Time, batchSize int
 		 WHERE (group_id, bucket_start, resolution_seconds) IN
 		       (SELECT group_id, bucket_start, resolution_seconds FROM metric_buckets WHERE bucket_start < ? LIMIT ?)`,
 		`DELETE FROM collection_runs WHERE id IN (SELECT id FROM collection_runs WHERE started_at < ? LIMIT ?)`,
-		`DELETE FROM operation_audit WHERE id IN (SELECT id FROM operation_audit WHERE occurred_at < ? LIMIT ?)`,
 	}
 	for _, query := range queries {
 		result, err := tx.ExecContext(ctx, query, unixMilli(cutoff), batchSize)
