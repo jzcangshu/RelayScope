@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"strings"
 	"sync"
 	"time"
@@ -275,23 +274,6 @@ func countObservation(collection domain.Collection) (int, int) {
 		groups += len(model.Groups)
 	}
 	return len(collection.Models), groups
-}
-
-func backoff(attempt int) time.Duration {
-	if attempt <= 0 {
-		return time.Minute
-	}
-	if attempt > 3 {
-		attempt = 3
-	}
-	return time.Duration(1<<(attempt-1)) * 5 * time.Minute
-}
-
-func nextJitter(interval, jitter time.Duration) time.Duration {
-	if jitter <= 0 {
-		return interval
-	}
-	return interval + time.Duration(rand.Int64N(jitter.Milliseconds()+1))*time.Millisecond
 }
 
 var _ adapter.Fetcher = adapter.HTTPFetcher{}
