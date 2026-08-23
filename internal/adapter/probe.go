@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"relaypulse/internal/adapter/adapterutil"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/pricing"
 )
@@ -103,7 +104,7 @@ func (adapter ProbeAdapter) Collect(ctx context.Context, site Site, fetcher Fetc
 		if group == "" {
 			group = "default"
 		}
-		observation := domain.ModelObservation{RawName: item.Model, Provider: item.Provider, Groups: []domain.GroupObservation{{RawName: group, ServiceState: serviceState(item.Status, normalizeRatio(item.SuccessRate)), Metrics: metricsFromPricing(item)}}}
+		observation := domain.ModelObservation{RawName: item.Model, Provider: item.Provider, Groups: []domain.GroupObservation{{RawName: group, ServiceState: serviceState(item.Status, adapterutil.NormalizeRatio(item.SuccessRate)), Metrics: metricsFromPricing(item)}}}
 		if adapter.historyWindow > 0 && item.HistoryPresent {
 			observation.HistoryCoverageStart = now.UTC().Add(-adapter.historyWindow)
 			observation.HistoryCoverageEnd = now.UTC()

@@ -59,12 +59,19 @@ DELETE+INSERT），N 站点并发时产生 N 次全表重写，SQLite 单写者�
 numberPointer 在 adapter/newapi.go 与 pricing/newapi.go 逐字重复。
 
 改动：新建 `internal/adapter/adapterutil` 包：
-- `health.go`：`HealthyThreshold/DegradedThreshold` 常量 + `RatioToServiceState(ratio)`；
-  query.go 的 SQL CASE 表达式由同一常量构建。
-- `timeparse.go`：`ParseFlexibleTime(v any) (time.Time, bool)` 统一秒/毫秒/字符串解析。
-- `jsonwalk.go`：`FindArray/FirstString/StringSlice/NumberPointer` 通用 walker。
+- `health.go`：`HealthyRatio/DegradedRatio` 常量 + `RatioToServiceState(ratio)` +
+  `NormalizeRatio(value)`；query.go 的 SQL CASE 表达式由同一常量构建。
+- `timeparse.go`：`ParseFlexibleTime(value int64) time.Time` 统一秒/毫秒猜测。
+- ~~`jsonwalk.go`：`FindArray/FirstString/StringSlice/NumberPointer` 通用 walker。~~
 
 边界：不改任何适配器的采集逻辑和解码行为，只做提取+替换；每替换一批跑一次测试。
+
+> **JSON walker 合并决策**：审计发现 findArray（depth 上限 4 vs 5、adapter 有
+> 内层 key 探测）、firstString（adapter 有 model/model_info 嵌套回退）、
+> stringSlice（adapter 首个数组即返回含空切片 vs pricing 继续尝试并返回 nil）、
+> numberPointer（adapter 用 strconv 且支持 `%` 除 100 vs pricing 用 fmt.Sscanf
+> 无 `%` 处理）四函数均有语义差异。合并会改变解码行为，违反本阶段边界，
+> 故保留各自实现。如需统一须另立阶段，逐函数验证所有调用点行为。
 
 ### 1.4 配置双真相统一
 

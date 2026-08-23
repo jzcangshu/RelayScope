@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"relaypulse/internal/adapter/adapterutil"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/pricing"
 )
@@ -130,7 +131,7 @@ func modelPulseMetrics(requests, failures int64, reportedRatio, averageMS *float
 	metrics.SuccessCount = int64Pointer(successes)
 	metrics.FailureCount = int64Pointer(failures)
 	if reportedRatio != nil {
-		metrics.SuccessRatio = normalizeRatio(reportedRatio)
+		metrics.SuccessRatio = adapterutil.NormalizeRatio(reportedRatio)
 	} else {
 		ratio := float64(successes) / float64(requests)
 		metrics.SuccessRatio = &ratio
@@ -139,11 +140,5 @@ func modelPulseMetrics(requests, failures int64, reportedRatio, averageMS *float
 }
 
 func modelPulseTime(value int64) time.Time {
-	if value <= 0 {
-		return time.Time{}
-	}
-	if value > 100000000000 {
-		return time.UnixMilli(value).UTC()
-	}
-	return time.Unix(value, 0).UTC()
+	return adapterutil.ParseFlexibleTime(value)
 }

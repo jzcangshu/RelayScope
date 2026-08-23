@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"relaypulse/internal/adapter/adapterutil"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/pricing"
 )
@@ -156,7 +157,7 @@ func (adapter NewAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fet
 		}
 		groups := make([]domain.GroupObservation, 0, len(groupNames))
 		for _, groupName := range groupNames {
-			state := serviceState(item.Status, normalizeRatio(item.SuccessRate))
+			state := serviceState(item.Status, adapterutil.NormalizeRatio(item.SuccessRate))
 			if availabilityMode == "presence" {
 				state = domain.ServiceHealthy
 			}
@@ -730,7 +731,7 @@ func mergeDetailBuckets(model *domain.ModelObservation, buckets []detailBucket, 
 			aggregateGroups[groupName] = struct{}{}
 			group.ServiceState = domain.ServiceNoSamples
 			group.ObservedAt = time.Time{}
-			group.Metrics = domain.Metrics{RequestCount: item.Requests, SuccessCount: item.Success, FailureCount: item.Failure, EmptyCount: item.Empty, SuccessRatio: normalizeRatio(item.SuccessRate), AverageLatencyMS: item.Latency, FirstTokenMS: item.TTFT, TokensPerSecond: item.TPS}
+			group.Metrics = domain.Metrics{RequestCount: item.Requests, SuccessCount: item.Success, FailureCount: item.Failure, EmptyCount: item.Empty, SuccessRatio: adapterutil.NormalizeRatio(item.SuccessRate), AverageLatencyMS: item.Latency, FirstTokenMS: item.TTFT, TokensPerSecond: item.TPS}
 		}
 	}
 
@@ -747,7 +748,7 @@ func mergeDetailBuckets(model *domain.ModelObservation, buckets []detailBucket, 
 		if item.Aggregate {
 			continue
 		}
-		bucketMetrics := domain.Metrics{RequestCount: item.Requests, SuccessCount: item.Success, FailureCount: item.Failure, EmptyCount: item.Empty, SuccessRatio: normalizeRatio(item.SuccessRate), AverageLatencyMS: item.Latency, FirstTokenMS: item.TTFT, TokensPerSecond: item.TPS}
+		bucketMetrics := domain.Metrics{RequestCount: item.Requests, SuccessCount: item.Success, FailureCount: item.Failure, EmptyCount: item.Empty, SuccessRatio: adapterutil.NormalizeRatio(item.SuccessRate), AverageLatencyMS: item.Latency, FirstTokenMS: item.TTFT, TokensPerSecond: item.TPS}
 		start, ok := detailBucketStart(item)
 		if !ok {
 			start = now.UTC().Add(-5 * time.Minute)
@@ -790,7 +791,7 @@ func mergeDetailBuckets(model *domain.ModelObservation, buckets []detailBucket, 
 					totals.ratioNumerator += float64(*item.Success)
 					totals.ratioRequests += *item.Requests
 					totals.hasRatio = true
-				} else if ratio := normalizeRatio(item.SuccessRate); ratio != nil {
+				} else if ratio := adapterutil.NormalizeRatio(item.SuccessRate); ratio != nil {
 					totals.ratioNumerator += *ratio * float64(*item.Requests)
 					totals.ratioRequests += *item.Requests
 					totals.hasRatio = true
@@ -844,10 +845,7 @@ func detailBucketOwnsCurrent(item detailBucket) bool {
 
 func detailBucketStart(item detailBucket) (time.Time, bool) {
 	if item.Timestamp != 0 {
-		if item.Timestamp > 100000000000 {
-			return time.UnixMilli(item.Timestamp).UTC(), true
-		}
-		return time.Unix(item.Timestamp, 0).UTC(), true
+		return adapterutil.ParseFlexibleTime(item.Timestamp), true
 	}
 	if item.Time != "" {
 		if parsed, err := time.Parse(time.RFC3339, item.Time); err == nil {
@@ -859,10 +857,7 @@ func detailBucketStart(item detailBucket) (time.Time, bool) {
 
 func detailBucketEnd(item detailBucket) time.Time {
 	if item.EndTimestamp != 0 {
-		if item.EndTimestamp > 100000000000 {
-			return time.UnixMilli(item.EndTimestamp).UTC()
-		}
-		return time.Unix(item.EndTimestamp, 0).UTC()
+		return adapterutil.ParseFlexibleTime(item.EndTimestamp)
 	}
 	if item.EndTime != "" {
 		if parsed, err := time.Parse(time.RFC3339, item.EndTime); err == nil {
@@ -891,31 +886,11 @@ func serviceState(status string, ratio *float64) domain.ServiceState {
 	case "degraded", "warning":
 		return domain.ServiceDegraded
 	}
-	if ratio == nil {
-		return domain.ServiceNoSamples
-	}
-	if *ratio >= 0.85 {
-		return domain.ServiceHealthy
-	}
-	if *ratio >= 0.50 {
-		return domain.ServiceDegraded
-	}
-	return domain.ServiceFailed
+	return adapterutil.RatioToServiceState(ratio)
 }
 
 func metricsFromPricing(item pricingModel) domain.Metrics {
-	return domain.Metrics{SuccessRatio: normalizeRatio(item.SuccessRate), AverageLatencyMS: item.Latency, TokensPerSecond: item.TPS}
-}
-
-func normalizeRatio(value *float64) *float64 {
-	if value == nil {
-		return nil
-	}
-	if *value <= 1 {
-		return value
-	}
-	normalized := *value / 100
-	return &normalized
+	return domain.Metrics{SuccessRatio: adapterutil.NormalizeRatio(item.SuccessRate), AverageLatencyMS: item.Latency, TokensPerSecond: item.TPS}
 }
 
 func deduplicateModels(models []domain.ModelObservation) []domain.ModelObservation {

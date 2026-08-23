@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"relaypulse/internal/adapter/adapterutil"
 	"relaypulse/internal/domain"
 )
 
@@ -182,13 +183,7 @@ func findAIAPIGroup(groups []domain.GroupObservation, name string) int {
 }
 
 func aiAPITimestamp(value int64) time.Time {
-	if value <= 0 {
-		return time.Time{}
-	}
-	if value > 100000000000 {
-		return time.UnixMilli(value).UTC()
-	}
-	return time.Unix(value, 0).UTC()
+	return adapterutil.ParseFlexibleTime(value)
 }
 
 func aiAPIState(status int) domain.ServiceState {

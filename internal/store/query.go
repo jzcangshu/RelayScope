@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"relaypulse/internal/adapter/adapterutil"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/pricing"
 )
@@ -62,6 +63,22 @@ type PublicHistoryBucket struct {
 }
 
 const publicSampleVisibilityWindow = 24 * time.Hour
+
+// Pre-built SQL CASE expressions derived from the shared health thresholds in
+// adapterutil, so the Go and SQL thresholds can never diverge.
+var ratioStateRankExpr = fmt.Sprintf(`CASE
+					WHEN buckets.success_ratio IS NULL THEN 4
+					WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= %g THEN 0
+					WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= %g THEN 1
+					ELSE 2
+				END`, adapterutil.HealthyRatio, adapterutil.DegradedRatio)
+
+var ratioStateNameExpr = fmt.Sprintf(`CASE
+			WHEN buckets.success_ratio IS NULL THEN 'no_samples'
+			WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= %g THEN 'healthy'
+			WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= %g THEN 'degraded'
+			ELSE 'failed'
+		END`, adapterutil.HealthyRatio, adapterutil.DegradedRatio)
 
 var publicVisibleModelPredicate = fmt.Sprintf(` AND (
 			site.acquisition_state <> 'fresh'
@@ -125,12 +142,7 @@ func (store *Store) QueryPublicHistory(ctx context.Context, since time.Time) ([]
 	// retaining only the best group state for each model and slot.
 	rows, err := store.db.QueryContext(ctx, `WITH RECURSIVE expanded AS (
 		SELECT site.id AS site_id, raw.raw_name,
-			CASE
-				WHEN buckets.success_ratio IS NULL THEN 4
-				WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= 0.85 THEN 0
-				WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= 0.50 THEN 1
-				ELSE 2
-			END AS state_rank,
+			`+ratioStateRankExpr+` AS state_rank,
 			(CAST(buckets.bucket_start / 1800000 AS INTEGER) * 1800000) AS slot_start,
 			buckets.bucket_end
 		FROM metric_buckets buckets
@@ -182,12 +194,7 @@ func (store *Store) QueryPublicHistory(ctx context.Context, since time.Time) ([]
 func (store *Store) QueryPublicDetails(ctx context.Context, ruleName, siteName, rawModel string, since time.Time) ([]DetailBucket, error) {
 	query := `SELECT site.id, site.name, site.source_url, raw.raw_name, groups.raw_name,
 		raw.source_extension, groups.source_extension,
-	CASE
-		WHEN buckets.success_ratio IS NULL THEN 'no_samples'
-		WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= 0.85 THEN 'healthy'
-		WHEN (CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END) >= 0.50 THEN 'degraded'
-		ELSE 'failed'
-	END, buckets.bucket_start, buckets.bucket_end, buckets.resolution_seconds,
+	` + ratioStateNameExpr + `, buckets.bucket_start, buckets.bucket_end, buckets.resolution_seconds,
 	 buckets.request_count, buckets.success_count, buckets.failure_count, CASE WHEN buckets.success_ratio > 1 THEN buckets.success_ratio / 100.0 ELSE buckets.success_ratio END,
  buckets.average_latency_ms, buckets.first_token_ms, buckets.tokens_per_second
  FROM metric_buckets buckets

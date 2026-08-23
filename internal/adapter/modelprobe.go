@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"relaypulse/internal/adapter/adapterutil"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/pricing"
 )
@@ -161,7 +162,7 @@ func modelProbeWindowMetrics(window modelProbeWindow, averageMS *float64) domain
 		}
 		metrics.FailureCount = int64Pointer(failure)
 	}
-	metrics.SuccessRatio = normalizeRatio(window.SuccessRate)
+	metrics.SuccessRatio = adapterutil.NormalizeRatio(window.SuccessRate)
 	metrics.AverageLatencyMS = averageMS
 	return metrics
 }
@@ -177,7 +178,7 @@ func modelProbeBucketMetrics(bucket modelProbeBucket) domain.Metrics {
 		}
 		metrics.FailureCount = int64Pointer(failure)
 	}
-	metrics.SuccessRatio = normalizeRatio(bucket.SuccessRate)
+	metrics.SuccessRatio = adapterutil.NormalizeRatio(bucket.SuccessRate)
 	return metrics
 }
 
@@ -190,8 +191,8 @@ func modelProbeState(status string, ratio *float64) domain.ServiceState {
 	case "unavailable", "failed", "down", "error":
 		return domain.ServiceFailed
 	case "not_probed", "unknown", "":
-		return serviceState("", normalizeRatio(ratio))
+		return serviceState("", adapterutil.NormalizeRatio(ratio))
 	default:
-		return serviceState(status, normalizeRatio(ratio))
+		return serviceState(status, adapterutil.NormalizeRatio(ratio))
 	}
 }
