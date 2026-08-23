@@ -170,53 +170,27 @@ func normalizeTerms(terms []string) []string {
 	return result
 }
 
+// SeedRules returns a small set of example matching rules that demonstrate
+// the different matching capabilities: pure required-terms, excluded terms,
+// regex patterns, aliases, and priority-based specificity. These are seeded
+// on first launch so new users can see how rules work. Administrators add
+// their own rules through the console.
 func SeedRules() []Rule {
-	rules := []Rule{
-		{Provider: "DeepSeek", CanonicalName: "deepseek-v4-flash", RequiredTerms: []string{"deepseek", "v4", "flash"}, ExcludedTerms: []string{"0731"}, Priority: 100, Enabled: true},
-		{Provider: "DeepSeek", CanonicalName: "deepseek-v4-pro", RequiredTerms: []string{"deepseek", "v4", "pro"}, ExcludedTerms: []string{"0731"}, Priority: 100, Enabled: true},
-		{Provider: "DeepSeek", CanonicalName: "deepseek-v4-flash-0731", RequiredTerms: []string{"deepseek", "v4", "flash", "0731"}, Priority: 110, Enabled: true},
-		{Provider: "DeepSeek", CanonicalName: "deepseek-v4-pro-0731", RequiredTerms: []string{"deepseek", "v4", "pro", "0731"}, Priority: 110, Enabled: true},
-		{Provider: "GLM", CanonicalName: "glm-5", RequiredTerms: []string{"glm", "5"}, Pattern: `(?i)(^|[^0-9])glm[^0-9]+5([^0-9.]|$)`, Priority: 90, Enabled: true},
-		{Provider: "GLM", CanonicalName: "glm-5.1", RequiredTerms: []string{"glm", "5", "1"}, Pattern: `(?i)glm[^0-9]+5[._-]1([^0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "GLM", CanonicalName: "glm-5.2", RequiredTerms: []string{"glm", "5", "2"}, Pattern: `(?i)glm[^0-9]+5[._-]2([^0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "GLM", CanonicalName: "glm-5.3", RequiredTerms: []string{"glm", "5", "3"}, Pattern: `(?i)glm[^0-9]+5[._-]3([^0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "MiniMax", CanonicalName: "minimax-m2.5", RequiredTerms: []string{"minimax", "m2", "5"}, Priority: 100, Enabled: true},
-		{Provider: "MiniMax", CanonicalName: "minimax-m2.7", RequiredTerms: []string{"minimax", "m2", "7"}, Priority: 100, Enabled: true},
-		{Provider: "MiniMax", CanonicalName: "minimax-m3", RequiredTerms: []string{"minimax", "m3"}, Priority: 100, Enabled: true},
-		{Provider: "Kimi", CanonicalName: "kimi-k2.5", RequiredTerms: []string{"kimi", "k2", "5"}, Priority: 100, Enabled: true},
-		{Provider: "Kimi", CanonicalName: "kimi-k2.6", RequiredTerms: []string{"kimi", "k2", "6"}, Priority: 100, Enabled: true},
-		{Provider: "Kimi", CanonicalName: "kimi-k2.7", RequiredTerms: []string{"kimi", "k2", "7"}, Priority: 100, Enabled: true},
-		{Provider: "Kimi", CanonicalName: "kimi-k3", RequiredTerms: []string{"kimi", "k3"}, Priority: 100, Enabled: true},
-		{Provider: "MiMo", CanonicalName: "mimo-v2.5", RequiredTerms: []string{"mimo", "v2", "5"}, ExcludedTerms: []string{"pro"}, Priority: 100, Enabled: true},
-		{Provider: "MiMo", CanonicalName: "mimo-v2.5-pro", RequiredTerms: []string{"mimo", "v2", "5", "pro"}, Priority: 110, Enabled: true},
-		{Provider: "OpenAI", CanonicalName: "gpt-5.4", RequiredTerms: []string{"gpt", "5", "4"}, Pattern: `(?i)gpt[ _./-]*5[._-]*4([^0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "OpenAI", CanonicalName: "gpt-5.5", RequiredTerms: []string{"gpt", "5", "5"}, Pattern: `(?i)gpt[ _./-]*5[._-]*5([^0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "OpenAI", CanonicalName: "gpt-5-nano", RequiredTerms: []string{"gpt", "5", "nano"}, Pattern: `(?i)(^|[^a-z0-9])gpt[ _./-]*5[ _.-]*nano([^a-z0-9]|$)`, Priority: 120, Enabled: true},
-		{Provider: "OpenAI", CanonicalName: "gpt-5.6-luna", RequiredTerms: []string{"gpt", "5", "6", "luna"}, Priority: 110, Enabled: true},
-		{Provider: "OpenAI", CanonicalName: "gpt-5.6-terra", RequiredTerms: []string{"gpt", "5", "6", "terra"}, Priority: 110, Enabled: true},
-		{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Priority: 110, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.7-flash", RequiredTerms: []string{"gemini", "3.7", "flash"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*7[ _./-]*flash([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.6-flash", RequiredTerms: []string{"gemini", "3.6", "flash"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*6[ _./-]*flash([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.5-flash", RequiredTerms: []string{"gemini", "3.5", "flash"}, ExcludedTerms: []string{"lite"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*5[ _./-]*flash([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.5-flash-lite", RequiredTerms: []string{"gemini", "3.5", "flash", "lite"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*5[ _./-]*flash[ _./-]*lite([^a-z0-9]|$)`, Priority: 110, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.1-flash-lite", RequiredTerms: []string{"gemini", "3.1", "flash", "lite"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*1[ _./-]*flash[ _./-]*lite([^a-z0-9]|$)`, Priority: 110, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.1-pro-preview", RequiredTerms: []string{"gemini", "3.1", "pro", "preview"}, ExcludedTerms: []string{"customtools"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*1[ _./-]*pro[ _./-]*preview([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3.1-pro-preview-customtools", RequiredTerms: []string{"gemini", "3.1", "pro", "preview", "customtools"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*1[ _./-]*pro[ _./-]*preview[ _./-]*customtools([^a-z0-9]|$)`, Priority: 120, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-3-flash-preview", RequiredTerms: []string{"gemini", "3", "flash", "preview"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*3[ _./-]*flash[ _./-]*preview([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-2.5-pro", RequiredTerms: []string{"gemini", "2.5", "pro"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*2[._-]*5[ _./-]*pro([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-2.5-flash", RequiredTerms: []string{"gemini", "2.5", "flash"}, ExcludedTerms: []string{"lite"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*2[._-]*5[ _./-]*flash([^a-z0-9]|$)`, Priority: 100, Enabled: true},
-		{Provider: "Google", CanonicalName: "gemini-2.5-flash-lite", RequiredTerms: []string{"gemini", "2.5", "flash", "lite"}, Pattern: `(?i)(^|[^a-z0-9])gemini[ _./-]*2[._-]*5[ _./-]*flash[ _./-]*lite([^a-z0-9]|$)`, Priority: 110, Enabled: true},
-		{Provider: "xAI", CanonicalName: "grok-4.3", RequiredTerms: []string{"grok", "4", "3"}, Priority: 100, Enabled: true},
-		{Provider: "xAI", CanonicalName: "grok-4.5", RequiredTerms: []string{"grok", "4", "5"}, Priority: 100, Enabled: true},
-		{Provider: "xAI", CanonicalName: "grok-4.6", RequiredTerms: []string{"grok", "4", "6"}, Priority: 100, Enabled: true},
-		{Provider: "Anthropic", CanonicalName: "claude-fable-5", RequiredTerms: []string{"claude", "fable", "5"}, Priority: 120, Enabled: true, Generated: true},
+	return []Rule{
+		// Pure required-terms match — the simplest rule form.
+		{Provider: "DeepSeek", CanonicalName: "deepseek-chat", RequiredTerms: []string{"deepseek", "chat"}, Priority: 100, Enabled: true},
+
+		// Required + excluded terms: match the base model but not its variants.
+		{Provider: "OpenAI", CanonicalName: "gpt-4o", RequiredTerms: []string{"gpt", "4o"}, ExcludedTerms: []string{"mini", "audio"}, Priority: 100, Enabled: true},
+
+		// Higher-priority specific variant that would also match the base rule above.
+		{Provider: "OpenAI", CanonicalName: "gpt-4o-mini", RequiredTerms: []string{"gpt", "4o", "mini"}, Priority: 110, Enabled: true},
+
+		// Regex pattern for precise version-boundary matching.
+		{Provider: "Anthropic", CanonicalName: "claude-sonnet-4", RequiredTerms: []string{"claude", "sonnet", "4"}, Pattern: `(?i)(^|[^a-z0-9])(?:claude[^a-z0-9]+)?sonnet[^0-9]+4([^0-9]|$)`, Priority: 100, Enabled: true},
+
+		// Aliases: alternate names that also match this rule (acts as an
+		// additional "any-of" requirement alongside the required terms).
+		{Provider: "Google", CanonicalName: "gemini-pro", RequiredTerms: []string{"gemini"}, AnyTerms: []string{"pro"}, Aliases: []string{"ultra"}, ExcludedTerms: []string{"flash"}, Priority: 100, Enabled: true},
 	}
-	for _, family := range []string{"opus", "sonnet", "haiku"} {
-		for _, version := range []string{"4-6", "4-7", "4-8", "5"} {
-			canonical := "claude-" + family + "-" + version
-			patternVersion := strings.ReplaceAll(version, "-", `[._-]`)
-			rules = append(rules, Rule{Provider: "Anthropic", CanonicalName: canonical, RequiredTerms: []string{family, version}, Pattern: `(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?` + family + `[^0-9]+` + patternVersion + `([^0-9]|$)`, Priority: 100, Enabled: true, Generated: true})
-		}
-	}
-	return rules
 }

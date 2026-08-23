@@ -40,30 +40,75 @@ func TestMultipleMatchesBecomeConflictWithoutPrimary(t *testing.T) {
 	}
 }
 
-func TestGeneratedClaudeRulesAndAmbiguity(t *testing.T) {
-	t.Parallel()
-
+func TestSeedRulesAreValidAndNonEmpty(t *testing.T) {
 	rules := SeedRules()
+	if len(rules) == 0 {
+		t.Fatal("SeedRules should return example rules for new users")
+	}
 	engine, err := New(rules)
 	if err != nil {
-		t.Fatalf("new seed engine: %v", err)
+		t.Fatalf("seed rules must produce a valid engine: %v", err)
 	}
-	preview := engine.Preview("anthropic/claude-sonnet-4-7-thinking")
-	if len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != "claude-sonnet-4-7" {
-		t.Fatalf("unexpected Claude match: %+v", preview)
+	if len(engine.rules) != len(rules) {
+		t.Fatalf("engine rule count = %d, want %d", len(engine.rules), len(rules))
 	}
-	if preview := engine.Preview("opus-4.8"); len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != "claude-opus-4-8" {
-		t.Fatalf("provider-prefix-free Claude alias did not match: %+v", preview)
-	}
-	ambiguousEngine, err := New([]Rule{
-		{CanonicalName: "first", RequiredTerms: []string{"model"}, Priority: 1, Enabled: true},
-		{CanonicalName: "second", RequiredTerms: []string{"model"}, Priority: 1, Enabled: true},
+}
+
+func TestExcludedTermsPreventVariantMatches(t *testing.T) {
+	t.Parallel()
+
+	engine, err := New([]Rule{
+		{CanonicalName: "gpt-4o", RequiredTerms: []string{"gpt", "4o"}, ExcludedTerms: []string{"mini"}, Priority: 100, Enabled: true},
+		{CanonicalName: "gpt-4o-mini", RequiredTerms: []string{"gpt", "4o", "mini"}, Priority: 110, Enabled: true},
 	})
 	if err != nil {
-		t.Fatalf("new ambiguous engine: %v", err)
+		t.Fatalf("new engine: %v", err)
 	}
-	if preview := ambiguousEngine.Preview("model"); !preview.Ambiguous {
-		t.Fatalf("expected ambiguity: %+v", preview)
+	// Base model matches.
+	if preview := engine.Preview("gpt-4o"); len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != "gpt-4o" {
+		t.Fatalf("gpt-4o should match base rule: %+v", preview)
+	}
+	// Variant does NOT match the base (excluded), matches the specific rule instead.
+	if preview := engine.Preview("gpt-4o-mini"); len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != "gpt-4o-mini" || !preview.Matches[0].Primary {
+		t.Fatalf("gpt-4o-mini should uniquely match its rule: %+v", preview)
+	}
+}
+
+func TestPatternPreventsVersionSubstringFalseMatches(t *testing.T) {
+	t.Parallel()
+
+	engine, err := New([]Rule{
+		{CanonicalName: "claude-sonnet-4", RequiredTerms: []string{"claude", "sonnet", "4"}, Pattern: `(?i)(^|[^a-z0-9])(?:claude[^a-z0-9]+)?sonnet[^0-9]+4([^0-9]|$)`, Priority: 100, Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	if preview := engine.Preview("claude-sonnet-4"); len(preview.Matches) != 1 {
+		t.Fatalf("claude-sonnet-4 should match: %+v", preview)
+	}
+	// Must NOT match version 45 — the pattern enforces a boundary after the 4.
+	if preview := engine.Preview("claude-sonnet-45"); len(preview.Matches) != 0 {
+		t.Fatalf("claude-sonnet-45 must not match claude-sonnet-4: %+v", preview.Matches)
+	}
+}
+
+func TestAliasesProvideAlternateNames(t *testing.T) {
+	t.Parallel()
+
+	engine, err := New([]Rule{
+		{CanonicalName: "gemini-pro", RequiredTerms: []string{"gemini"}, AnyTerms: []string{"pro"}, Aliases: []string{"ultra"}, ExcludedTerms: []string{"flash"}, Priority: 100, Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	if preview := engine.Preview("gemini-pro"); len(preview.Matches) != 1 {
+		t.Fatalf("gemini-pro should match: %+v", preview)
+	}
+	if preview := engine.Preview("gemini-ultra"); len(preview.Matches) != 1 {
+		t.Fatalf("alias gemini-ultra should match: %+v", preview)
+	}
+	if preview := engine.Preview("gemini-flash"); len(preview.Matches) != 0 {
+		t.Fatalf("gemini-flash must not match pro rule (excluded): %+v", preview.Matches)
 	}
 }
 
@@ -85,119 +130,23 @@ func TestAnyAndExcludeTerms(t *testing.T) {
 	}
 }
 
-func TestSeedRulesAvoidVersionSubstringFalseMatches(t *testing.T) {
-	engine, err := New(SeedRules())
+func TestAmbiguousMatchesHaveNoPrimary(t *testing.T) {
+	t.Parallel()
+
+	engine, err := New([]Rule{
+		{CanonicalName: "first", RequiredTerms: []string{"model"}, Priority: 1, Enabled: true},
+		{CanonicalName: "second", RequiredTerms: []string{"model"}, Priority: 1, Enabled: true},
+	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("new engine: %v", err)
 	}
-	if preview := engine.Preview("glm-4.5"); len(preview.Matches) != 0 {
-		t.Fatalf("glm-4.5 should not match glm-5: %+v", preview.Matches)
+	preview := engine.Preview("model")
+	if !preview.Ambiguous {
+		t.Fatalf("expected ambiguity: %+v", preview)
 	}
-	preview := engine.Preview("claude-haiku-4-5")
 	for _, match := range preview.Matches {
-		if match.Rule.CanonicalName == "claude-haiku-5" || match.Rule.CanonicalName == "claude-haiku-4-6" || match.Rule.CanonicalName == "claude-haiku-4-7" || match.Rule.CanonicalName == "claude-haiku-4-8" {
-			t.Fatalf("unexpected Claude version match: %+v", preview.Matches)
+		if match.Primary {
+			t.Fatalf("ambiguous matches must have no primary: %+v", preview)
 		}
-	}
-	for rawName, canonical := range map[string]string{
-		"deepseek-v4-flash-0731-free": "deepseek-v4-flash-0731",
-		"deepseek-v4-pro-0731":        "deepseek-v4-pro-0731",
-		"mimo-v2.5-pro-thinking":      "mimo-v2.5-pro",
-	} {
-		preview := engine.Preview(rawName)
-		if preview.Ambiguous || len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != canonical || !preview.Matches[0].Primary {
-			t.Fatalf("%s should uniquely match %s: %+v", rawName, canonical, preview)
-		}
-	}
-}
-
-func TestSeedRulesKeepGPT5NanoDistinct(t *testing.T) {
-	engine, err := New(SeedRules())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, rawName := range []string{"gpt-5-nano", "openai/gpt_5_nano-thinking", "GPT 5 nano"} {
-		preview := engine.Preview(rawName)
-		if preview.Ambiguous || len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != "gpt-5-nano" || !preview.Matches[0].Primary {
-			t.Fatalf("%q should uniquely match gpt-5-nano: %+v", rawName, preview)
-		}
-	}
-	for _, rawName := range []string{"gpt-5.5", "gpt-5.6-sol", "gpt-5-nanobot"} {
-		preview := engine.Preview(rawName)
-		for _, match := range preview.Matches {
-			if match.Rule.CanonicalName == "gpt-5-nano" {
-				t.Fatalf("%q must not match gpt-5-nano: %+v", rawName, preview)
-			}
-		}
-	}
-}
-
-func TestSeedRulesCoverHXIStatusPageModels(t *testing.T) {
-	engine, err := New(SeedRules())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for rawName, canonical := range map[string]string{
-		"gpt-5.4":                    "gpt-5.4",
-		"gpt-5.5":                    "gpt-5.5",
-		"gpt-5.6-luna":               "gpt-5.6-luna",
-		"gpt-5.6-sol":                "gpt-5.6-sol",
-		"gpt-5.6-terra":              "gpt-5.6-terra",
-		"deepseek/deepseek-v4-flash": "deepseek-v4-flash",
-		"deepseek/deepseek-v4-pro":   "deepseek-v4-pro",
-		"z-ai/glm-5.2":               "glm-5.2",
-		"z-ai/glm-5.3":               "glm-5.3",
-		"minimax/minimax-m3":         "minimax-m3",
-		"moonshotai/kimi-k2.6":       "kimi-k2.6",
-	} {
-		preview := engine.Preview(rawName)
-		if preview.Ambiguous || len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != canonical || !preview.Matches[0].Primary {
-			t.Fatalf("%q should uniquely match %q: %+v", rawName, canonical, preview)
-		}
-	}
-}
-
-func TestSeedRulesCoverRequestedGeminiModels(t *testing.T) {
-	engine, err := New(SeedRules())
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]string{
-		"gemini-3.7-flash":                   "gemini-3.7-flash",
-		"gemini-3.6-flash-thinking":          "gemini-3.6-flash",
-		"google/gemini-3.5-flash":            "gemini-3.5-flash",
-		"gemini-3.5-flash-lite":              "gemini-3.5-flash-lite",
-		"gemini-3.1-flash-lite":              "gemini-3.1-flash-lite",
-		"gemini-3.1-pro-preview":             "gemini-3.1-pro-preview",
-		"gemini-3.1-pro-preview-customtools": "gemini-3.1-pro-preview-customtools",
-		"gemini-3-flash-preview":             "gemini-3-flash-preview",
-		"gemini-2.5-pro":                     "gemini-2.5-pro",
-		"gemini-2.5-flash":                   "gemini-2.5-flash",
-		"gemini-2.5-flash-lite":              "gemini-2.5-flash-lite",
-	}
-	for rawName, canonical := range want {
-		preview := engine.Preview(rawName)
-		if preview.Ambiguous || len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != canonical || !preview.Matches[0].Primary {
-			t.Errorf("%q should uniquely match %q: %+v", rawName, canonical, preview)
-		}
-	}
-	for _, rawName := range []string{"gemini-3.5-flash-lite", "gemini-3.1-pro-preview-customtools", "gemini-2.5-flash-lite"} {
-		preview := engine.Preview(rawName)
-		for _, match := range preview.Matches {
-			if match.Rule.CanonicalName == "gemini-3.5-flash" || match.Rule.CanonicalName == "gemini-3.1-pro-preview" || match.Rule.CanonicalName == "gemini-2.5-flash" {
-				t.Errorf("%q matched base Gemini rule %q: %+v", rawName, match.Rule.CanonicalName, preview)
-			}
-		}
-	}
-}
-
-func TestSeedRulesCoverGrok46(t *testing.T) {
-	engine, err := New(SeedRules())
-	if err != nil {
-		t.Fatal(err)
-	}
-	preview := engine.Preview("grok-4.6")
-	if preview.Ambiguous || len(preview.Matches) != 1 || preview.Matches[0].Rule.CanonicalName != "grok-4.6" || !preview.Matches[0].Primary {
-		t.Fatalf("grok-4.6 should uniquely match its rule: %+v", preview)
 	}
 }

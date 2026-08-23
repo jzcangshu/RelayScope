@@ -45,17 +45,9 @@ Cross-site statistical scoring, long-term analytics, and low-usage model coverag
 
 RelayPulse starts with an empty database. Sites are added through the admin console. Display names may fall back to the site's own title or hostname and can be edited after creation. See `sites.example.json` in the repository root for the configuration format.
 
-## Initial monitored model families
+## Model matching rules
 
-- DeepSeek: `deepseek-v4-flash`, `deepseek-v4-pro`, `deepseek-v4-flash-0731`, `deepseek-v4-pro-0731`
-- GLM: `glm-5`, `glm-5.1`, `glm-5.2`
-- MiniMax: `minimax-m2.5`, `minimax-m2.7`, `minimax-m3`
-- Kimi: `kimi-k2.5`, `kimi-k2.6`, `kimi-k2.7`, `kimi-k3`
-- MiMo: `mimo-v2.5`, `mimo-v2.5-pro`
-- OpenAI: `gpt-5.5`, `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`
-- Google: `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.1-pro-preview`, `gemini-3.1-pro-preview-customtools`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
-- xAI: `grok-4.3`, `grok-4.5`
-- Anthropic: every combination of `claude-{opus,sonnet,haiku}-{4-6,4-7,4-8,5}`, plus `claude-fable-5`
+RelayPulse ships with a small set of example matching rules that demonstrate each matching capability (required terms, excluded terms, regex patterns, aliases, priority-based specificity). Administrators add their own rules through the console to match the model families they care about.
 
 Matching is intentionally recall-oriented. Prefix and suffix variants coexist as distinct raw models. Rules are deterministic and editable. Exactly one matching rule assigns the public canonical model; multiple matching candidates are retained as an administrator-visible conflict with no public canonical assignment until the rule set is corrected. Exact raw names are never rewritten.
 
