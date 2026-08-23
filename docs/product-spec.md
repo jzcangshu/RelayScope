@@ -2,7 +2,7 @@
 
 ## Purpose
 
-RelayPulse answers two practical questions for users of LinuxDo community relay sites:
+RelayPulse answers two practical questions for users of AI API relay sites:
 
 1. If I want to use a model now, which site and group currently look usable?
 2. If I want to use a site now, which monitored models and groups currently look usable?
@@ -41,27 +41,9 @@ Cross-site statistical scoring, long-term analytics, and low-usage model coverag
 - Trigger a bounded collection or session recovery run.
 - Never display complete cookies, OAuth state, encryption keys, or other credentials.
 
-## Initial sites
+## Adding sites
 
-Display names may initially fall back to the site's own title or hostname and can be edited in the console.
-
-| Source URL | Initial adapter family | Known note |
-| --- | --- | --- |
-| https://elysiver.h-e.top/pricing | NewAPI pricing | Reference implementation |
-| https://new-api.abrdns.com/status | NewAPI embedded probe | Batch status endpoint |
-| https://status.chybenzun.top/ | Custom probe | Cloudflare-protected HTTP |
-| https://metapi.lilililwan.xyz/pricing | Unknown pending probe | Connection currently closes |
-| https://api.42w.shop/pricing | NewAPI pricing | Full catalog is available behind page pagination |
-| https://api.fengwind.com/model-market | Model market | Login required |
-| http://v4.whyyin.cn:28327/pricing | Pending discovery | User has opened page in Chrome |
-| https://52ccl.net/pricing | Pending discovery | User has opened page in Chrome |
-| https://ai.121628.xyz/pricing | Pending discovery | User has opened page in Chrome |
-| https://aitoken.forum/pricing | Pending discovery | User has opened page in Chrome |
-| https://api.llm.pm/pricing | Pending discovery | User has opened page in Chrome |
-| https://demo.dev2.mulink.top/pricing | Pending discovery | User has opened page in Chrome |
-| https://v-api.de5.net/pricing | Pending discovery | User has opened page in Chrome |
-| https://jianzhile.vip/console/model-status | Authenticated NewAPI model probe + pricing | Login required; prices from https://jianzhile.vip/pricing |
-| https://sub2.pigeonw.com/monitor | Authenticated Sub2API channel monitor | Login required |
+RelayPulse starts with an empty database. Sites are added through the admin console. Display names may fall back to the site's own title or hostname and can be edited after creation. See `sites.example.json` in the repository root for the configuration format.
 
 ## Initial monitored model families
 

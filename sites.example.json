@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Example NewAPI Relay",
+    "base_url": "https://relay.example.com",
+    "source_url": "https://relay.example.com/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
+  },
+  {
+    "name": "Example Uptime Kuma Probe",
+    "base_url": "https://status.example.com",
+    "source_url": "https://status.example.com/",
+    "adapter": "uptime-kuma",
+    "adapter_config": {
+      "slug": "api",
+      "retryAttempts": 3,
+      "monitorNameMode": "suffix-model"
+    },
+    "session_required": false
+  },
+  {
+    "name": "Example Authenticated Relay",
+    "base_url": "https://private.example.com",
+    "source_url": "https://private.example.com/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {
+      "pricingRequiresSession": true
+    },
+    "session_required": true
+  }
+]
