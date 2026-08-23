@@ -150,8 +150,8 @@ func TestOpenAppliesSchemaAndPragmas(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "1" {
-		t.Fatalf("schema version = %q, want 1", version)
+	if version != "2" {
+		t.Fatalf("schema version = %q, want 2", version)
 	}
 }
 
@@ -161,8 +161,8 @@ func TestMigrationVersionIsRecordedAndIdempotent(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != "1" {
-		t.Fatalf("version = %q, want 1", version)
+	if version != "2" {
+		t.Fatalf("version = %q, want 2", version)
 	}
 	if err := store.migrate(context.Background()); err != nil {
 		t.Fatalf("second migration: %v", err)

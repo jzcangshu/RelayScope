@@ -44,6 +44,7 @@ type Site struct {
 	JitterSeconds       int64                   `json:"jitterSeconds"`
 	SessionConfigured   bool                    `json:"sessionConfigured"`
 	AcquisitionState    domain.AcquisitionState `json:"acquisitionState"`
+	NextRunAt           *time.Time              `json:"nextRunAt,omitempty"`
 	CreatedAt           time.Time               `json:"createdAt"`
 	UpdatedAt           time.Time               `json:"updatedAt"`
 }
@@ -763,48 +764,20 @@ func (store *Store) CreateManagedSite(ctx context.Context, site Site) (Site, err
 func (store *Store) ListEnabledSites(ctx context.Context) ([]Site, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
-			interval_seconds, jitter_seconds, acquisition_state, created_at, updated_at,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
 		FROM sites WHERE enabled = 1 ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled sites: %w", err)
 	}
 	defer rows.Close()
-
-	var sites []Site
-	for rows.Next() {
-		var site Site
-		var enabled, sessionRequired int
-		var intervalSeconds, jitterSeconds int64
-		var acquisitionState string
-		var createdAt, updatedAt int64
-		var sessionConfigured bool
-		if err := rows.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
-			&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &createdAt, &updatedAt, &sessionConfigured); err != nil {
-			return nil, fmt.Errorf("scan site: %w", err)
-		}
-		site.Enabled = enabled == 1
-		site.SessionRequired = sessionRequired == 1
-		site.Interval = time.Duration(intervalSeconds) * time.Second
-		site.Jitter = time.Duration(jitterSeconds) * time.Second
-		site.IntervalSeconds = intervalSeconds
-		site.JitterSeconds = jitterSeconds
-		site.AcquisitionState = domain.AcquisitionState(acquisitionState)
-		site.SessionConfigured = sessionConfigured
-		site.CreatedAt = time.UnixMilli(createdAt).UTC()
-		site.UpdatedAt = time.UnixMilli(updatedAt).UTC()
-		sites = append(sites, site)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate sites: %w", err)
-	}
-	return sites, nil
+	return scanSites(rows)
 }
 
 func (store *Store) ListAllSites(ctx context.Context) ([]Site, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
-			interval_seconds, jitter_seconds, acquisition_state, created_at, updated_at,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
 		FROM sites ORDER BY id`)
 	if err != nil {
@@ -812,6 +785,64 @@ func (store *Store) ListAllSites(ctx context.Context) ([]Site, error) {
 	}
 	defer rows.Close()
 	return scanSites(rows)
+}
+
+func (store *Store) GetSite(ctx context.Context, siteID int64) (Site, error) {
+	row := store.db.QueryRowContext(ctx, `
+		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
+			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
+		FROM sites WHERE id = ?`, siteID)
+	var site Site
+	var enabled, sessionRequired int
+	var intervalSeconds, jitterSeconds int64
+	var acquisitionState string
+	var nextRunAt sql.NullInt64
+	var createdAt, updatedAt int64
+	var sessionConfigured bool
+	if err := row.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
+		&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
+		return Site{}, fmt.Errorf("get site %d: %w", siteID, err)
+	}
+	site.Enabled = enabled == 1
+	site.SessionRequired = sessionRequired == 1
+	site.Interval = time.Duration(intervalSeconds) * time.Second
+	site.Jitter = time.Duration(jitterSeconds) * time.Second
+	site.IntervalSeconds = intervalSeconds
+	site.JitterSeconds = jitterSeconds
+	site.AcquisitionState = domain.AcquisitionState(acquisitionState)
+	if nextRunAt.Valid {
+		t := time.UnixMilli(nextRunAt.Int64).UTC()
+		site.NextRunAt = &t
+	}
+	site.SessionConfigured = sessionConfigured
+	site.CreatedAt = time.UnixMilli(createdAt).UTC()
+	site.UpdatedAt = time.UnixMilli(updatedAt).UTC()
+	return site, nil
+}
+
+func (store *Store) ListDueSites(ctx context.Context, now time.Time, limit int) ([]Site, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := store.db.QueryContext(ctx, `
+		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
+			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
+		FROM sites WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= ?)
+		ORDER BY COALESCE(next_run_at, 0), id LIMIT ?`, unixMilli(now), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list due sites: %w", err)
+	}
+	defer rows.Close()
+	return scanSites(rows)
+}
+
+func (store *Store) SetSiteNextRun(ctx context.Context, siteID int64, nextRunAt time.Time) error {
+	if _, err := store.db.ExecContext(ctx, `UPDATE sites SET next_run_at = ? WHERE id = ?`, unixMilli(nextRunAt), siteID); err != nil {
+		return fmt.Errorf("set next run: %w", err)
+	}
+	return nil
 }
 
 func (store *Store) StartCollectionRun(ctx context.Context, siteID int64, adapterKey string, startedAt time.Time) (int64, error) {
@@ -893,10 +924,11 @@ func scanSites(rows siteRows) ([]Site, error) {
 		var enabled, sessionRequired int
 		var intervalSeconds, jitterSeconds int64
 		var acquisitionState string
+		var nextRunAt sql.NullInt64
 		var createdAt, updatedAt int64
 		var sessionConfigured bool
 		if err := rows.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
-			&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &createdAt, &updatedAt, &sessionConfigured); err != nil {
+			&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
 			return nil, fmt.Errorf("scan site: %w", err)
 		}
 		site.Enabled = enabled == 1
@@ -906,6 +938,10 @@ func scanSites(rows siteRows) ([]Site, error) {
 		site.IntervalSeconds = intervalSeconds
 		site.JitterSeconds = jitterSeconds
 		site.AcquisitionState = domain.AcquisitionState(acquisitionState)
+		if nextRunAt.Valid {
+			t := time.UnixMilli(nextRunAt.Int64).UTC()
+			site.NextRunAt = &t
+		}
 		site.SessionConfigured = sessionConfigured
 		site.CreatedAt = time.UnixMilli(createdAt).UTC()
 		site.UpdatedAt = time.UnixMilli(updatedAt).UTC()

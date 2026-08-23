@@ -47,3 +47,92 @@ func TestCollectionDelayUsesFailedSiteBackoff(t *testing.T) {
 		}
 	}
 }
+
+func TestListDueSitesRespectsNextRunAt(t *testing.T) {
+	ctx := context.Background()
+	dbStore, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+
+	past, _ := dbStore.CreateSite(ctx, store.Site{
+		Name: "past", BaseURL: "https://past.example", SourceURL: "https://past.example/pricing",
+		AdapterKey: "test", Enabled: true, Interval: 15 * time.Minute, Jitter: 0,
+	})
+	future, _ := dbStore.CreateSite(ctx, store.Site{
+		Name: "future", BaseURL: "https://future.example", SourceURL: "https://future.example/pricing",
+		AdapterKey: "test", Enabled: true, Interval: 15 * time.Minute, Jitter: 0,
+	})
+
+	now := time.Now().UTC()
+	if err := dbStore.SetSiteNextRun(ctx, past.ID, now.Add(-1*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbStore.SetSiteNextRun(ctx, future.ID, now.Add(1*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	due, err := dbStore.ListDueSites(ctx, now, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0].ID != past.ID {
+		t.Fatalf("expected only past site to be due, got %d sites", len(due))
+	}
+}
+
+func TestNewSiteWithNullNextRunAtIsImmediatelyDue(t *testing.T) {
+	ctx := context.Background()
+	dbStore, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+
+	created, err := dbStore.CreateSite(ctx, store.Site{
+		Name: "fresh", BaseURL: "https://fresh.example", SourceURL: "https://fresh.example/pricing",
+		AdapterKey: "test", Enabled: true, Interval: 15 * time.Minute, Jitter: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	due, err := dbStore.ListDueSites(ctx, time.Now().UTC(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0].ID != created.ID {
+		t.Fatalf("new site with NULL next_run_at should be immediately due, got %d sites", len(due))
+	}
+}
+
+func TestGetSiteReturnsNextRunAt(t *testing.T) {
+	ctx := context.Background()
+	dbStore, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+
+	created, err := dbStore.CreateSite(ctx, store.Site{
+		Name: "scheduled", BaseURL: "https://scheduled.example", SourceURL: "https://scheduled.example/pricing",
+		AdapterKey: "test", Enabled: true, Interval: 15 * time.Minute, Jitter: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(1 * time.Hour)
+	if err := dbStore.SetSiteNextRun(ctx, created.ID, future); err != nil {
+		t.Fatal(err)
+	}
+	site, err := dbStore.GetSite(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.NextRunAt == nil {
+		t.Fatal("NextRunAt should not be nil after SetSiteNextRun")
+	}
+	if !site.NextRunAt.Truncate(time.Second).Equal(future.Truncate(time.Second)) {
+		t.Fatalf("NextRunAt = %v, want ~%v", site.NextRunAt, future)
+	}
+}
