@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>RelayPulse - 公益聚合监测</title>
+  <title>RelayPulse - 中转站健康监测</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/dashboard.css">
@@ -21,10 +21,10 @@
   <header class="topbar">
     <div class="brand-lockup">
       <span class="brand-mark" aria-hidden="true"><i></i></span>
-      <strong class="brand">RelayPulse - 公益聚合监测</strong>
+      <strong class="brand">RelayPulse - 中转站健康监测</strong>
     </div>
     <div class="header-actions">
-      <button id="user-action" type="button">LinuxDo 登录</button>
+      <button id="user-action" type="button">登录</button>
       <div class="header-tools" role="group" aria-label="页面工具">
         <button id="announcement-action" class="theme-toggle announcement-action" type="button" aria-label="查看运行通知" title="查看运行通知" aria-haspopup="dialog" aria-controls="announcement-dialog">
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8.5 13h5" /></svg>
@@ -61,7 +61,7 @@
 	  <form id="feedback-form" class="detail-content"><label>反馈内容<textarea id="feedback-content" rows="6" maxlength="2000" required placeholder="例如：某个站点的模型状态与实际不一致"></textarea></label><button type="submit">提交反馈</button><p id="feedback-message" class="muted"></p></form>
     </dialog>
     <dialog id="announcement-dialog" class="announcement-dialog">
-      <div class="detail-head announcement-head"><h2>公益监测服务运行状态</h2><button id="announcement-close" class="icon-button" type="button" aria-label="关闭公告" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <div class="detail-head announcement-head"><h2>运行状态通知</h2><button id="announcement-close" class="icon-button" type="button" aria-label="关闭公告" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div id="announcement-content" class="announcement-content" aria-live="polite"></div>
     </dialog>
   </main>

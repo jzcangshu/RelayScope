@@ -508,7 +508,7 @@ async function loadUser() {
   }
   const identity = await response.json();
   currentUser = identity.authenticated ? identity.user : null;
-  userAction.textContent = currentUser ? `反馈 · ${currentUser.username}` : 'LinuxDo 登录';
+  userAction.textContent = currentUser ? `反馈 · ${currentUser.username}` : '登录';
 }
 
 userAction.addEventListener('click', () => {

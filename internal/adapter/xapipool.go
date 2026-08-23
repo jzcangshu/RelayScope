@@ -17,7 +17,7 @@ import (
 type XAPIPoolAdapter struct{}
 
 func (XAPIPoolAdapter) Key() string         { return "xapi-pool" }
-func (XAPIPoolAdapter) DisplayName() string { return "X-API 号池" }
+func (XAPIPoolAdapter) DisplayName() string { return "X-API Pool" }
 func (XAPIPoolAdapter) ConfigSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"heatmapPath":{"type":"string","default":"/api/pool/requests/heatmap?channel=text"}}}`)
 }

@@ -18,7 +18,7 @@ test('public dashboard uses a compact bell control and single announcement title
   const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
   const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
   assert.match(html, /id="announcement-action" class="theme-toggle announcement-action"/);
-  assert.match(html, /公益监测服务运行状态/);
+  assert.match(html, /运行状态通知/);
   assert.doesNotMatch(html, /service-status|announcement-count|运行公告/);
   assert.equal((html.match(/class="icon-button"/g) || []).length, 3);
   assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 3);
@@ -30,7 +30,7 @@ test('public dashboard uses a compact bell control and single announcement title
   assert.match(css, /\.icon-button svg[\s\S]*?width: 19px[\s\S]*?height: 19px/);
 });
 
-test('dashboard script binds the public LinuxDo login control', () => {
+test('dashboard script binds the public login control', () => {
   const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
   assert.match(source, /user-action/);
   assert.match(source, /userAction\.addEventListener\('click'/);

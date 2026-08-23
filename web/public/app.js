@@ -139,7 +139,7 @@ async function loadUser() {
   const response = await fetch('/api/v1/auth/me', { cache: 'no-store' });
   if (!response.ok) { userAction.hidden = true; return; }
   const identity = await response.json(); currentUser = identity.authenticated ? identity.user : null;
-  userAction.textContent = currentUser ? `反馈 · ${currentUser.username}` : 'LinuxDo 登录';
+  userAction.textContent = currentUser ? `反馈 · ${currentUser.username}` : '登录';
 }
 userAction.addEventListener('click', () => { if (currentUser) { feedbackMessage.textContent = ''; feedbackDialog.showModal(); } else { window.location.assign('/api/v1/auth/linuxdo'); } });
 document.querySelector('#feedback-close').addEventListener('click', () => feedbackDialog.close());

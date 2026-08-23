@@ -86,7 +86,7 @@ func TestHealthAndMetaEndpoints(t *testing.T) {
 		{path: "/health/ready", contains: []string{`"status":"ready"`}},
 		{path: "/api/v1/meta", contains: []string{`"publicUrl":"https://status.example.com"`}},
 		{path: "/", contains: []string{
-			"RelayPulse - 公益聚合监测",
+			"RelayPulse - 中转站健康监测",
 			`href="/assets/favicon.svg"`,
 		}, absent: []string{"公益站模型状态", "expiry-countdown"}},
 		{path: "/admin/", contains: []string{"管理员控制台"}},
