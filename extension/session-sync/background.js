@@ -1,6 +1,6 @@
 importScripts('config.js', 'capture.js');
 
-const DEFAULT_SERVER = self.RELAYPULSE_SERVER || 'http://monitor.mihayo.xyz';
+const DEFAULT_SERVER = self.RELAYPULSE_SERVER || 'http://127.0.0.1:8080';
 const BUILTIN_PASSWORD = self.RELAYPULSE_ADMIN_PASSWORD || '';
 
 const normalizeServer = (value) => String(value || '').trim().replace(/\/$/, '');

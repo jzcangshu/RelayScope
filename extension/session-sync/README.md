@@ -4,7 +4,7 @@
 2. Choose **Load unpacked** and select this directory.
 3. Reach RelayPulse through HTTPS or an SSH tunnel such as `http://127.0.0.1:8080`.
 4. Copy `config.example.js` to `config.js` and put the private administrator password in `config.js`.
-5. Reload the extension and click its toolbar icon. It opens as a persistent Chrome side panel and connects to `http://monitor.mihayo.xyz` automatically.
+5. Reload the extension and click its toolbar icon. It opens as a persistent Chrome side panel and connects to the configured server automatically.
 6. Select an All API Hub account backup. Only exact-origin matches from the server's pending list are prepared for upload.
 7. For Sub2API sites, keep the matching logged-in site page open so the extension can read its refreshable token set. Choose **同步并逐站验证**.
 
