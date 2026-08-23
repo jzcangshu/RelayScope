@@ -21,6 +21,20 @@ func (challenge *fakeChallenge) Solve(_ context.Context, _ string) (ChallengeRes
 	return ChallengeResult{UserAgent: "solved-agent", Cookies: []ChallengeCookie{{Name: "cf_clearance", Value: "ok"}}}, nil
 }
 
+func TestHTTPFetcherRedactsQueryValuesFromErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte("not-json"))
+	}))
+	defer server.Close()
+
+	var target map[string]any
+	err := (HTTPFetcher{Client: server.Client()}).GetJSON(context.Background(), server.URL+"/status?api_key=secret-value", &target)
+	if err == nil || strings.Contains(err.Error(), "secret-value") || strings.Contains(err.Error(), "api_key=") {
+		t.Fatalf("query value leaked through decode error: %v", err)
+	}
+}
+
 func TestHTTPFetcherRetriesForbiddenWithChallengeSession(t *testing.T) {
 	var sawCookie, sawAgent bool
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

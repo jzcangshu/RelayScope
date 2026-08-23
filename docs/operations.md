@@ -39,7 +39,9 @@ health endpoints and the admin run view after restart.
 
 ## Routine checks
 
-- Open `/health/live` and `/health/ready` after upgrades.
+- Open `/health/live` and `/health/ready` after upgrades. `live` is a process
+  probe; `ready` also performs a lightweight SQLite revision check and should
+  return `503` when the store is unavailable.
 - Inspect the administrator collection-run view for `login_expired`,
   `challenge_pending`, `challenge_failed`, and stale data.
 - Refresh private-site credentials through the Chrome access-token side panel.

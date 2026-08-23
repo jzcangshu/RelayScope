@@ -198,9 +198,22 @@ func TestSchedulerDispatchPersistsStateForRestart(t *testing.T) {
 	for time.Now().Before(deadline) {
 		loaded, loadErr := dbStore.GetSite(ctx, site.ID)
 		if loadErr == nil && loaded.NextRunAt != nil {
-			return
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("scheduler dispatch did not persist next_run_at")
+	loaded, err := dbStore.GetSite(ctx, site.ID)
+	if err != nil || loaded.NextRunAt == nil {
+		t.Fatalf("scheduler dispatch did not persist next_run_at: site=%+v err=%v", loaded, err)
+	}
+	restarted := New(dbStore, siteCollector, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Now)
+	due, err := dbStore.ListDueSites(ctx, time.Now().UTC(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 0 {
+		t.Fatalf("restart saw future site as due: %+v", due)
+	}
+	restarted.dispatch(ctx)
+	restarted.Stop()
 }

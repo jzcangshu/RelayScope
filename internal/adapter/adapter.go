@@ -26,6 +26,34 @@ type FetchError struct {
 	Err             error
 }
 
+type redactedError struct {
+	message string
+	err     error
+}
+
+func (err redactedError) Error() string { return err.message }
+func (err redactedError) Unwrap() error { return err.err }
+
+func wrapRedacted(message string, err error) error {
+	if err == nil {
+		return errors.New(message)
+	}
+	return redactedError{message: message, err: err}
+}
+
+func safeURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "<invalid URL>"
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	return parsed.String()
+}
+
 func (err *FetchError) Error() string {
 	if err.Err != nil {
 		return err.Err.Error()
@@ -136,14 +164,14 @@ func (fetcher HTTPFetcher) GetJSON(ctx context.Context, rawURL string, target an
 		return err
 	}
 	if err := json.Unmarshal(body, target); err != nil {
-		return fmt.Errorf("decode JSON from %s: %w", rawURL, err)
+		return fmt.Errorf("decode JSON from %s: %w", safeURL(rawURL), err)
 	}
 	return nil
 }
 
 func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte, http.Header, error) {
 	if _, err := url.ParseRequestURI(rawURL); err != nil {
-		return nil, nil, fmt.Errorf("invalid fetch URL: %w", err)
+		return nil, nil, wrapRedacted("invalid fetch URL", err)
 	}
 	client := fetcher.Client
 	if client == nil {
@@ -151,7 +179,7 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build fetch request: %w", err)
+		return nil, nil, wrapRedacted("build fetch request", err)
 	}
 	if fetcher.UserAgent != "" {
 		request.Header.Set("User-Agent", fetcher.UserAgent)
@@ -168,7 +196,7 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, nil, fmt.Errorf("fetch request failed: %w", err)
+		return nil, nil, wrapRedacted("fetch request failed", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
@@ -177,7 +205,7 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 		if challenge && fetcher.Challenge != nil {
 			solved, solveErr := fetcher.Challenge.Solve(ctx, rawURL)
 			if solveErr != nil {
-				return nil, response.Header, &FetchError{URL: rawURL, StatusCode: response.StatusCode, Challenge: true, ChallengeFailed: true, Err: fmt.Errorf("challenge solve failed: %w", solveErr)}
+				return nil, response.Header, &FetchError{URL: safeURL(rawURL), StatusCode: response.StatusCode, Challenge: true, ChallengeFailed: true, Err: wrapRedacted("challenge solve failed", solveErr)}
 			}
 			retry, retryErr := fetcher.requestWithChallenge(ctx, rawURL, solved)
 			if retryErr != nil {
@@ -186,7 +214,7 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 			return retry, response.Header, nil
 		}
 		return nil, response.Header, &FetchError{
-			URL: rawURL, StatusCode: response.StatusCode,
+			URL: safeURL(rawURL), StatusCode: response.StatusCode,
 			Challenge:     challenge,
 			LoginRequired: response.StatusCode == http.StatusUnauthorized,
 			Err:           fmt.Errorf("fetch returned HTTP %d", response.StatusCode),
@@ -198,10 +226,10 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
 	if err != nil {
-		return nil, response.Header, fmt.Errorf("read %s: %w", rawURL, err)
+		return nil, response.Header, wrapRedacted("read response body", err)
 	}
 	if int64(len(body)) > maxBytes {
-		return nil, response.Header, fmt.Errorf("response from %s exceeds %d bytes", rawURL, maxBytes)
+		return nil, response.Header, fmt.Errorf("response exceeds %d bytes", maxBytes)
 	}
 	return body, response.Header, nil
 }
@@ -213,7 +241,7 @@ func (fetcher HTTPFetcher) requestWithChallenge(ctx context.Context, rawURL stri
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, wrapRedacted("build challenge retry request", err)
 	}
 	userAgent := solved.UserAgent
 	if userAgent == "" {
@@ -235,14 +263,14 @@ func (fetcher HTTPFetcher) requestWithChallenge(ctx context.Context, rawURL stri
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("retry fetch failed: %w", err)
+		return nil, wrapRedacted("retry fetch failed", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		preview, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		challenge := looksLikeChallenge(response.Header.Get("Content-Type"), string(preview))
 		return nil, &FetchError{
-			URL: rawURL, StatusCode: response.StatusCode, Challenge: challenge, ChallengeFailed: challenge,
+			URL: safeURL(rawURL), StatusCode: response.StatusCode, Challenge: challenge, ChallengeFailed: challenge,
 			LoginRequired: response.StatusCode == http.StatusUnauthorized,
 			Err:           fmt.Errorf("retry fetch returned HTTP %d", response.StatusCode),
 		}
@@ -253,10 +281,10 @@ func (fetcher HTTPFetcher) requestWithChallenge(ctx context.Context, rawURL stri
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
 	if err != nil {
-		return nil, err
+		return nil, wrapRedacted("read challenge response body", err)
 	}
 	if int64(len(body)) > maxBytes {
-		return nil, fmt.Errorf("response from %s exceeds %d bytes", rawURL, maxBytes)
+		return nil, fmt.Errorf("challenge response exceeds %d bytes", maxBytes)
 	}
 	return body, nil
 }

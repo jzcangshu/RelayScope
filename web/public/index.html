@@ -8,14 +8,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/dashboard.css">
-  <script>
-    try {
-      const savedTheme = localStorage.getItem('relaypulse-theme');
-      document.documentElement.dataset.theme = savedTheme === 'light' || savedTheme === 'dark'
-        ? savedTheme
-        : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    } catch (_) {}
-  </script>
+  <script src="/assets/theme.js"></script>
 </head>
 <body class="public-dashboard">
   <header class="topbar">

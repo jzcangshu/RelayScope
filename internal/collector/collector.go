@@ -58,17 +58,24 @@ func New(options Options) (*Collector, error) {
 	}, nil
 }
 
-func (collector *Collector) CollectSite(ctx context.Context, site store.Site, now time.Time) error {
+func (collector *Collector) CollectSite(ctx context.Context, site store.Site, now time.Time) (returnErr error) {
 	if !collector.tryClaimSite(site.ID) {
 		return fmt.Errorf("site %d collection is already running", site.ID)
 	}
 	defer collector.releaseSite(site.ID)
+	var runID int64
+	var err error
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			returnErr = collector.finishFailure(ctx, site, runID, "collector_panic", "adapter panicked during collection", now)
+		}
+	}()
 
 	adapterImpl, ok := collector.registry.Get(site.AdapterKey)
 	if !ok {
 		return collector.finishFailure(ctx, site, 0, "adapter_not_found", "adapter "+site.AdapterKey+" is not registered", now)
 	}
-	runID, err := collector.store.StartCollectionRun(ctx, site.ID, site.AdapterKey, now)
+	runID, err = collector.store.StartCollectionRun(ctx, site.ID, site.AdapterKey, now)
 	if err != nil {
 		return err
 	}
@@ -88,8 +95,10 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	if err := collector.acquireHTTP(ctx); err != nil {
 		return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error(), now)
 	}
-	collection, collectErr := adapterImpl.Collect(ctx, siteDefinition, fetcher, now)
-	collector.releaseHTTP()
+	collection, collectErr := func() (domain.Collection, error) {
+		defer collector.releaseHTTP()
+		return adapterImpl.Collect(ctx, siteDefinition, fetcher, now)
+	}()
 	if collectErr != nil {
 		return collector.finishFailure(ctx, site, runID, classifyFetchError(collectErr), collectErr.Error(), now)
 	}
@@ -125,8 +134,10 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 		if err := collector.acquireHTTP(ctx); err != nil {
 			return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error(), now)
 		}
-		detailErr := detailCollector.CollectDetails(ctx, siteDefinition, fetcher, &collection, matchedNames, now)
-		collector.releaseHTTP()
+		detailErr := func() error {
+			defer collector.releaseHTTP()
+			return detailCollector.CollectDetails(ctx, siteDefinition, fetcher, &collection, matchedNames, now)
+		}()
 		if detailErr != nil {
 			return collector.finishFailure(ctx, site, runID, classifyFetchError(detailErr), detailErr.Error(), now)
 		}
@@ -152,7 +163,9 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 		message = formatCollectionIssues(collection.Issues)
 		collector.logger.Warn("site collection completed with partial details", "site_id", site.ID, "issues", len(collection.Issues))
 	}
-	if err := collector.store.FinishCollectionRun(ctx, runID, status, collection.CatalogComplete, modelCount, groupCount, code, message, now); err != nil {
+	finishCtx, cancelFinish := persistenceContext(ctx)
+	defer cancelFinish()
+	if err := collector.store.FinishCollectionRun(finishCtx, runID, status, collection.CatalogComplete, modelCount, groupCount, code, message, now); err != nil {
 		return err
 	}
 	collector.logger.Info("site collection complete", "site_id", site.ID, "models", modelCount, "groups", groupCount, "revision", revision)
@@ -249,12 +262,8 @@ func (collector *Collector) CollectNow(ctx context.Context, siteID int64) error 
 }
 
 func (collector *Collector) finishFailure(ctx context.Context, site store.Site, runID int64, code, message string, now time.Time) error {
-	persistCtx := ctx
-	var cancel context.CancelFunc
-	if ctx.Err() != nil {
-		persistCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-	}
+	persistCtx, cancel := persistenceContext(ctx)
+	defer cancel()
 	if runID > 0 {
 		if err := collector.store.FinishCollectionRun(persistCtx, runID, "failed", false, 0, 0, code, message, now); err != nil {
 			collector.logger.Error("finish failed run failed", "site_id", site.ID, "error", err)
@@ -274,6 +283,10 @@ func (collector *Collector) finishFailure(ctx context.Context, site store.Site, 
 	}
 	collector.logger.Warn("site collection failed", "site_id", site.ID, "code", code, "error", message)
 	return fmt.Errorf("site %d: %s: %s", site.ID, code, message)
+}
+
+func persistenceContext(_ context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
 func (collector *Collector) tryClaimSite(siteID int64) bool {

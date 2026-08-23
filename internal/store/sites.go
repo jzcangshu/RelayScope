@@ -152,14 +152,18 @@ func (store *Store) ListActiveFailureAnnouncements(ctx context.Context) ([]Failu
 }
 
 func (store *Store) CreateSite(ctx context.Context, site Site) (Site, error) {
+	site.Name = strings.TrimSpace(site.Name)
+	site.BaseURL = strings.TrimSpace(site.BaseURL)
+	site.SourceURL = strings.TrimSpace(site.SourceURL)
+	site.AdapterKey = strings.TrimSpace(site.AdapterKey)
 	if site.Name == "" || site.BaseURL == "" || site.SourceURL == "" || site.AdapterKey == "" {
 		return Site{}, errors.New("site name, URLs, and adapter key are required")
 	}
-	for name, value := range map[string]string{"base URL": site.BaseURL, "source URL": site.SourceURL} {
-		parsed, err := url.Parse(strings.TrimSpace(value))
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
-			return Site{}, fmt.Errorf("invalid %s", name)
-		}
+	if err := validateSiteURL("base URL", site.BaseURL); err != nil {
+		return Site{}, err
+	}
+	if err := validateSiteURL("source URL", site.SourceURL); err != nil {
+		return Site{}, err
 	}
 	if site.Interval == 0 {
 		site.Interval = 15 * time.Minute
@@ -167,8 +171,10 @@ func (store *Store) CreateSite(ctx context.Context, site Site) (Site, error) {
 	if site.Interval < 5*time.Minute || site.Jitter < 0 {
 		return Site{}, errors.New("site interval must be at least five minutes and jitter cannot be negative")
 	}
-	if site.AdapterConfig == "" {
+	if strings.TrimSpace(site.AdapterConfig) == "" {
 		site.AdapterConfig = "{}"
+	} else {
+		site.AdapterConfig = strings.TrimSpace(site.AdapterConfig)
 	}
 	site.CustomFailureReason = strings.TrimSpace(site.CustomFailureReason)
 	if len([]rune(site.CustomFailureReason)) > 500 {

@@ -35,7 +35,7 @@ Planned internal packages:
 - `internal/scheduler`: jittered per-site scheduling with no overlapping site runs.
 - `internal/session`: encrypted site sessions and OAuth login recovery coordination.
 - `internal/challenge`: challenge detection and replaceable FlareSolverr/browser recovery.
-- `internal/httpapi`: public and administrator handlers.
+- `internal/httpserver`: public and administrator handlers.
 - `web`: embedded static frontend source and build output.
 
 Administrative site deletion is a soft delete: historical data remains for

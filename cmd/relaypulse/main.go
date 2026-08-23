@@ -54,6 +54,9 @@ func run() error {
 		return fmt.Errorf("open data store: %w", err)
 	}
 	defer dbStore.Close()
+	if _, err := dbStore.RecoverRunningCollectionRuns(context.Background(), time.Now().UTC()); err != nil {
+		return fmt.Errorf("recover interrupted collection runs: %w", err)
+	}
 	adminPassword, err := loadOrCreateAdminPassword(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("prepare administrator password: %w", err)
@@ -134,7 +137,7 @@ func run() error {
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      2 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 	}
 

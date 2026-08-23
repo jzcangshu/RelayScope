@@ -141,6 +141,48 @@ func (store *Store) FinishCollectionRun(ctx context.Context, runID int64, status
 	return nil
 }
 
+// RecoverRunningCollectionRuns closes runs left behind by a process restart.
+// The scheduler is started only after this reconciliation, so every running
+// row at startup belongs to work that can no longer complete in this process.
+func (store *Store) RecoverRunningCollectionRuns(ctx context.Context, finishedAt time.Time) (int64, error) {
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin running run recovery: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `
+		UPDATE collection_runs
+		SET finished_at = ?, status = 'failed', error_code = 'process_restarted',
+			error_message = 'collection interrupted by process restart'
+		WHERE status = 'running'`, unixMilli(finishedAt))
+	if err != nil {
+		return 0, fmt.Errorf("recover running collection runs: %w", err)
+	}
+	runCount, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count recovered collection runs: %w", err)
+	}
+	stateResult, err := tx.ExecContext(ctx, `
+		UPDATE sites SET acquisition_state = 'collection_failed', updated_at = ?
+		WHERE acquisition_state = 'collecting'`, unixMilli(finishedAt))
+	if err != nil {
+		return 0, fmt.Errorf("recover collecting site states: %w", err)
+	}
+	stateCount, err := stateResult.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count recovered site states: %w", err)
+	}
+	if runCount > 0 || stateCount > 0 {
+		if _, err := incrementRevision(ctx, tx); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit running run recovery: %w", err)
+	}
+	return runCount, nil
+}
+
 func (store *Store) SetAcquisitionState(ctx context.Context, siteID int64, state domain.AcquisitionState, updatedAt time.Time) error {
 	if !state.Valid() {
 		return fmt.Errorf("invalid acquisition state %q", state)

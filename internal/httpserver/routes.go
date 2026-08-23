@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"relaypulse/internal/domain"
@@ -41,9 +42,18 @@ func NewHandler(options Options) (http.Handler, error) {
 	mux.HandleFunc("GET /health/live", jsonHandler(func() any {
 		return map[string]any{"status": "ok"}
 	}))
-	mux.HandleFunc("GET /health/ready", jsonHandler(func() any {
-		return map[string]any{"status": "ready"}
-	}))
+	mux.HandleFunc("GET /health/ready", func(writer http.ResponseWriter, request *http.Request) {
+		if options.Store != nil {
+			checkCtx, cancel := context.WithTimeout(request.Context(), time.Second)
+			_, err := options.Store.Revision(checkCtx)
+			cancel()
+			if err != nil {
+				writeError(writer, http.StatusServiceUnavailable, "store unavailable")
+				return
+			}
+		}
+		writeJSON(writer, map[string]any{"status": "ready"})
+	})
 	mux.HandleFunc("GET /api/v1/meta", jsonHandler(func() any {
 		meta := map[string]any{
 			"version":    options.Version,
@@ -267,22 +277,28 @@ func NewHandler(options Options) (http.Handler, error) {
 				OK     bool   `json:"ok"`
 				Error  string `json:"error,omitempty"`
 			}
-			results := make([]verificationResult, 0, len(payload.Bundles))
-			for _, bundle := range payload.Bundles {
-				result := verificationResult{SiteID: bundle.SiteID, Name: allowed[bundle.SiteID].Name}
-				if options.Collector == nil {
-					result.OK = true
-				} else {
-					collectCtx, cancel := context.WithTimeout(request.Context(), 30*time.Second)
-					err := options.Collector.CollectNow(collectCtx, bundle.SiteID)
-					cancel()
-					result.OK = err == nil
-					if err != nil {
-						result.Error = "采集验证失败"
+			results := make([]verificationResult, len(payload.Bundles))
+			verifyCtx, cancelVerify := context.WithTimeout(request.Context(), 25*time.Second)
+			var verifyWait sync.WaitGroup
+			for index, bundle := range payload.Bundles {
+				verifyWait.Add(1)
+				go func(index int, bundle sessionSyncBundle) {
+					defer verifyWait.Done()
+					result := verificationResult{SiteID: bundle.SiteID, Name: allowed[bundle.SiteID].Name}
+					if options.Collector == nil {
+						result.OK = true
+					} else {
+						err := options.Collector.CollectNow(verifyCtx, bundle.SiteID)
+						result.OK = err == nil
+						if err != nil {
+							result.Error = "采集验证失败"
+						}
 					}
-				}
-				results = append(results, result)
+					results[index] = result
+				}(index, bundle)
 			}
+			verifyWait.Wait()
+			cancelVerify()
 			writeJSON(writer, map[string]any{"status": "ok", "imported": len(payload.Bundles), "results": results})
 		})
 		dashboardCache := &publicDashboardCache{}

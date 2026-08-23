@@ -14,12 +14,36 @@ import (
 	"testing"
 	"time"
 
+	"relaypulse/internal/adapter"
 	"relaypulse/internal/admin"
+	"relaypulse/internal/collector"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/linuxdo"
 	"relaypulse/internal/session"
 	"relaypulse/internal/store"
 )
+
+func TestAdapterRegistrationValidationUsesCollectorRegistry(t *testing.T) {
+	db, err := store.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	registry, err := adapter.NewRegistry(adapter.NewAPIAdapter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	siteCollector, err := collector.New(collector.Options{Store: db, Registry: registry, Fetcher: adapter.HTTPFetcher{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !adapterRegistered(Options{Collector: siteCollector}, "newapi-pricing") {
+		t.Fatal("registered adapter was rejected")
+	}
+	if adapterRegistered(Options{Collector: siteCollector}, "missing-adapter") {
+		t.Fatal("unknown adapter was accepted")
+	}
+}
 
 func TestFeedbackRequiresLinuxDOLoginAndPersistsSubmission(t *testing.T) {
 	t.Parallel()
@@ -116,6 +140,25 @@ func TestHealthAndMetaEndpoints(t *testing.T) {
 				t.Fatal("security headers missing")
 			}
 		})
+	}
+}
+
+func TestReadinessChecksStoreAvailability(t *testing.T) {
+	db, err := store.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: db})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness status = %d, body = %s", response.Code, response.Body.String())
 	}
 }
 

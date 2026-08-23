@@ -18,6 +18,16 @@ import (
 	"relaypulse/internal/store"
 )
 
+func TestPersistenceContextSurvivesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	persistCtx, finish := persistenceContext(ctx)
+	defer finish()
+	if err := persistCtx.Err(); err != nil {
+		t.Fatalf("persistence context is canceled: %v", err)
+	}
+}
+
 func TestCollectSiteWritesObservationAndRevision(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +143,40 @@ func TestCollectSitePersistsUnmatchedModelIdentity(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].RawModelName != "unmatched-model" || items[0].SiteID != site.ID {
 		t.Fatalf("unmatched models = %+v", items)
+	}
+}
+
+type panicAdapter struct{}
+
+func (panicAdapter) Key() string         { return "panic-adapter" }
+func (panicAdapter) DisplayName() string { return "panic adapter" }
+func (panicAdapter) ConfigSchema() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
+}
+func (panicAdapter) Collect(context.Context, adapter.Site, adapter.Fetcher, time.Time) (domain.Collection, error) {
+	panic("unexpected adapter state")
+}
+
+func TestCollectSiteConvertsAdapterPanicToFailedRun(t *testing.T) {
+	dbStore := openCollectorStore(t)
+	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "panic", BaseURL: "https://panic.example", SourceURL: "https://panic.example/status", AdapterKey: "panic-adapter", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := adapter.NewRegistry(panicAdapter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fakeJSONFetcher{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := collector.CollectSite(context.Background(), site, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "collector_panic") {
+		t.Fatalf("panic collection error = %v", err)
+	}
+	runs, err := dbStore.ListCollectionRuns(context.Background(), 1)
+	if err != nil || len(runs) != 1 || runs[0].Status != "failed" || runs[0].ErrorCode != "collector_panic" {
+		t.Fatalf("panic run = %+v, err = %v", runs, err)
 	}
 }
 

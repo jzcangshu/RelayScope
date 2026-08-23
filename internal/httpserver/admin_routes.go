@@ -80,6 +80,10 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			}
 			payload.Interval = time.Duration(payload.IntervalSeconds) * time.Second
 			payload.Jitter = time.Duration(payload.JitterSeconds) * time.Second
+			if !adapterRegistered(options, payload.AdapterKey) {
+				writeError(writer, http.StatusBadRequest, "unknown adapter")
+				return
+			}
 			created, err := options.Store.CreateManagedSite(request.Context(), payload)
 			if err != nil {
 				writeError(writer, http.StatusBadRequest, "create site")
@@ -107,6 +111,10 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			}
 			if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 32<<10)).Decode(&payload); err != nil {
 				writeError(writer, http.StatusBadRequest, "invalid site payload")
+				return
+			}
+			if !adapterRegistered(options, payload.AdapterKey) {
+				writeError(writer, http.StatusBadRequest, "unknown adapter")
 				return
 			}
 			current, err := options.Store.GetSite(request.Context(), id)
@@ -390,6 +398,14 @@ func valueOrBool(value *bool, fallback bool) bool {
 		return fallback
 	}
 	return *value
+}
+
+func adapterRegistered(options Options, key string) bool {
+	if options.Collector == nil {
+		return true
+	}
+	_, ok := options.Collector.Registry().Get(strings.TrimSpace(key))
+	return ok
 }
 
 func parseRunFilters(request *http.Request) (store.RunFilters, error) {

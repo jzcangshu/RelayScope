@@ -36,6 +36,14 @@ test('dashboard script binds the public login control', () => {
   assert.match(source, /userAction\.addEventListener\('click'/);
 });
 
+test('public theme initialization is CSP-compatible', () => {
+  const page = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  const theme = readFileSync(join(__dirname, 'theme.js'), 'utf8');
+  assert.match(page, /<script src="\/assets\/theme\.js"><\/script>/);
+  assert.doesNotMatch(page, /<script>\s*try\s*\{/);
+  assert.match(theme, /localStorage\.getItem\('relaypulse-theme'\)/);
+});
+
 test('dashboard script renders and polls failure announcements', () => {
   const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
   assert.match(source, /\/api\/v1\/public\/announcements/);

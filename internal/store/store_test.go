@@ -207,6 +207,20 @@ func TestSiteSessionRequirementRoundTrips(t *testing.T) {
 	}
 }
 
+func TestCreateSiteNormalizesEditableText(t *testing.T) {
+	dbStore := openTestStore(t)
+	created, err := dbStore.CreateSite(context.Background(), Site{
+		Name: "  padded site  ", BaseURL: " https://padded.example ", SourceURL: " https://padded.example/status ",
+		AdapterKey: " test ", AdapterConfig: "  {}  ", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Name != "padded site" || created.BaseURL != "https://padded.example" || created.SourceURL != "https://padded.example/status" || created.AdapterKey != "test" || created.AdapterConfig != "{}" {
+		t.Fatalf("created site was not normalized: %+v", created)
+	}
+}
+
 func TestSoftDeleteHidesSiteFromActiveQueriesAndRestores(t *testing.T) {
 	ctx := context.Background()
 	dbStore := openTestStore(t)
@@ -871,6 +885,36 @@ func TestPublicStateChangesAdvanceRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertRevision(3)
+}
+
+func TestRecoverRunningCollectionRunsAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+	site, err := store.CreateSite(ctx, Site{Name: "interrupted", BaseURL: "https://interrupted.example", SourceURL: "https://interrupted.example/status", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Date(2026, time.August, 24, 3, 0, 0, 0, time.UTC)
+	runID, err := store.StartCollectionRun(ctx, site.ID, site.AdapterKey, started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAcquisitionState(ctx, site.ID, domain.AcquisitionCollecting, started); err != nil {
+		t.Fatal(err)
+	}
+	finished := started.Add(time.Minute)
+	count, err := store.RecoverRunningCollectionRuns(ctx, finished)
+	if err != nil || count != 1 {
+		t.Fatalf("recovered runs = %d, err = %v", count, err)
+	}
+	runs, err := store.ListCollectionRuns(ctx, 10)
+	if err != nil || len(runs) != 1 || runs[0].ID != runID || runs[0].Status != "failed" || runs[0].ErrorCode != "process_restarted" {
+		t.Fatalf("recovered run = %+v, err = %v", runs, err)
+	}
+	recovered, err := store.GetSite(ctx, site.ID)
+	if err != nil || recovered.AcquisitionState != domain.AcquisitionCollectionFailed {
+		t.Fatalf("recovered site = %+v, err = %v", recovered, err)
+	}
 }
 
 func TestPublicHistoryReturnsOnlyMatchedRecentBuckets(t *testing.T) {
