@@ -88,8 +88,6 @@ func TestHealthAndMetaEndpoints(t *testing.T) {
 		{path: "/", contains: []string{
 			"RelayPulse - 公益聚合监测",
 			`href="/assets/favicon.svg"`,
-			"服务器到期提醒",
-			"本站服务器将于 9 月 12 日到期",
 		}, absent: []string{"公益站模型状态", "expiry-countdown"}},
 		{path: "/admin/", contains: []string{"管理员控制台"}},
 	}
