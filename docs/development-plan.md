@@ -92,13 +92,19 @@ numberPointer 在 adapter/newapi.go 与 pricing/newapi.go 逐字重复。
 全测试绿；新增增量刷新行为测试；调度端到端重启不风暴测试（至少验证一次采集后的 next_run_at 持久化）；adapterutil 单元测试；
 各适配器测试确认替换后行为不变。
 
-## Phase 2 — 代码重构
+## Phase 2 — 代码重构 ✅（已完成）
 
 store.go（1275 行）拆为 migrate/sites/runs/sessions/rules/matches/collection_apply/meta；
-server.go 拆为 respond/middleware/public/auth/sessionsync/admin handlers（闭包改方法，
-新增 writeError 统一错误 envelope，CSRF token 独立随机值）；newapi.go 按
-Collect/decode/merge 三段拆分（mergeDetailBuckets 162 行拆子函数）。
-边界：不改任何外部行为；最大单文件 <400 行。
+server.go 拆为 `routes.go`（健康、OAuth、session-sync、公开 API 与静态资源装配）、
+`respond.go`、`middleware.go`、`sessionsync.go`、`admin_routes.go`；闭包路由按职责集中，
+新增 `writeError` 统一错误 envelope。管理员登录签发独立随机 CSRF token，且双提交校验
+绑定到实际管理员 session，过期 session/CSRF 映射和登录限流状态会被清理。newapi.go 按
+Collect/decode/merge 三段拆分，decode 辅助逻辑保持在 400 行以内。store 的通用类型、
+迁移、站点、运行记录、会话、匹配、采集应用和元数据辅助函数分别归档到对应文件。
+
+本阶段只调整代码组织，并按计划统一错误/CSRF 封装；不改变 API 路径、成功响应、数据库结构或采集语义；验证通过
+`go test ./... -count=1`、`go vet ./...`、`gofmt -l .` 和 `git diff --check`。
+边界：不改任何外部行为；本阶段新增或拆分的生产文件最大 400 行以内（既有未纳入范围的适配器文件不在此约束内）。
 
 ## Phase 3 — 管理后台重做
 

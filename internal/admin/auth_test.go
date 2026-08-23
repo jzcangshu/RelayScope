@@ -15,4 +15,11 @@ func TestAuthLoginAndExpiry(t *testing.T) {
 	if !ok || token == "" || !auth.Valid(token) {
 		t.Fatal("valid login failed")
 	}
+	csrf, ok := auth.NewCSRFToken(token)
+	if !ok || csrf == "" || csrf == token {
+		t.Fatal("expected independent CSRF token")
+	}
+	if got, valid := auth.CSRFToken(token); !valid || got != csrf {
+		t.Fatal("expected CSRF token lookup")
+	}
 }

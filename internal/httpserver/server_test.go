@@ -230,6 +230,17 @@ func TestAdminSessionImportRequiresAuthAndCSRF(t *testing.T) {
 		t.Fatal("login did not issue both session cookies")
 	}
 
+	forged := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), strings.NewReader(`{"name":"forged-site","adapterKey":"test-adapter","adapterConfig":"{}","enabled":true,"intervalSeconds":1200,"jitterSeconds":0}`))
+	forged.AddCookie(adminCookie)
+	forgedCSRF := &http.Cookie{Name: "relaypulse_csrf", Value: "unissued-csrf-token"}
+	forged.AddCookie(forgedCSRF)
+	forged.Header.Set("X-CSRF-Token", forgedCSRF.Value)
+	forgedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(forgedResponse, forged)
+	if forgedResponse.Code != http.StatusForbidden {
+		t.Fatalf("unissued CSRF token status = %d, body=%s", forgedResponse.Code, forgedResponse.Body.String())
+	}
+
 	payload := `{"userAgent":"test-agent","cookies":[{"name":"sid","value":"secret-value"}]}`
 	withoutCSRF := httptest.NewRequest(http.MethodPost, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10)+"/session", strings.NewReader(payload))
 	withoutCSRF.AddCookie(adminCookie)
