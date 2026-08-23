@@ -51,11 +51,13 @@ type probeConfig struct {
 }
 
 func (adapter ProbeAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply %s config defaults: %w", adapter.Key(), err)
+	}
 	config := probeConfig{CatalogPath: adapter.defaultPath, StatusPath: adapter.defaultStatusPath, PageSize: 100}
-	if site.ConfigJSON != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode %s config: %w", adapter.Key(), err)
-		}
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode %s config: %w", adapter.Key(), err)
 	}
 	path := config.CatalogPath
 	if path == "" {
@@ -388,10 +390,12 @@ func (adapter ProbeAdapter) CollectDetails(ctx context.Context, site Site, fetch
 		return nil
 	}
 	config := probeConfig{DetailPathTemplate: adapter.defaultDetailPath}
-	if site.ConfigJSON != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return err
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return fmt.Errorf("apply %s config defaults: %w", adapter.Key(), err)
+	}
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return err
 	}
 	path := config.DetailPath
 	template := config.DetailPathTemplate

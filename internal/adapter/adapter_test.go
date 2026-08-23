@@ -508,6 +508,14 @@ func TestProbeAcceptsStringCatalogAndModelPathDetails(t *testing.T) {
 	}
 }
 
+func TestProbeRejectsInvalidSchemaConfig(t *testing.T) {
+	probe := NewAPIProbeAdapter()
+	_, err := probe.Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test", ConfigJSON: `{"pageSize":0}`}, fakeFetcher{responses: map[string][]byte{}}, time.Now())
+	if err == nil {
+		t.Fatal("expected pageSize minimum validation error")
+	}
+}
+
 func TestProbePricingCanBeAddedByConfiguration(t *testing.T) {
 	probe := NewAPIProbeAdapter()
 	config := `{"catalogPath":"/catalog","statusPath":"","detailPath":"","pricingAdapter":"newapi","pricingPath":"/pricing","pricingStatusPath":"/status"}`

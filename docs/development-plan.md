@@ -5,7 +5,7 @@
 
 ## 总原则与执行纪律
 
-1. **每个阶段独立提交、测试全绿后才进下一步。** 每步必须通过 `go vet ./...`、`go test ./...`、`gofmt -l .`、node 测试。
+1. **每个阶段独立提交、测试全绿后才进下一步。** 每步必须通过 `go vet ./...`、`go test ./...`、`gofmt -l .`；前端测试从 Phase 3 前端改造开始执行，当前没有 Node 测试套件时明确标记为不适用。
 2. **只做该阶段定义的事。** 发现的旁支问题记录到本文件末尾的「待办备忘」，留到对应阶段处理。
 3. **保持轻量化。** 不引入依赖、不增加抽象层、不加兜底分支，除非有明确收益且写明理由。
 
@@ -49,6 +49,7 @@ DELETE+INSERT），N 站点并发时产生 N 次全表重写，SQLite 单写者�
 - store 新增 `ListDueSites(ctx, now, limit)` / `GetSite(ctx, id)` / `SetSiteNextRun(ctx, id, at)`。
 - scheduler 改为从 DB 读 due 站点、完成后把下次时间写入 DB；内存仅保留 in-flight 去重集合。
 - NULL next_run_at 视为立即可采集（新站点首采）。
+- 迁移旧数据库时为已有启用站点回填分散的初始 next_run_at，避免首次升级把全部旧站点同时拉起；新建站点仍保留 NULL 首采语义。
 
 边界：不改间隔默认值（15min 正常 / 30min 失败）、jitter 语义、3 分钟采集超时。
 
@@ -82,12 +83,13 @@ numberPointer 在 adapter/newapi.go 与 pricing/newapi.go 逐字重复。
   default，并对已知属性做 type/enum/minimum 校验；保留未知键。轻量实现，不引入
   jsonschema 依赖。
 - 各适配器 Collect 开头的 config 解码改用此函数，消除手写默认值填充。
+- ProbeAdapter 的 Collect/CollectDetails 也必须走该函数；其构造器默认路径继续保留，但 Schema 约束不能绕过。
 
 边界：不做 schema 由 struct 反射生成（侵入大收益不明，留待需求驱动）。
 
 ### Phase 1 验收
 
-全测试绿；新增增量刷新行为测试；调度重启不风暴测试；adapterutil 单元测试；
+全测试绿；新增增量刷新行为测试；调度端到端重启不风暴测试（至少验证一次采集后的 next_run_at 持久化）；adapterutil 单元测试；
 各适配器测试确认替换后行为不变。
 
 ## Phase 2 — 代码重构
@@ -100,7 +102,7 @@ Collect/decode/merge 三段拆分（mergeDetailBuckets 162 行拆子函数）。
 
 ## Phase 3 — 管理后台重做
 
-后端先行：DELETE site（软删）、POST admin/logout、URL 可编辑、runs 过滤参数、
+后端先行：DELETE site（软删；必须停止调度并从公开/管理列表隐藏，明确是否可恢复、历史保留和会话清理策略）、POST admin/logout、URL 可编辑、runs 过滤参数、
 GET admin/unmatched（spec 承诺未实现）、session 元信息端点、错误 envelope。
 前端：vendored Preact+htm 零构建 ESM（满足 CSP 'self' 无 Node），五视图
 （概览/站点/规则/运行/系统），schema 驱动适配器配置表单（~100 行渲染器 +
@@ -108,7 +110,7 @@ JSON 高级回退）。前端测试升级为行为测试。
 
 ## Phase 4 — 发布基础设施
 
-运维参数进 config（HTTP 并发/采集超时/HTTP 超时/维护周期/健康阈值）；信号量感知 ctx；
+运维参数进 config（HTTP 并发/采集超时/HTTP 超时/维护周期）；健康阈值暂保持编译期常量，除非先设计 Store 查询层的运行时阈值注入方案；信号量感知 ctx；
 版本 ldflags 注入 + 首 tag v0.1.0；GHCR 镜像 workflow；文档定稿（development.md 去
 个人化、adapter-authoring 更新、operations 补 Docker）。
 
