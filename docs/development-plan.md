@@ -110,8 +110,8 @@ Collect/decode/merge 三段拆分，decode 辅助逻辑保持在 400 行以内�
 
 后端已完成：DELETE site（软删；停止调度并从公开/管理列表隐藏，保留历史与加密会话，显式 restore 恢复为禁用状态）、POST admin/logout、URL 可编辑、runs 过滤参数、
 GET admin/unmatched、脱敏 session 元信息端点、统一错误 envelope。删除后的站点不接受常规 PATCH 或会话读写，避免绕过软删除边界。
-前端：vendored Preact+htm 零构建 ESM（满足 CSP 'self' 无 Node），五视图
-（概览/站点/规则/运行/系统），schema 驱动适配器配置表单（~100 行渲染器 +
+前端：原生零构建 JavaScript（满足 CSP 'self'、无运行时 Node，也不新增 UI 依赖），五视图
+（概览/站点/规则/运行/系统），schema 驱动适配器配置表单（约 100 行渲染器 +
 JSON 高级回退）。前端测试升级为行为测试。
 
 验收：Go 单测、前端行为测试、gofmt、git diff --check、go vet 和无 CGO 构建均通过；竞态测试在 CI 的 Linux runner 执行，本地 Windows 环境因未安装 C 编译器无法运行。
@@ -119,7 +119,7 @@ JSON 高级回退）。前端测试升级为行为测试。
 ## Phase 4 — 发布基础设施 ✅（已完成）
 
 已完成：运维参数进入 config（HTTP 并发/采集超时/HTTP 超时/维护周期）；健康阈值保持编译期常量；信号量感知 ctx；版本 ldflags 注入并暴露 `/api/v1/meta`；GHCR 镜像 workflow；
-README、development、operations、CHANGELOG、Docker 和环境变量模板定稿。发布 workflow 只在版本 tag 推送时构建并推送 GHCR，构建参数写入版本、提交和构建时间。
+README、development、operations、CHANGELOG、Docker 和环境变量模板定稿。发布 workflow 只在 `vMAJOR.MINOR.PATCH` 版本 tag 推送时构建并推送 GHCR，构建参数写入版本、提交和构建时间；版本 tag 是发布标识，`latest` 仅作为便捷别名。
 
 ---
 
