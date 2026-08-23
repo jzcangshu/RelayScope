@@ -12,19 +12,39 @@ import (
 )
 
 func (store *Store) ListCollectionRuns(ctx context.Context, limit int) ([]CollectionRun, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
+	return store.ListCollectionRunsFiltered(ctx, RunFilters{Limit: limit})
+}
+
+func (store *Store) ListCollectionRunsFiltered(ctx context.Context, filters RunFilters) ([]CollectionRun, error) {
+	if filters.Limit <= 0 || filters.Limit > 200 {
+		filters.Limit = 50
 	}
-	rows, err := store.db.QueryContext(ctx, `
+	query := `
 		SELECT run.id, run.site_id, site.name, run.adapter_key, run.started_at, run.finished_at, run.status,
 			run.catalog_complete, run.models_seen, run.groups_seen, COALESCE(run.error_code, ''), COALESCE(run.error_message, '')
 		FROM collection_runs run JOIN sites site ON site.id = run.site_id
-		ORDER BY run.started_at DESC LIMIT ?`, limit)
+		WHERE site.deleted_at IS NULL`
+	args := make([]any, 0, 4)
+	if filters.SiteID > 0 {
+		query += ` AND run.site_id = ?`
+		args = append(args, filters.SiteID)
+	}
+	if strings.TrimSpace(filters.Status) != "" {
+		query += ` AND run.status = ?`
+		args = append(args, filters.Status)
+	}
+	if filters.Since != nil {
+		query += ` AND run.started_at >= ?`
+		args = append(args, unixMilli(*filters.Since))
+	}
+	query += ` ORDER BY run.started_at DESC, run.id DESC LIMIT ?`
+	args = append(args, filters.Limit)
+	rows, err := store.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list collection runs: %w", err)
 	}
 	defer rows.Close()
-	runs := make([]CollectionRun, 0, limit)
+	runs := make([]CollectionRun, 0, filters.Limit)
 	for rows.Next() {
 		var run CollectionRun
 		var started int64
@@ -60,6 +80,7 @@ func (store *Store) ListRecentCollectionRunsBySite(ctx context.Context, perSite 
 				ROW_NUMBER() OVER (PARTITION BY run.site_id ORDER BY run.started_at DESC, run.id DESC) AS site_rank
 			FROM collection_runs run
 			JOIN sites site ON site.id = run.site_id
+			WHERE site.deleted_at IS NULL
 		)
 		SELECT id, site_id, site_name, adapter_key, started_at, finished_at, status,
 			catalog_complete, models_seen, groups_seen, error_code, error_message

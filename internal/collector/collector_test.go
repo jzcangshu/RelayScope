@@ -43,6 +43,19 @@ func TestCollectSiteWritesObservationAndRevision(t *testing.T) {
 	}
 }
 
+func TestAcquireHTTPHonorsCancellationWhenAllSlotsAreBusy(t *testing.T) {
+	collector := &Collector{httpSlots: make(chan struct{}, 1)}
+	collector.httpSlots <- struct{}{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := collector.acquireHTTP(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("acquireHTTP error = %v, want context canceled", err)
+	}
+	if len(collector.httpSlots) != 1 {
+		t.Fatalf("canceled acquire changed semaphore occupancy: %d", len(collector.httpSlots))
+	}
+}
+
 type partialDetailAdapter struct{}
 
 func (partialDetailAdapter) Key() string         { return "partial-detail" }

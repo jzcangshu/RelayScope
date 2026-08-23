@@ -150,8 +150,8 @@ func TestOpenAppliesSchemaAndPragmas(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "2" {
-		t.Fatalf("schema version = %q, want 2", version)
+	if version != "3" {
+		t.Fatalf("schema version = %q, want 3", version)
 	}
 }
 
@@ -161,8 +161,8 @@ func TestMigrationVersionIsRecordedAndIdempotent(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != "2" {
-		t.Fatalf("version = %q, want 2", version)
+	if version != "3" {
+		t.Fatalf("version = %q, want 3", version)
 	}
 	if err := store.migrate(context.Background()); err != nil {
 		t.Fatalf("second migration: %v", err)
@@ -204,6 +204,71 @@ func TestSiteSessionRequirementRoundTrips(t *testing.T) {
 	}
 	if sites[0].SessionRequired {
 		t.Fatalf("updated session requirement = true, want false")
+	}
+}
+
+func TestSoftDeleteHidesSiteFromActiveQueriesAndRestores(t *testing.T) {
+	ctx := context.Background()
+	dbStore := openTestStore(t)
+	site, err := dbStore.CreateSite(ctx, Site{Name: "deletable", BaseURL: "https://delete.example", SourceURL: "https://delete.example/status", AdapterKey: "test", Enabled: true, Interval: 15 * time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deletedAt := time.Date(2026, time.August, 24, 1, 2, 3, 0, time.UTC)
+	if err := dbStore.DeleteSite(ctx, site.ID, deletedAt); err != nil {
+		t.Fatal(err)
+	}
+	if sites, err := dbStore.ListAllSites(ctx); err != nil || len(sites) != 0 {
+		t.Fatalf("deleted site visible in active list: %+v %v", sites, err)
+	}
+	if due, err := dbStore.ListDueSites(ctx, deletedAt.Add(time.Hour), 10); err != nil || len(due) != 0 {
+		t.Fatalf("deleted site visible to scheduler: %+v %v", due, err)
+	}
+	if err := dbStore.RestoreSite(ctx, site.ID, deletedAt.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := dbStore.GetSite(ctx, site.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.DeletedAt != nil || restored.Enabled {
+		t.Fatalf("restored site state = %+v", restored)
+	}
+}
+
+func TestSessionMetadataDoesNotExposeCiphertext(t *testing.T) {
+	ctx := context.Background()
+	dbStore := openTestStore(t)
+	site, err := dbStore.CreateSite(ctx, Site{Name: "session-meta", BaseURL: "https://meta.example", SourceURL: "https://meta.example/status", AdapterKey: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dbStore.SaveEncryptedSession(ctx, EncryptedSession{SiteID: site.ID, Purpose: "site-http", KeyVersion: 1, Nonce: []byte("nonce"), Ciphertext: []byte("secret-ciphertext"), UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := dbStore.SessionMetadata(ctx, site.ID, "site-http")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.CiphertextBytes != len("secret-ciphertext") || metadata.NonceBytes != len("nonce") {
+		t.Fatalf("unexpected metadata: %+v", metadata)
+	}
+}
+
+func TestListUnmatchedModels(t *testing.T) {
+	ctx := context.Background()
+	dbStore := openTestStore(t)
+	site, err := dbStore.CreateSite(ctx, Site{Name: "unmatched", BaseURL: "https://unmatched.example", SourceURL: "https://unmatched.example/status", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	if _, _, err := dbStore.ApplyCollection(ctx, domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true, Models: []domain.ModelObservation{{RawName: "unmatched-model", Provider: "demo", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}}}}, strings.ToLower); err != nil {
+		t.Fatal(err)
+	}
+	items, err := dbStore.ListUnmatchedModels(ctx, 10)
+	if err != nil || len(items) != 1 || items[0].RawModelName != "unmatched-model" {
+		t.Fatalf("unmatched models = %+v, err=%v", items, err)
 	}
 }
 

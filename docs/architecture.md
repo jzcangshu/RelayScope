@@ -38,6 +38,11 @@ Planned internal packages:
 - `internal/httpapi`: public and administrator handlers.
 - `web`: embedded static frontend source and build output.
 
+Administrative site deletion is a soft delete: historical data remains for
+retention and recovery, while deleted sites are disabled and excluded from
+active queries and scheduling. Recovery is explicit and restores a disabled
+site, avoiding an unexpected collection on restore.
+
 Adapters are compiled Go plugins in the architectural sense, not Go's runtime `plugin` package. Each adapter is a separately registered module with metadata, a configuration schema, discovery logic, and collection logic. This avoids unsafe dynamic loading while keeping integrations independently testable, enableable, and maintainable.
 
 ## Adapter contract

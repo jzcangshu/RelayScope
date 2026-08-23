@@ -89,3 +89,23 @@ func (store *Store) SessionExpiresAt(ctx context.Context, siteID int64, purpose 
 	value := time.UnixMilli(expires.Int64).UTC()
 	return &value, true, nil
 }
+
+func (store *Store) SessionMetadata(ctx context.Context, siteID int64, purpose string) (SessionMetadata, error) {
+	var metadata SessionMetadata
+	var expires sql.NullInt64
+	var updated int64
+	var nonce, ciphertext []byte
+	err := store.db.QueryRowContext(ctx, `SELECT site_id, purpose, key_version, nonce, ciphertext, expires_at, updated_at FROM encrypted_sessions WHERE site_id = ? AND purpose = ?`, siteID, purpose).
+		Scan(&metadata.SiteID, &metadata.Purpose, &metadata.KeyVersion, &nonce, &ciphertext, &expires, &updated)
+	if err != nil {
+		return SessionMetadata{}, fmt.Errorf("load session metadata: %w", err)
+	}
+	metadata.NonceBytes = len(nonce)
+	metadata.CiphertextBytes = len(ciphertext)
+	metadata.UpdatedAt = time.UnixMilli(updated).UTC()
+	if expires.Valid {
+		value := time.UnixMilli(expires.Int64).UTC()
+		metadata.ExpiresAt = &value
+	}
+	return metadata, nil
+}

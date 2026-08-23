@@ -585,6 +585,100 @@ func TestPublicDetailsRequiresScopedModelAndDefaultsToTwentyFourHours(t *testing
 	}
 }
 
+func TestAdminSiteLifecycleFiltersAndRedactedSessionMetadata(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.Open(ctx, t.TempDir()+"/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	site, err := db.CreateSite(ctx, store.Site{Name: "lifecycle", BaseURL: "https://lifecycle.example", SourceURL: "https://lifecycle.example/status", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, err := db.StartCollectionRun(ctx, site.ID, "test", time.Now().UTC().Add(-time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.FinishCollectionRun(ctx, runID, "failed", false, 0, 0, "test_failure", "not exposed", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SaveEncryptedSession(ctx, store.EncryptedSession{SiteID: site.ID, Purpose: session.SessionPurpose, KeyVersion: 1, Nonce: []byte("nonce"), Ciphertext: []byte("ciphertext"), UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	auth, err := admin.NewAuth("this-is-a-long-test-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: db, Auth: auth})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := httptest.NewRequest(http.MethodPost, "/api/v1/admin/login", strings.NewReader(`{"password":"this-is-a-long-test-password"}`))
+	login.RemoteAddr = "127.0.0.1:12345"
+	loginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(loginResponse, login)
+	var adminCookie, csrfCookie *http.Cookie
+	for _, cookie := range loginResponse.Result().Cookies() {
+		if cookie.Name == "relaypulse_admin" {
+			adminCookie = cookie
+		}
+		if cookie.Name == "relaypulse_csrf" {
+			csrfCookie = cookie
+		}
+	}
+	if adminCookie == nil || csrfCookie == nil {
+		t.Fatal("login did not issue cookies")
+	}
+	request := func(method, path string, body io.Reader, csrf bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, body)
+		req.AddCookie(adminCookie)
+		req.AddCookie(csrfCookie)
+		if csrf {
+			req.Header.Set("X-CSRF-Token", csrfCookie.Value)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	metadata := request(http.MethodGet, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10)+"/session", nil, false)
+	if metadata.Code != http.StatusOK || strings.Contains(metadata.Body.String(), `"ciphertext":"`) || strings.Contains(metadata.Body.String(), `"nonce":"`) {
+		t.Fatalf("session metadata leaked or failed: %d %s", metadata.Code, metadata.Body.String())
+	}
+	runs := request(http.MethodGet, "/api/v1/admin/runs?status=failed&limit=1", nil, false)
+	if runs.Code != http.StatusOK || !strings.Contains(runs.Body.String(), `"status":"failed"`) {
+		t.Fatalf("filtered runs = %d %s", runs.Code, runs.Body.String())
+	}
+	deleted := request(http.MethodDelete, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), nil, true)
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("delete status = %d %s", deleted.Code, deleted.Body.String())
+	}
+	deletedMetadata := request(http.MethodGet, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10)+"/session", nil, false)
+	if deletedMetadata.Code != http.StatusNotFound {
+		t.Fatalf("deleted session metadata status = %d %s", deletedMetadata.Code, deletedMetadata.Body.String())
+	}
+	deletedUpdate := request(http.MethodPatch, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), strings.NewReader(`{"name":"should-not-update","adapterKey":"test","adapterConfig":"{}","enabled":true,"intervalSeconds":900,"jitterSeconds":0}`), true)
+	if deletedUpdate.Code != http.StatusBadRequest {
+		t.Fatalf("deleted site update status = %d %s", deletedUpdate.Code, deletedUpdate.Body.String())
+	}
+	visible := request(http.MethodGet, "/api/v1/admin/sites", nil, false)
+	if visible.Code != http.StatusOK || strings.Contains(visible.Body.String(), "lifecycle") {
+		t.Fatalf("deleted site remains visible: %d %s", visible.Code, visible.Body.String())
+	}
+	restored := request(http.MethodPost, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10)+"/restore", nil, true)
+	if restored.Code != http.StatusOK {
+		t.Fatalf("restore status = %d %s", restored.Code, restored.Body.String())
+	}
+	logout := request(http.MethodPost, "/api/v1/admin/logout", nil, true)
+	if logout.Code != http.StatusOK {
+		t.Fatalf("logout status = %d %s", logout.Code, logout.Body.String())
+	}
+	unauthorized := request(http.MethodGet, "/api/v1/admin/sites", nil, false)
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked session status = %d", unauthorized.Code)
+	}
+}
+
 func TestPublicDashboardReturnsCachedSnapshotShape(t *testing.T) {
 	db, err := store.Open(context.Background(), t.TempDir()+"/state.db")
 	if err != nil {

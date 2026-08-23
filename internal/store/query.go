@@ -150,7 +150,7 @@ func (store *Store) QueryPublicHistory(ctx context.Context, since time.Time) ([]
 		JOIN raw_models raw ON raw.id = groups.raw_model_id
 		JOIN sites site ON site.id = raw.site_id
 		JOIN model_matches match ON match.raw_model_id = raw.id AND match.is_primary = 1
-		WHERE raw.removed_at IS NULL AND site.enabled = 1 AND buckets.bucket_end >= ?
+		WHERE raw.removed_at IS NULL AND site.enabled = 1 AND site.deleted_at IS NULL AND buckets.bucket_end >= ?
 		UNION ALL
 		SELECT site_id, raw_name, state_rank, slot_start + 1800000, bucket_end
 		FROM expanded
@@ -203,7 +203,7 @@ func (store *Store) QueryPublicDetails(ctx context.Context, ruleName, siteName, 
  JOIN sites site ON site.id = raw.site_id
  JOIN model_matches match ON match.raw_model_id = raw.id AND match.is_primary = 1
  JOIN model_rules rule ON rule.id = match.rule_id
-	WHERE raw.removed_at IS NULL AND site.enabled = 1 AND buckets.bucket_end >= ?`
+	WHERE raw.removed_at IS NULL AND site.enabled = 1 AND site.deleted_at IS NULL AND buckets.bucket_end >= ?`
 	args := []any{unixMilli(since)}
 	if strings.TrimSpace(ruleName) != "" {
 		query += ` AND rule.canonical_name = ?`
@@ -273,7 +273,7 @@ func (store *Store) queryPublicRows(ctx context.Context, ruleName, siteName, raw
 		JOIN sites site ON site.id = raw.site_id
 		JOIN model_matches match ON match.raw_model_id = raw.id AND match.is_primary = 1
 		JOIN model_rules rule ON rule.id = match.rule_id
-		WHERE raw.removed_at IS NULL AND site.enabled = 1` + publicVisibleModelPredicate
+		WHERE raw.removed_at IS NULL AND site.enabled = 1 AND site.deleted_at IS NULL` + publicVisibleModelPredicate
 	args := make([]any, 0, 2)
 	if strings.TrimSpace(ruleName) != "" {
 		query += ` AND rule.canonical_name = ?`

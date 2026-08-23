@@ -19,6 +19,8 @@ import (
 type Options struct {
 	Logger       *slog.Logger
 	Version      string
+	Commit       string
+	BuildDate    string
 	Now          func() time.Time
 	Store        *store.Store
 	Auth         *admin.Auth

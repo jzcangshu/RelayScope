@@ -46,6 +46,8 @@ func NewHandler(options Options) (http.Handler, error) {
 	mux.HandleFunc("GET /api/v1/meta", jsonHandler(func() any {
 		meta := map[string]any{
 			"version":    options.Version,
+			"commit":     options.Commit,
+			"buildDate":  options.BuildDate,
 			"serverTime": options.Now().UTC().Format(time.RFC3339),
 		}
 		if options.PublicURL != "" {

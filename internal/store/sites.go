@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ func (store *Store) UpdateSite(ctx context.Context, siteID int64, name, adapterK
 		return fmt.Errorf("begin site update: %w", err)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE sites SET name = ?, adapter_key = ?, adapter_config = ?, enabled = ?, session_required = COALESCE(?, session_required), interval_seconds = ?, jitter_seconds = ?, updated_at = ? WHERE id = ?`, name, adapterKey, adapterConfig, boolInt(enabled), optionalBoolInt(sessionRequired), int64(interval/time.Second), int64(jitter/time.Second), unixMilli(time.Now().UTC()), siteID)
+	result, err := tx.ExecContext(ctx, `UPDATE sites SET name = ?, adapter_key = ?, adapter_config = ?, enabled = ?, session_required = COALESCE(?, session_required), interval_seconds = ?, jitter_seconds = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, name, adapterKey, adapterConfig, boolInt(enabled), optionalBoolInt(sessionRequired), int64(interval/time.Second), int64(jitter/time.Second), unixMilli(time.Now().UTC()), siteID)
 	if err != nil {
 		return fmt.Errorf("update site: %w", err)
 	}
@@ -52,7 +53,7 @@ func (store *Store) UpdateSiteFailureReason(ctx context.Context, siteID int64, r
 		return fmt.Errorf("begin failure reason update: %w", err)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE sites SET custom_failure_reason = ?, updated_at = ? WHERE id = ?`, reason, unixMilli(time.Now().UTC()), siteID)
+	result, err := tx.ExecContext(ctx, `UPDATE sites SET custom_failure_reason = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, reason, unixMilli(time.Now().UTC()), siteID)
 	if err != nil {
 		return fmt.Errorf("update failure reason: %w", err)
 	}
@@ -79,7 +80,7 @@ func (store *Store) ListActiveFailureAnnouncements(ctx context.Context) ([]Failu
 			COALESCE(latest_failed.error_code, ''), COALESCE(latest_failed.error_message, '')
 		FROM sites site
 		LEFT JOIN latest_failed ON latest_failed.site_id = site.id AND latest_failed.site_rank = 1
-		WHERE site.enabled = 1 AND site.acquisition_state IN ('collection_failed', 'login_expired', 'challenge_pending', 'challenge_failed')
+		WHERE site.enabled = 1 AND site.deleted_at IS NULL AND site.acquisition_state IN ('collection_failed', 'login_expired', 'challenge_pending', 'challenge_failed')
 		ORDER BY site.name COLLATE NOCASE, site.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list active failure announcements: %w", err)
@@ -111,6 +112,12 @@ func (store *Store) ListActiveFailureAnnouncements(ctx context.Context) ([]Failu
 func (store *Store) CreateSite(ctx context.Context, site Site) (Site, error) {
 	if site.Name == "" || site.BaseURL == "" || site.SourceURL == "" || site.AdapterKey == "" {
 		return Site{}, errors.New("site name, URLs, and adapter key are required")
+	}
+	for name, value := range map[string]string{"base URL": site.BaseURL, "source URL": site.SourceURL} {
+		parsed, err := url.Parse(strings.TrimSpace(value))
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+			return Site{}, fmt.Errorf("invalid %s", name)
+		}
 	}
 	if site.Interval == 0 {
 		site.Interval = 15 * time.Minute
@@ -156,9 +163,9 @@ func (store *Store) CreateManagedSite(ctx context.Context, site Site) (Site, err
 func (store *Store) ListEnabledSites(ctx context.Context) ([]Site, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
-			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
-		FROM sites WHERE enabled = 1 ORDER BY id`)
+		FROM sites WHERE enabled = 1 AND deleted_at IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled sites: %w", err)
 	}
@@ -169,9 +176,9 @@ func (store *Store) ListEnabledSites(ctx context.Context) ([]Site, error) {
 func (store *Store) ListAllSites(ctx context.Context) ([]Site, error) {
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
-			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
-		FROM sites ORDER BY id`)
+		FROM sites WHERE deleted_at IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list all sites: %w", err)
 	}
@@ -182,18 +189,19 @@ func (store *Store) ListAllSites(ctx context.Context) ([]Site, error) {
 func (store *Store) GetSite(ctx context.Context, siteID int64) (Site, error) {
 	row := store.db.QueryRowContext(ctx, `
 		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
-			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
-		FROM sites WHERE id = ?`, siteID)
+		FROM sites WHERE id = ? AND deleted_at IS NULL`, siteID)
 	var site Site
 	var enabled, sessionRequired int
 	var intervalSeconds, jitterSeconds int64
 	var acquisitionState string
 	var nextRunAt sql.NullInt64
+	var deletedAt sql.NullInt64
 	var createdAt, updatedAt int64
 	var sessionConfigured bool
 	if err := row.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
-		&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
+		&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &deletedAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
 		return Site{}, fmt.Errorf("get site %d: %w", siteID, err)
 	}
 	site.Enabled = enabled == 1
@@ -207,6 +215,10 @@ func (store *Store) GetSite(ctx context.Context, siteID int64) (Site, error) {
 		t := time.UnixMilli(nextRunAt.Int64).UTC()
 		site.NextRunAt = &t
 	}
+	if deletedAt.Valid {
+		value := time.UnixMilli(deletedAt.Int64).UTC()
+		site.DeletedAt = &value
+	}
 	site.SessionConfigured = sessionConfigured
 	site.CreatedAt = time.UnixMilli(createdAt).UTC()
 	site.UpdatedAt = time.UnixMilli(updatedAt).UTC()
@@ -219,9 +231,9 @@ func (store *Store) ListDueSites(ctx context.Context, now time.Time, limit int) 
 	}
 	rows, err := store.db.QueryContext(ctx, `
 		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
-			interval_seconds, jitter_seconds, acquisition_state, next_run_at, created_at, updated_at,
+			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
-		FROM sites WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at <= ?)
+		FROM sites WHERE enabled = 1 AND deleted_at IS NULL AND (next_run_at IS NULL OR next_run_at <= ?)
 		ORDER BY COALESCE(next_run_at, 0), id LIMIT ?`, unixMilli(now), limit)
 	if err != nil {
 		return nil, fmt.Errorf("list due sites: %w", err)
@@ -237,6 +249,77 @@ func (store *Store) SetSiteNextRun(ctx context.Context, siteID int64, nextRunAt 
 	return nil
 }
 
+func (store *Store) UpdateSiteURLs(ctx context.Context, siteID int64, baseURL, sourceURL string) error {
+	if siteID <= 0 {
+		return errors.New("invalid site ID")
+	}
+	baseURL, sourceURL = strings.TrimSpace(baseURL), strings.TrimSpace(sourceURL)
+	for name, value := range map[string]string{"base URL": baseURL, "source URL": sourceURL} {
+		parsed, err := url.Parse(value)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+			return fmt.Errorf("invalid %s", name)
+		}
+	}
+	result, err := store.db.ExecContext(ctx, `UPDATE sites SET base_url = ?, source_url = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, baseURL, sourceURL, unixMilli(time.Now().UTC()), siteID)
+	if err != nil {
+		return fmt.Errorf("update site URLs: %w", err)
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return errors.New("site not found")
+	}
+	return nil
+}
+
+func (store *Store) DeleteSite(ctx context.Context, siteID int64, deletedAt time.Time) error {
+	if siteID <= 0 {
+		return errors.New("invalid site ID")
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin site deletion: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE sites SET deleted_at = ?, enabled = 0, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, unixMilli(deletedAt), unixMilli(deletedAt), siteID)
+	if err != nil {
+		return fmt.Errorf("delete site: %w", err)
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return errors.New("site not found")
+	}
+	if _, err := incrementRevision(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit site deletion: %w", err)
+	}
+	return nil
+}
+
+func (store *Store) RestoreSite(ctx context.Context, siteID int64, restoredAt time.Time) error {
+	if siteID <= 0 {
+		return errors.New("invalid site ID")
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin site restore: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE sites SET deleted_at = NULL, enabled = 0, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL`, unixMilli(restoredAt), siteID)
+	if err != nil {
+		return fmt.Errorf("restore site: %w", err)
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return errors.New("deleted site not found")
+	}
+	if _, err := incrementRevision(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit site restore: %w", err)
+	}
+	return nil
+}
+
 func scanSites(rows siteRows) ([]Site, error) {
 	var sites []Site
 	for rows.Next() {
@@ -245,10 +328,11 @@ func scanSites(rows siteRows) ([]Site, error) {
 		var intervalSeconds, jitterSeconds int64
 		var acquisitionState string
 		var nextRunAt sql.NullInt64
+		var deletedAt sql.NullInt64
 		var createdAt, updatedAt int64
 		var sessionConfigured bool
 		if err := rows.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
-			&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
+			&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &deletedAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
 			return nil, fmt.Errorf("scan site: %w", err)
 		}
 		site.Enabled = enabled == 1
@@ -261,6 +345,10 @@ func scanSites(rows siteRows) ([]Site, error) {
 		if nextRunAt.Valid {
 			t := time.UnixMilli(nextRunAt.Int64).UTC()
 			site.NextRunAt = &t
+		}
+		if deletedAt.Valid {
+			value := time.UnixMilli(deletedAt.Int64).UTC()
+			site.DeletedAt = &value
 		}
 		site.SessionConfigured = sessionConfigured
 		site.CreatedAt = time.UnixMilli(createdAt).UTC()

@@ -39,6 +39,14 @@ type Data struct {
 	Cookies        []Cookie `json:"cookies,omitempty"`
 }
 
+type Metadata struct {
+	AuthType        string `json:"authType,omitempty"`
+	HasAccessToken  bool   `json:"hasAccessToken"`
+	HasRefreshToken bool   `json:"hasRefreshToken"`
+	HasUserAgent    bool   `json:"hasUserAgent"`
+	CookieCount     int    `json:"cookieCount"`
+}
+
 type Vault struct{ key []byte }
 
 func NewVault(rawKey string) (*Vault, error) {
@@ -144,6 +152,10 @@ func (vault *Vault) Decrypt(nonce, ciphertext []byte) (Data, error) {
 		return Data{}, fmt.Errorf("decode session payload: %w", err)
 	}
 	return data, nil
+}
+
+func Describe(data Data) Metadata {
+	return Metadata{AuthType: data.AuthType, HasAccessToken: strings.TrimSpace(data.AccessToken) != "", HasRefreshToken: strings.TrimSpace(data.RefreshToken) != "", HasUserAgent: strings.TrimSpace(data.UserAgent) != "", CookieCount: len(data.Cookies)}
 }
 
 func (vault *Vault) Save(ctx context.Context, db *store.Store, siteID int64, data Data, expiresAt *time.Time) error {

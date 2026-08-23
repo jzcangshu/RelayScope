@@ -12,6 +12,36 @@ import (
 	"relaypulse/internal/matcher"
 )
 
+func (store *Store) ListUnmatchedModels(ctx context.Context, limit int) ([]UnmatchedModel, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := store.db.QueryContext(ctx, `
+		SELECT raw.site_id, site.name, raw.raw_name, raw.provider_hint, raw.last_seen_at
+		FROM raw_models raw JOIN sites site ON site.id = raw.site_id
+		LEFT JOIN model_matches matches ON matches.raw_model_id = raw.id
+		WHERE site.deleted_at IS NULL AND site.enabled = 1 AND raw.removed_at IS NULL AND matches.raw_model_id IS NULL
+		ORDER BY raw.last_seen_at DESC, site.name COLLATE NOCASE, raw.raw_name LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list unmatched models: %w", err)
+	}
+	defer rows.Close()
+	result := make([]UnmatchedModel, 0)
+	for rows.Next() {
+		var item UnmatchedModel
+		var lastSeen int64
+		if err := rows.Scan(&item.SiteID, &item.SiteName, &item.RawModelName, &item.ProviderHint, &lastSeen); err != nil {
+			return nil, fmt.Errorf("scan unmatched model: %w", err)
+		}
+		item.LastSeenAt = time.UnixMilli(lastSeen).UTC()
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate unmatched models: %w", err)
+	}
+	return result, nil
+}
+
 func (store *Store) ListRuleNames(ctx context.Context) ([]string, error) {
 	rows, err := store.db.QueryContext(ctx, `SELECT canonical_name FROM model_rules ORDER BY id`)
 	if err != nil {
@@ -98,7 +128,7 @@ func (store *Store) ListMatchConflicts(ctx context.Context, limit int) ([]MatchC
 		JOIN sites ON sites.id = raw.site_id
 		JOIN model_matches match ON match.raw_model_id = raw.id
 		JOIN model_rules rule ON rule.id = match.rule_id
-		WHERE raw.removed_at IS NULL AND raw.id IN (
+		WHERE raw.removed_at IS NULL AND sites.deleted_at IS NULL AND raw.id IN (
 			SELECT raw_model_id FROM model_matches GROUP BY raw_model_id HAVING COUNT(*) > 1
 		)
 		ORDER BY sites.name, raw.raw_name, rule.priority DESC, rule.canonical_name
@@ -136,7 +166,7 @@ func (store *Store) PreviewRule(ctx context.Context, rule matcher.Rule, limit in
 	if limit <= 0 || limit > 1000 {
 		limit = 300
 	}
-	rows, err := store.db.QueryContext(ctx, `SELECT sites.name, raw_models.raw_name FROM raw_models JOIN sites ON sites.id = raw_models.site_id WHERE raw_models.removed_at IS NULL ORDER BY sites.name, raw_models.raw_name LIMIT ?`, limit)
+	rows, err := store.db.QueryContext(ctx, `SELECT sites.name, raw_models.raw_name FROM raw_models JOIN sites ON sites.id = raw_models.site_id WHERE raw_models.removed_at IS NULL AND sites.deleted_at IS NULL ORDER BY sites.name, raw_models.raw_name LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}

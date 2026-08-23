@@ -28,6 +28,7 @@ type Site struct {
 	SessionConfigured   bool                    `json:"sessionConfigured"`
 	AcquisitionState    domain.AcquisitionState `json:"acquisitionState"`
 	NextRunAt           *time.Time              `json:"nextRunAt,omitempty"`
+	DeletedAt           *time.Time              `json:"deletedAt,omitempty"`
 	CreatedAt           time.Time               `json:"createdAt"`
 	UpdatedAt           time.Time               `json:"updatedAt"`
 }
@@ -59,6 +60,31 @@ type EncryptedSession struct {
 	Ciphertext []byte
 	ExpiresAt  *time.Time
 	UpdatedAt  time.Time
+}
+
+type SessionMetadata struct {
+	SiteID          int64      `json:"siteId"`
+	Purpose         string     `json:"purpose"`
+	KeyVersion      int        `json:"keyVersion"`
+	ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	NonceBytes      int        `json:"nonceBytes"`
+	CiphertextBytes int        `json:"ciphertextBytes"`
+}
+
+type UnmatchedModel struct {
+	SiteID       int64     `json:"siteId"`
+	SiteName     string    `json:"siteName"`
+	RawModelName string    `json:"rawModelName"`
+	ProviderHint string    `json:"providerHint"`
+	LastSeenAt   time.Time `json:"lastSeenAt"`
+}
+
+type RunFilters struct {
+	Limit  int
+	SiteID int64
+	Status string
+	Since  *time.Time
 }
 type siteRows interface {
 	Next() bool

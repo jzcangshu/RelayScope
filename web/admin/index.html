@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
-  <header class="topbar"><strong class="brand">RelayPulse 管理</strong><a href="/">公开页面</a></header>
+  <header class="topbar"><strong class="brand">RelayPulse 管理</strong><div class="header-actions"><a href="/">公开页面</a><button id="logout" type="button">退出登录</button></div></header>
   <main>
     <section class="empty" id="login-panel">
       <h1>管理员登录</h1>
@@ -17,11 +17,18 @@
     <section id="dashboard" hidden>
       <div class="admin-heading"><div><h1>管理员控制台</h1><p id="dashboard-message" class="muted">正在读取运行状态。</p></div><button id="refresh" type="button">刷新</button></div>
       <nav class="admin-tabs" aria-label="管理视图">
-        <button type="button" data-tab="sites" aria-pressed="true">站点</button>
+		<button type="button" data-tab="overview" aria-pressed="true">概览</button>
+        <button type="button" data-tab="sites" aria-pressed="false">站点</button>
         <button type="button" data-tab="rules" aria-pressed="false">模型规则</button>
         <button type="button" data-tab="runs" aria-pressed="false">采集记录</button>
+		<button type="button" data-tab="unmatched" aria-pressed="false">未匹配</button>
+		<button type="button" data-tab="system" aria-pressed="false">系统</button>
 		<button type="button" data-tab="feedback" aria-pressed="false">用户反馈</button>
       </nav>
+	  <section id="overview-panel" class="admin-panel">
+		<div class="section-head"><h2>运行概览</h2><span id="overview-summary" class="muted"></span></div>
+		<div id="overview-content" class="summary-grid"></div>
+	  </section>
       <section id="sites-panel" class="admin-panel">
         <div class="section-head"><h2>站点与适配器</h2><div class="actions"><button id="session-sync" type="button">浏览器同步</button><button id="add-site" type="button">新增站点</button></div></div>
         <div id="site-list" class="rows"></div>
@@ -34,8 +41,11 @@
       </section>
       <section id="runs-panel" class="admin-panel" hidden>
         <div class="section-head"><div><h2>站点采集档案</h2><p id="run-summary" class="muted"></p></div></div>
+		<div class="run-filters"><select id="run-status-filter"><option value="">全部状态</option><option value="success">成功</option><option value="partial">部分完成</option><option value="failed">失败</option><option value="running">采集中</option></select><input id="run-site-filter" type="number" min="1" placeholder="站点 ID"><button id="run-filter-apply" type="button">筛选</button></div>
         <div id="run-list" class="run-archive"></div>
       </section>
+	  <section id="unmatched-panel" class="admin-panel" hidden><div class="section-head"><h2>未匹配模型</h2><button id="unmatched-refresh" type="button">刷新</button></div><div id="unmatched-list" class="rows"></div></section>
+	  <section id="system-panel" class="admin-panel" hidden><div class="section-head"><h2>系统状态</h2></div><div id="system-content" class="summary-grid"></div></section>
 	  <section id="feedback-panel" class="admin-panel" hidden><div class="section-head"><h2>用户反馈</h2></div><div id="feedback-list" class="rows"></div></section>
     </section>
   </main>
@@ -51,6 +61,7 @@
       <label>采集间隔（分钟）<input id="site-interval" type="number" min="5" max="1440" value="15" required></label>
       <label>抖动（秒）<input id="site-jitter" type="number" min="0" max="3600" value="120" required></label>
       <label>适配器配置 JSON<textarea id="site-config" rows="6">{}</textarea></label>
+	  <div id="site-config-fields" class="schema-fields"></div>
       <label>公告自定义原因（留空则显示后台报错）<textarea id="site-failure-reason" rows="3" maxlength="500" placeholder="例如：源站暂时限制国内 IP，正在处理中"></textarea></label>
       <label class="check"><input id="site-enabled" type="checkbox" checked> 启用采集</label>
       <label class="check"><input id="site-session-required" type="checkbox"> 需要登录态</label>

@@ -3,9 +3,11 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"relaypulse/internal/matcher"
@@ -41,6 +43,14 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_csrf", Value: csrfToken, Path: "/", HttpOnly: false, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil, MaxAge: 12 * 60 * 60})
 			writeJSON(writer, map[string]string{"status": "ok"})
 		})
+		mux.Handle("POST /api/v1/admin/logout", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if cookie, err := request.Cookie("relaypulse_admin"); err == nil {
+				options.Auth.Logout(cookie.Value)
+			}
+			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_admin", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
+			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_csrf", Value: "", Path: "/", MaxAge: -1, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
+			writeJSON(writer, map[string]string{"status": "ok"})
+		}))))
 		adminHandler := options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			sites, err := options.Store.ListAllSites(request.Context())
 			if err != nil {
@@ -85,6 +95,8 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			}
 			var payload struct {
 				Name                string  `json:"name"`
+				BaseURL             string  `json:"baseUrl"`
+				SourceURL           string  `json:"sourceUrl"`
 				AdapterKey          string  `json:"adapterKey"`
 				AdapterConfig       string  `json:"adapterConfig"`
 				Enabled             bool    `json:"enabled"`
@@ -101,11 +113,41 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "update site")
 				return
 			}
+			if strings.TrimSpace(payload.BaseURL) != "" || strings.TrimSpace(payload.SourceURL) != "" {
+				if err := options.Store.UpdateSiteURLs(request.Context(), id, payload.BaseURL, payload.SourceURL); err != nil {
+					writeError(writer, http.StatusBadRequest, "update site URLs")
+					return
+				}
+			}
 			if payload.CustomFailureReason != nil {
 				if err := options.Store.UpdateSiteFailureReason(request.Context(), id, *payload.CustomFailureReason); err != nil {
 					writeError(writer, http.StatusBadRequest, "update site failure reason")
 					return
 				}
+			}
+			writeJSON(writer, map[string]string{"status": "ok"})
+		}))))
+		mux.Handle("DELETE /api/v1/admin/sites/{id}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, "invalid site id")
+				return
+			}
+			if err := options.Store.DeleteSite(request.Context(), id, options.Now().UTC()); err != nil {
+				writeError(writer, http.StatusBadRequest, "delete site")
+				return
+			}
+			writeJSON(writer, map[string]string{"status": "ok"})
+		}))))
+		mux.Handle("POST /api/v1/admin/sites/{id}/restore", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, "invalid site id")
+				return
+			}
+			if err := options.Store.RestoreSite(request.Context(), id, options.Now().UTC()); err != nil {
+				writeError(writer, http.StatusBadRequest, "restore site")
+				return
 			}
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
@@ -137,6 +179,10 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid site id")
 				return
 			}
+			if _, err := options.Store.GetSite(request.Context(), id); err != nil {
+				writeError(writer, http.StatusNotFound, "site not found")
+				return
+			}
 			var payload session.Data
 			if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 64<<10)).Decode(&payload); err != nil {
 				writeError(writer, http.StatusBadRequest, "invalid session payload")
@@ -158,12 +204,43 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid site id")
 				return
 			}
+			if _, err := options.Store.GetSite(request.Context(), id); err != nil {
+				writeError(writer, http.StatusNotFound, "site not found")
+				return
+			}
 			if err := options.Store.DeleteEncryptedSession(request.Context(), id, session.SessionPurpose); err != nil {
 				writeError(writer, http.StatusInternalServerError, "delete session")
 				return
 			}
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
+		mux.Handle("GET /api/v1/admin/sites/{id}/session", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, "invalid site id")
+				return
+			}
+			if _, err := options.Store.GetSite(request.Context(), id); err != nil {
+				writeError(writer, http.StatusNotFound, "site not found")
+				return
+			}
+			metadata, err := options.Store.SessionMetadata(request.Context(), id, session.SessionPurpose)
+			if err != nil {
+				writeError(writer, http.StatusNotFound, "session metadata unavailable")
+				return
+			}
+			response := map[string]any{"metadata": metadata}
+			if options.SessionVault != nil {
+				encrypted, loadErr := options.Store.LoadEncryptedSession(request.Context(), id, session.SessionPurpose)
+				if loadErr == nil {
+					data, decryptErr := options.SessionVault.Decrypt(encrypted.Nonce, encrypted.Ciphertext)
+					if decryptErr == nil {
+						response["credential"] = session.Describe(data)
+					}
+				}
+			}
+			writeJSON(writer, response)
+		})))
 		mux.Handle("GET /api/v1/admin/adapters", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			if options.Collector == nil {
 				writeJSON(writer, map[string]any{"adapters": []any{}})
@@ -184,12 +261,34 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			writeJSON(writer, map[string]any{"rules": rules})
 		})))
 		mux.Handle("GET /api/v1/admin/runs", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			runs, err := options.Store.ListRecentCollectionRunsBySite(request.Context(), 12)
+			filters, err := parseRunFilters(request)
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, err.Error())
+				return
+			}
+			runs, err := options.Store.ListCollectionRunsFiltered(request.Context(), filters)
 			if err != nil {
 				writeError(writer, http.StatusInternalServerError, "query collection runs")
 				return
 			}
 			writeJSON(writer, map[string]any{"runs": runs})
+		})))
+		mux.Handle("GET /api/v1/admin/unmatched", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			limit := 100
+			if raw := request.URL.Query().Get("limit"); raw != "" {
+				parsed, err := strconv.Atoi(raw)
+				if err != nil || parsed < 1 || parsed > 500 {
+					writeError(writer, http.StatusBadRequest, "invalid limit")
+					return
+				}
+				limit = parsed
+			}
+			items, err := options.Store.ListUnmatchedModels(request.Context(), limit)
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "query unmatched models")
+				return
+			}
+			writeJSON(writer, map[string]any{"models": items})
 		})))
 		mux.Handle("GET /api/v1/admin/conflicts", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			conflicts, err := options.Store.ListMatchConflicts(request.Context(), 300)
@@ -280,4 +379,39 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
 	}
+}
+
+func parseRunFilters(request *http.Request) (store.RunFilters, error) {
+	query := request.URL.Query()
+	filters := store.RunFilters{Limit: 50}
+	if raw := query.Get("limit"); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 200 {
+			return store.RunFilters{}, fmt.Errorf("invalid limit")
+		}
+		filters.Limit = limit
+	}
+	if raw := query.Get("site"); raw != "" {
+		siteID, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || siteID <= 0 {
+			return store.RunFilters{}, fmt.Errorf("invalid site")
+		}
+		filters.SiteID = siteID
+	}
+	if status := strings.TrimSpace(query.Get("status")); status != "" {
+		switch status {
+		case "running", "success", "partial", "failed":
+			filters.Status = status
+		default:
+			return store.RunFilters{}, fmt.Errorf("invalid status")
+		}
+	}
+	if raw := strings.TrimSpace(query.Get("since")); raw != "" {
+		since, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return store.RunFilters{}, fmt.Errorf("invalid since")
+		}
+		filters.Since = &since
+	}
+	return filters, nil
 }

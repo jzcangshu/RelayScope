@@ -132,6 +132,13 @@ func (auth *Auth) Valid(token string) bool {
 	return true
 }
 
+func (auth *Auth) Logout(token string) {
+	auth.mu.Lock()
+	defer auth.mu.Unlock()
+	delete(auth.sessions, token)
+	delete(auth.csrfTokens, token)
+}
+
 func (auth *Auth) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		cookie, err := request.Cookie("relaypulse_admin")

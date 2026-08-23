@@ -104,6 +104,13 @@ a { color: #1769aa; }
 .admin-tabs { display: flex; gap: 8px; margin-bottom: 18px; border-bottom: 1px solid #d9dedd; padding-bottom: 10px; }
 .admin-tabs button[aria-pressed="true"] { border-color: #1769aa; color: #1769aa; }
 .admin-panel { padding: 4px 0 24px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.summary-cell { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid #d9dedd; border-radius: 6px; background: #fff; }
+.summary-cell strong { font-size: 18px; overflow-wrap: anywhere; }
+.summary-cell span { color: #66716f; font-size: 12px; }
+.run-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.run-filters input, .run-filters select, .run-filters button { min-height: 32px; }
+.schema-fields { display: grid; gap: 10px; padding: 10px 0; border-top: 1px solid #edf0ef; }
 .section-head { margin-bottom: 12px; }
 .admin-row { cursor: default; grid-template-columns: minmax(180px, 1.4fr) minmax(110px, .6fr) minmax(160px, 1fr) minmax(220px, 1.2fr); }
 .site-row { border-left-width: 3px; }

@@ -85,3 +85,19 @@ A source-provided group summary is a window aggregate, not a current observation
 The newest real bucket timestamp is stored independently from the collection time. A source sample older than two hours is exposed as `no_samples` even when RelayPulse has just fetched an otherwise valid response. This keeps source-data freshness separate from collector health.
 
 Public timelines contain only persisted source buckets. A collection timestamp or aggregate state must never be inserted into an empty timeline slot. When a source omits bucket end times, inferred intervals are capped at one hour so sparse points cannot claim unobserved multi-hour coverage.
+
+## Administrative projections
+
+Site deletion is a recoverable soft delete. It records `deleted_at`, disables
+the site, excludes it from scheduler, public, and normal administrator lists,
+and retains snapshots, history, runs, and encrypted session rows. A restore
+clears `deleted_at` and leaves the site disabled until an administrator opts
+back in. Retention cleanup remains responsible for expiring historical rows.
+
+The administrator unmatched projection contains only raw model identity,
+provider hint, site identity, and last-seen time. Session metadata contains
+sizes, key version, purpose, expiry, and update time; decrypted credentials,
+nonces, ciphertext, cookie values, and access tokens are never serialized.
+
+Run filters are bounded server-side by limit, site ID, status, and RFC3339
+start time. Invalid filters are rejected instead of silently widening a query.
