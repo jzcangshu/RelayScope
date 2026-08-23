@@ -119,7 +119,7 @@ func run() error {
 		SessionVault: sessionVault,
 		PublicURL:    cfg.PublicURL,
 		SessionSync:  session.NewSyncManager(time.Now),
-		LinuxDO:      linuxdo.New(linuxdo.Config{ClientID: cfg.LinuxDOClientID, ClientSecret: cfg.LinuxDOClientSecret, CallbackURL: cfg.PublicURL + "/api/v1/auth/linuxdo/callback"}, dbStore),
+		LinuxDO:      linuxdo.New(linuxdo.Config{ClientID: cfg.OAuthClientID, ClientSecret: cfg.OAuthClientSecret, CallbackURL: cfg.PublicURL + "/api/v1/auth/linuxdo/callback"}, dbStore),
 	})
 	if err != nil {
 		return fmt.Errorf("build HTTP handler: %w", err)

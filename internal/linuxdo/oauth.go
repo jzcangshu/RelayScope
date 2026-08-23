@@ -116,7 +116,7 @@ func (s *Service) Callback(ctx context.Context, code, state string) (store.User,
 	if avatar == "" {
 		avatar = profile.ProfilePicture
 	}
-	return s.db.UpsertUser(ctx, id, profile.Username, profile.Name, avatar)
+	return s.db.UpsertUser(ctx, "linuxdo", id, profile.Username, profile.Name, avatar)
 }
 func (s *Service) StartSession(user store.User) (string, time.Time, error) {
 	token, err := randomValue()

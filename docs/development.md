@@ -32,8 +32,8 @@ Supported environment variables currently are:
 | `RELAYPULSE_FLARESOLVERR_ENDPOINT` | empty | Optional loopback FlareSolverr endpoint, for example `http://127.0.0.1:8191`; only contacted after a non-2xx response whose body explicitly looks like a Cloudflare challenge |
 | `RELAYPULSE_SESSION_ENCRYPTION_KEY` | empty | Optional base64url key (at least 32 bytes before encoding) used to encrypt site session bundles |
 | `RELAYPULSE_PUBLIC_URL` | empty | Optional public HTTP/HTTPS origin, configured after the production domain is ready |
-| `LINUXDO_CLIENT_ID` | empty | LinuxDo OAuth client ID; together with the secret enables public login |
-| `LINUXDO_CLIENT_SECRET` | empty | LinuxDo OAuth client secret; keep only in protected deployment configuration |
+| `RELAYPULSE_OAUTH_CLIENT_ID` | empty | OAuth provider client ID; together with the secret enables public login (currently LinuxDo) |
+| `RELAYPULSE_OAUTH_CLIENT_SECRET` | empty | OAuth provider client secret; keep only in protected deployment configuration |
 
 ## Session import
 
@@ -135,7 +135,7 @@ failure cooldown; it is not a guarantee that every Cloudflare challenge can
 be solved. Do not run Chromium and FlareSolverr on a 768 MB host without swap
 and memory monitoring.
 
-LinuxDo 登录的人机验证不由 RelayPulse 自动处理。管理员在本地 Chrome 完成授权后，将最小化的 User-Agent（浏览器标识）与 Cookie（会话 Cookie）包导入后台；主服务不会读取 Chrome 配置目录，也不会把浏览器凭据写入 Git，导入内容通过上述密钥加密后保存。
+OAuth 登录的人机验证不由 RelayPulse 自动处理。管理员在本地 Chrome 完成授权后，将最小化的 User-Agent（浏览器标识）与 Cookie（会话 Cookie）包导入后台；主服务不会读取 Chrome 配置目录，也不会把浏览器凭据写入 Git，导入内容通过上述密钥加密后保存。
 
 ## Chrome session sync
 

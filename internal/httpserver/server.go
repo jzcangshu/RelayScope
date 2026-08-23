@@ -132,6 +132,9 @@ func NewHandler(options Options) (http.Handler, error) {
 		if options.PublicURL != "" {
 			meta["publicUrl"] = options.PublicURL
 		}
+		if options.LinuxDO != nil && options.LinuxDO.Enabled() {
+			meta["authProviders"] = []string{"linuxdo"}
+		}
 		if options.Store != nil {
 			if revision, err := options.Store.Revision(context.Background()); err == nil {
 				meta["revision"] = revision
@@ -142,13 +145,13 @@ func NewHandler(options Options) (http.Handler, error) {
 	if options.LinuxDO != nil {
 		mux.HandleFunc("GET /api/v1/auth/linuxdo", func(writer http.ResponseWriter, request *http.Request) {
 			if err := options.LinuxDO.Begin(writer); err != nil {
-				http.Error(writer, "LinuxDo 登录未配置", http.StatusNotImplemented)
+				http.Error(writer, "OAuth login is not configured", http.StatusNotImplemented)
 			}
 		})
 		mux.HandleFunc("GET /api/v1/auth/linuxdo/callback", func(writer http.ResponseWriter, request *http.Request) {
 			user, err := options.LinuxDO.Callback(request.Context(), request.URL.Query().Get("code"), request.URL.Query().Get("state"))
 			if err != nil {
-				http.Error(writer, "LinuxDo 登录失败", http.StatusBadRequest)
+				http.Error(writer, "登录失败", http.StatusBadRequest)
 				return
 			}
 			token, expires, err := options.LinuxDO.StartSession(user)
@@ -176,7 +179,7 @@ func NewHandler(options Options) (http.Handler, error) {
 		mux.HandleFunc("POST /api/v1/feedback", func(writer http.ResponseWriter, request *http.Request) {
 			user, ok := linuxDOUser(options.LinuxDO, request)
 			if !ok {
-				http.Error(writer, "请先使用 LinuxDo 登录", http.StatusUnauthorized)
+				http.Error(writer, "请先登录", http.StatusUnauthorized)
 				return
 			}
 			var payload struct {

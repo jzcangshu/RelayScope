@@ -89,9 +89,9 @@ A failed collection retains the last successful service snapshot. A raw model be
 
 ## Authentication and challenge boundaries
 
-- All registered initial sites are approved for LinuxDo-authenticated session import.
-- The existing user script remains the behavioral reference for the user's local authorization flow, but RelayPulse does not automate the LinuxDo login challenge.
-- LinuxDo session import and Cloudflare recovery are separate workflows sharing only the encrypted credential store.
+- Authenticated sites are approved for session import through their configured OAuth provider.
+- RelayPulse does not automate the OAuth login challenge; the administrator completes authorization locally and imports the minimal session bundle.
+- OAuth session import and Cloudflare recovery are separate workflows sharing only the encrypted credential store.
 - Occasional checkbox-style Cloudflare challenges must be attempted unattended.
 - FlareSolverr may be pinned, wrapped, or patched as a replaceable challenge provider.
 - If clearance cookies cannot be reused by the HTTP collector, the collector may fetch the structured endpoint inside the freshly cleared browser session.

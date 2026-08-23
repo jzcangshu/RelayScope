@@ -26,8 +26,8 @@ type Config struct {
 	FlareSolverrEndpoint string
 	SessionEncryptionKey string
 	PublicURL            string
-	LinuxDOClientID      string
-	LinuxDOClientSecret  string
+	OAuthClientID        string
+	OAuthClientSecret    string
 }
 
 func Load() (Config, error) {
@@ -42,8 +42,8 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		FlareSolverrEndpoint: strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_FLARESOLVERR_ENDPOINT", "")),
 		SessionEncryptionKey: strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_SESSION_ENCRYPTION_KEY", "")),
 		PublicURL:            strings.TrimRight(strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_PUBLIC_URL", "")), "/"),
-		LinuxDOClientID:      strings.TrimSpace(valueOrDefault(lookup, "LINUXDO_CLIENT_ID", "")),
-		LinuxDOClientSecret:  strings.TrimSpace(valueOrDefault(lookup, "LINUXDO_CLIENT_SECRET", "")),
+		OAuthClientID:        strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_OAUTH_CLIENT_ID", "")),
+		OAuthClientSecret:    strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_OAUTH_CLIENT_SECRET", "")),
 	}
 
 	if err := validateListenAddr(cfg.ListenAddr); err != nil {

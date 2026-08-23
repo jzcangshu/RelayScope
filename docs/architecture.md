@@ -33,7 +33,7 @@ Planned internal packages:
 - `internal/adapter`: adapter interfaces, registry, configuration schemas, and implementations.
 - `internal/collector`: collection orchestration, retries, completeness checks, and transactional writes.
 - `internal/scheduler`: jittered per-site scheduling with no overlapping site runs.
-- `internal/session`: encrypted site sessions and LinuxDo login recovery coordination.
+- `internal/session`: encrypted site sessions and OAuth login recovery coordination.
 - `internal/challenge`: challenge detection and replaceable FlareSolverr/browser recovery.
 - `internal/httpapi`: public and administrator handlers.
 - `web`: embedded static frontend source and build output.
@@ -85,7 +85,7 @@ Historical buckets and verbose run diagnostics expire after three days. Identity
 
 The main binary never keeps Chromium running merely for scheduling. Browser work is an exceptional external capability:
 
-- LinuxDo workflow: import the minimal session bundle established in the user's local browser and store it with authenticated encryption.
+- OAuth workflow: import the minimal session bundle established in the user's local browser and store it with authenticated encryption.
 - Cloudflare workflow: solve an occasional managed or checkbox challenge with a pinned FlareSolverr provider, then reuse clearance or fetch inside the cleared context.
 
 Cloudflare browser work acquires one global lease with hard timeouts, memory-aware launch settings, cooldowns, and process cleanup. Production targets the upgraded server; swap is still recommended because browser memory use is bursty.
@@ -102,7 +102,7 @@ Public updates use a revision-aware conditional poll every 30 to 60 seconds. Web
 - Site credentials and cookies use authenticated encryption with a key supplied outside the database.
 - Logs redact cookies, authorization headers, API keys, and query values known to contain credentials.
 - FlareSolverr binds only to loopback and is never exposed publicly.
-- Browser automation is restricted to registered site and LinuxDo domain allowlists.
+- Browser automation is restricted to registered site and OAuth provider domain allowlists.
 - `.env` files, database files, browser profiles, cookies, and keys never enter Git.
 
 ## Capacity target

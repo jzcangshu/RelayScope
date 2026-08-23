@@ -153,12 +153,14 @@ CREATE TABLE encrypted_sessions (
 
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
-    linuxdo_id TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
+    external_id TEXT NOT NULL,
     username TEXT NOT NULL,
     name TEXT NOT NULL DEFAULT '',
     avatar_url TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    UNIQUE(provider, external_id)
 );
 
 CREATE TABLE feedback (
