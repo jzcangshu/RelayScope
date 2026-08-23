@@ -59,17 +59,13 @@ type aiAPITimeline struct {
 }
 
 func (adapter AIAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	config := aiAPIConfig{StatusPath: "/api/status", Period: "24h", Board: "hot"}
-	if strings.TrimSpace(site.ConfigJSON) != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode AIAPI config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply AIAPI config defaults: %w", err)
 	}
-	if strings.TrimSpace(config.StatusPath) == "" {
-		config.StatusPath = "/api/status"
-	}
-	if strings.TrimSpace(config.Period) == "" {
-		config.Period = "24h"
+	var config aiAPIConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode AIAPI config: %w", err)
 	}
 	endpoint, err := resolveSiteURL(site.BaseURL, config.StatusPath)
 	if err != nil {

@@ -88,11 +88,13 @@ type detailBucket struct {
 }
 
 func (adapter NewAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	config := NewAPIConfig{PricingPath: "/api/pricing", SummaryPath: "/api/perf-metrics/summary", DetailPath: "/api/perf-metrics", WindowHours: 24, CatalogPageSize: 1000, PricingAdapter: "newapi", PricingStatusPath: "/api/status"}
-	if site.ConfigJSON != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode NewAPI config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply NewAPI config defaults: %w", err)
+	}
+	var config NewAPIConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode NewAPI config: %w", err)
 	}
 	if config.WindowHours <= 0 {
 		config.WindowHours = 24
@@ -185,11 +187,16 @@ func (adapter NewAPIAdapter) CollectDetails(ctx context.Context, site Site, fetc
 	if collection == nil || len(modelNames) == 0 {
 		return nil
 	}
-	config := NewAPIConfig{DetailPath: "/api/perf-metrics", WindowHours: 24}
-	if site.ConfigJSON != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return fmt.Errorf("decode NewAPI detail config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return fmt.Errorf("apply NewAPI config defaults: %w", err)
+	}
+	var config NewAPIConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return fmt.Errorf("decode NewAPI detail config: %w", err)
+	}
+	if config.WindowHours <= 0 {
+		config.WindowHours = 24
 	}
 	if config.SkipDetails {
 		return nil

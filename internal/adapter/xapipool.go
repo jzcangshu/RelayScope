@@ -46,11 +46,13 @@ type xAPIHeatmapCell struct {
 }
 
 func (adapter XAPIPoolAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	config := xAPIPoolConfig{HeatmapPath: "/api/pool/requests/heatmap?channel=text"}
-	if strings.TrimSpace(site.ConfigJSON) != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode X-API pool config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply X-API pool config defaults: %w", err)
+	}
+	var config xAPIPoolConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode X-API pool config: %w", err)
 	}
 	if strings.TrimSpace(config.HeatmapPath) == "" {
 		return domain.Collection{}, fmt.Errorf("X-API pool paths are required")

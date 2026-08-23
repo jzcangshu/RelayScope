@@ -66,14 +66,13 @@ type modelProbeBucket struct {
 }
 
 func (adapter ModelProbeAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	config := modelProbeConfig{ModelProbePath: "/api/model_probe/status", PricingAdapter: "newapi", PricingPath: "/api/pricing", PricingStatusPath: "/api/status"}
-	if site.ConfigJSON != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode model-probe config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply model-probe config defaults: %w", err)
 	}
-	if strings.TrimSpace(config.ModelProbePath) == "" {
-		config.ModelProbePath = "/api/model_probe/status"
+	var config modelProbeConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode model-probe config: %w", err)
 	}
 	endpoint, err := resolveSiteURL(site.BaseURL, config.ModelProbePath)
 	if err != nil {

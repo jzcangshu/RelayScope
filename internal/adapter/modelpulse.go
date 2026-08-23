@@ -55,14 +55,13 @@ type modelPulseMinute struct {
 }
 
 func (adapter ModelPulseAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	config := modelPulseConfig{PulsePath: "/api/model-pulse", PricingAdapter: "newapi", PricingPath: "/api/pricing", PricingStatusPath: "/api/status"}
-	if strings.TrimSpace(site.ConfigJSON) != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode model-pulse config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply model-pulse config defaults: %w", err)
 	}
-	if strings.TrimSpace(config.PulsePath) == "" {
-		config.PulsePath = "/api/model-pulse"
+	var config modelPulseConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode model-pulse config: %w", err)
 	}
 	endpoint, err := resolveSiteURL(site.BaseURL, config.PulsePath)
 	if err != nil {

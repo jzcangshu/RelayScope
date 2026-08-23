@@ -58,14 +58,13 @@ type sub2TimelinePoint struct {
 }
 
 func (Sub2MonitorAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	config := sub2MonitorConfig{MonitorPath: "/api/v1/channel-monitors"}
-	if site.ConfigJSON != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return domain.Collection{}, fmt.Errorf("decode sub2api-monitor config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(Sub2MonitorAdapter{}.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return domain.Collection{}, fmt.Errorf("apply sub2api-monitor config defaults: %w", err)
 	}
-	if strings.TrimSpace(config.MonitorPath) == "" {
-		config.MonitorPath = "/api/v1/channel-monitors"
+	var config sub2MonitorConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return domain.Collection{}, fmt.Errorf("decode sub2api-monitor config: %w", err)
 	}
 	endpoint, err := resolveSiteURL(site.BaseURL, config.MonitorPath)
 	if err != nil {

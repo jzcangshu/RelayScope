@@ -253,11 +253,13 @@ func hasUptimeKumaHeartbeats(payload uptimeKumaHeartbeatPayload) bool {
 }
 
 func decodeUptimeKumaConfig(site Site) (uptimeKumaConfig, error) {
-	config := uptimeKumaConfig{}
-	if strings.TrimSpace(site.ConfigJSON) != "" {
-		if err := json.Unmarshal([]byte(site.ConfigJSON), &config); err != nil {
-			return uptimeKumaConfig{}, fmt.Errorf("decode uptime-kuma config: %w", err)
-		}
+	defaulted, err := ApplyConfigDefaults(UptimeKumaAdapter{}.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return uptimeKumaConfig{}, fmt.Errorf("apply uptime-kuma config defaults: %w", err)
+	}
+	var config uptimeKumaConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return uptimeKumaConfig{}, fmt.Errorf("decode uptime-kuma config: %w", err)
 	}
 	return config, nil
 }
