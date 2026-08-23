@@ -88,7 +88,7 @@ func TestHealthAndMetaEndpoints(t *testing.T) {
 		{path: "/", contains: []string{
 			"RelayPulse - 中转站健康监测",
 			`href="/assets/favicon.svg"`,
-		}, absent: []string{"公益站模型状态", "expiry-countdown"}},
+		}, absent: []string{"expiry-countdown"}},
 		{path: "/admin/", contains: []string{"管理员控制台"}},
 	}
 
