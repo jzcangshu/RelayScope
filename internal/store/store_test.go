@@ -387,6 +387,24 @@ func TestCompleteCatalogMarksModelRemovedAfterThreeOmissions(t *testing.T) {
 	if _, _, err := store.ApplyCollection(ctx, initial, strings.ToLower); err != nil {
 		t.Fatalf("seed model: %v", err)
 	}
+	if err := store.CreateRule(ctx, matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Enabled: true}); err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	rules, err := store.ListRules(ctx)
+	if err != nil {
+		t.Fatalf("list rules: %v", err)
+	}
+	engine, err := matcher.New(rules)
+	if err != nil {
+		t.Fatalf("build matcher: %v", err)
+	}
+	if err := store.RefreshAllMatches(ctx, engine, now); err != nil {
+		t.Fatalf("seed matches: %v", err)
+	}
+	var matchCount int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM model_matches`).Scan(&matchCount); err != nil || matchCount != 1 {
+		t.Fatalf("seed match count = %d, err=%v", matchCount, err)
+	}
 
 	partial := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now.Add(time.Minute), CatalogComplete: false}
 	if _, _, err := store.ApplyCollection(ctx, partial, strings.ToLower); err != nil {
@@ -401,6 +419,11 @@ func TestCompleteCatalogMarksModelRemovedAfterThreeOmissions(t *testing.T) {
 		}
 	}
 	assertRemovalEvidence(t, store, 3, true)
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM model_matches`).Scan(&matchCount); err != nil {
+		t.Fatalf("count removed matches: %v", err)
+	} else if matchCount != 0 {
+		t.Fatalf("removed model retained %d matches", matchCount)
+	}
 }
 
 func TestModelHistoryCoverageMergesOverlapAndResetsAfterGap(t *testing.T) {

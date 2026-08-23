@@ -136,3 +136,28 @@ func TestGetSiteReturnsNextRunAt(t *testing.T) {
 		t.Fatalf("NextRunAt = %v, want ~%v", site.NextRunAt, future)
 	}
 }
+
+func TestScheduleNextPersistsWithIndependentContext(t *testing.T) {
+	ctx := context.Background()
+	dbStore, err := store.Open(ctx, ":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer dbStore.Close()
+	created, err := dbStore.CreateSite(ctx, store.Site{
+		Name: "durable", BaseURL: "https://durable.example", SourceURL: "https://durable.example/pricing",
+		AdapterKey: "test", Enabled: true, Interval: 15 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler := New(dbStore, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Now)
+	scheduler.scheduleNext(created.ID)
+	site, err := dbStore.GetSite(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.NextRunAt == nil {
+		t.Fatal("scheduleNext did not persist next_run_at")
+	}
+}

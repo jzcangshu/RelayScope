@@ -107,3 +107,26 @@ func TestApplyConfigDefaultsInvalidRaw(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
+
+func TestApplyConfigDefaultsValidatesKnownProperties(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"mode":{"type":"string","enum":["fast","safe"]},"count":{"type":"integer","minimum":1,"maximum":3},"enabled":{"type":"boolean"}}}`)
+	for _, test := range []struct {
+		name string
+		raw  string
+	}{
+		{"enum", `{"mode":"other"}`},
+		{"type", `{"enabled":"yes"}`},
+		{"minimum", `{"count":0}`},
+		{"maximum", `{"count":4}`},
+		{"integer", `{"count":1.5}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := ApplyConfigDefaults(schema, json.RawMessage(test.raw)); err == nil {
+				t.Fatal("expected schema validation error")
+			}
+		})
+	}
+	if _, err := ApplyConfigDefaults(schema, json.RawMessage(`{"mode":"safe","count":2,"enabled":true,"future":"kept"}`)); err != nil {
+		t.Fatalf("valid config rejected: %v", err)
+	}
+}

@@ -1212,6 +1212,10 @@ func updateAbsenceEvidence(ctx context.Context, tx *sql.Tx, siteID int64, catalo
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("update model absence evidence: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM model_matches
+		WHERE raw_model_id IN (SELECT id FROM raw_models WHERE site_id = ? AND removed_at IS NOT NULL)`, siteID); err != nil {
+		return fmt.Errorf("clear matches for removed models: %w", err)
+	}
 	return nil
 }
 

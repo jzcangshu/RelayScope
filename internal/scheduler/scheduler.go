@@ -13,6 +13,7 @@ import (
 )
 
 const scheduledCollectionTimeout = 3 * time.Minute
+const scheduleWriteTimeout = 5 * time.Second
 
 type Scheduler struct {
 	store      *store.Store
@@ -82,12 +83,14 @@ func (scheduler *Scheduler) dispatch(ctx context.Context) {
 			if err := scheduler.collector.CollectSite(collectCtx, site, scheduler.now().UTC()); err != nil {
 				scheduler.logger.Warn("scheduled collection failed", "site_id", site.ID, "error", err)
 			}
-			scheduler.scheduleNext(ctx, site.ID)
+			scheduler.scheduleNext(site.ID)
 		}()
 	}
 }
 
-func (scheduler *Scheduler) scheduleNext(ctx context.Context, siteID int64) {
+func (scheduler *Scheduler) scheduleNext(siteID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), scheduleWriteTimeout)
+	defer cancel()
 	latest, err := scheduler.store.GetSite(ctx, siteID)
 	if err != nil {
 		scheduler.logger.Warn("get site for scheduling failed", "site_id", siteID, "error", err)
