@@ -17,6 +17,11 @@
 - Copy `deploy/relaypulse.env.example` to `/etc/relaypulse/relaypulse.env`, then fill secrets only on the server with mode `0600`.
 - Use `deploy/Caddyfile.example` only after replacing the placeholder domain.
 
+Tagged releases (`vMAJOR.MINOR.PATCH`) publish a CGO-free image to GHCR via
+`.github/workflows/release.yml`. Verify the tag and image digest before
+deployment, keep the previous binary and a database backup, then check both
+health endpoints and the admin run view after restart.
+
 ## FlareSolverr
 
 - Pin the standalone Linux x64 release instead of adding a container runtime.

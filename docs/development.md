@@ -34,6 +34,10 @@ Supported environment variables currently are:
 | `RELAYPULSE_PUBLIC_URL` | empty | Optional public HTTP/HTTPS origin, configured after the production domain is ready |
 | `RELAYPULSE_OAUTH_CLIENT_ID` | empty | OAuth provider client ID; together with the secret enables public login (currently LinuxDo) |
 | `RELAYPULSE_OAUTH_CLIENT_SECRET` | empty | OAuth provider client secret; keep only in protected deployment configuration |
+| `RELAYPULSE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations (1-32) |
+| `RELAYPULSE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
+| `RELAYPULSE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
+| `RELAYPULSE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval (minimum 1m) |
 
 ## Session import
 

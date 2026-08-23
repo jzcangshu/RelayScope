@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Management API lifecycle controls, filtered runs, unmatched-model inspection, redacted session metadata, and schema-driven adapter fields.
+- Configurable HTTP concurrency, collection/HTTP timeouts, maintenance interval, and build metadata.
 - Public open-source repository scaffold: CI workflow, Dockerfile, Makefile, CONTRIBUTING guide.
 - Cross-platform build entry point (`make build/test/vet`) replacing PowerShell-only scripts.
 

@@ -16,24 +16,35 @@ const scheduledCollectionTimeout = 3 * time.Minute
 const scheduleWriteTimeout = 5 * time.Second
 
 type Scheduler struct {
-	store      *store.Store
-	collector  *collector.Collector
-	logger     *slog.Logger
-	now        func() time.Time
-	interval   time.Duration
-	stop       chan struct{}
-	stopOnce   sync.Once
-	loopWait   sync.WaitGroup
-	workerWait sync.WaitGroup
-	activeMu   sync.Mutex
-	active     map[int64]struct{}
+	store             *store.Store
+	collector         *collector.Collector
+	logger            *slog.Logger
+	now               func() time.Time
+	interval          time.Duration
+	collectionTimeout time.Duration
+	stop              chan struct{}
+	stopOnce          sync.Once
+	loopWait          sync.WaitGroup
+	workerWait        sync.WaitGroup
+	activeMu          sync.Mutex
+	active            map[int64]struct{}
 }
 
 func New(dbStore *store.Store, siteCollector *collector.Collector, logger *slog.Logger, now func() time.Time) *Scheduler {
 	if now == nil {
 		now = time.Now
 	}
-	return &Scheduler{store: dbStore, collector: siteCollector, logger: logger, now: now, interval: 30 * time.Second, stop: make(chan struct{}), active: make(map[int64]struct{})}
+	return NewWithCollectionTimeout(dbStore, siteCollector, logger, now, scheduledCollectionTimeout)
+}
+
+func NewWithCollectionTimeout(dbStore *store.Store, siteCollector *collector.Collector, logger *slog.Logger, now func() time.Time, timeout time.Duration) *Scheduler {
+	if now == nil {
+		now = time.Now
+	}
+	if timeout <= 0 {
+		timeout = scheduledCollectionTimeout
+	}
+	return &Scheduler{store: dbStore, collector: siteCollector, logger: logger, now: now, interval: 30 * time.Second, collectionTimeout: timeout, stop: make(chan struct{}), active: make(map[int64]struct{})}
 }
 
 func (scheduler *Scheduler) Start(ctx context.Context) {
@@ -78,7 +89,7 @@ func (scheduler *Scheduler) dispatch(ctx context.Context) {
 		go func() {
 			defer scheduler.workerWait.Done()
 			defer scheduler.release(site.ID)
-			collectCtx, cancel := context.WithTimeout(ctx, scheduledCollectionTimeout)
+			collectCtx, cancel := context.WithTimeout(ctx, scheduler.collectionTimeout)
 			defer cancel()
 			if err := scheduler.collector.CollectSite(collectCtx, site, scheduler.now().UTC()); err != nil {
 				scheduler.logger.Warn("scheduled collection failed", "site_id", site.ID, "error", err)

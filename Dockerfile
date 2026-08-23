@@ -4,11 +4,15 @@
 FROM golang:1.26-alpine AS builder
 WORKDIR /src
 
+ARG VERSION=docker
+ARG COMMIT=none
+ARG BUILD_DATE=unknown
+
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=docker" \
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${BUILD_DATE}" \
     -o /out/relaypulse ./cmd/relaypulse
 
 # Runtime stage — minimal, no shell in final image footprint

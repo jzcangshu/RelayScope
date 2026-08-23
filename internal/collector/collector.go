@@ -85,9 +85,11 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 		}
 		fetcher = resolved
 	}
-	collector.httpSlots <- struct{}{}
+	if err := collector.acquireHTTP(ctx); err != nil {
+		return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error(), now)
+	}
 	collection, collectErr := adapterImpl.Collect(ctx, siteDefinition, fetcher, now)
-	<-collector.httpSlots
+	collector.releaseHTTP()
 	if collectErr != nil {
 		return collector.finishFailure(ctx, site, runID, classifyFetchError(collectErr), collectErr.Error(), now)
 	}
@@ -115,9 +117,11 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	}
 	collection.Models = filteredModels
 	if detailCollector, ok := adapterImpl.(adapter.DetailCollector); ok {
-		collector.httpSlots <- struct{}{}
+		if err := collector.acquireHTTP(ctx); err != nil {
+			return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error(), now)
+		}
 		detailErr := detailCollector.CollectDetails(ctx, siteDefinition, fetcher, &collection, matchedNames, now)
-		<-collector.httpSlots
+		collector.releaseHTTP()
 		if detailErr != nil {
 			return collector.finishFailure(ctx, site, runID, classifyFetchError(detailErr), detailErr.Error(), now)
 		}
@@ -149,6 +153,17 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	collector.logger.Info("site collection complete", "site_id", site.ID, "models", modelCount, "groups", groupCount, "revision", revision)
 	return nil
 }
+
+func (collector *Collector) acquireHTTP(ctx context.Context) error {
+	select {
+	case collector.httpSlots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (collector *Collector) releaseHTTP() { <-collector.httpSlots }
 
 func formatCollectionIssues(issues []domain.CollectionIssue) string {
 	const maxIssues = 5

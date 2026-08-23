@@ -29,6 +29,8 @@ import (
 )
 
 var version = "dev"
+var commit = "none"
+var buildDate = "unknown"
 
 func main() {
 	if err := run(); err != nil {
@@ -89,7 +91,7 @@ func run() error {
 		}
 		challengeProvider = provider
 	}
-	baseFetcher := adapter.HTTPFetcher{Client: &http.Client{Timeout: 20 * time.Second}, UserAgent: "RelayPulse/0.1", MaxBytes: 2 << 20, Challenge: challengeProvider}
+	baseFetcher := adapter.HTTPFetcher{Client: &http.Client{Timeout: cfg.HTTPTimeout}, UserAgent: "RelayPulse/0.1", MaxBytes: 2 << 20, Challenge: challengeProvider}
 	var siteFetcher adapter.Fetcher = baseFetcher
 	var sessionVault *session.Vault
 	if cfg.SessionEncryptionKey != "" {
@@ -101,7 +103,7 @@ func run() error {
 		siteFetcher = session.Provider{Store: dbStore, Vault: vault, Base: baseFetcher}
 	}
 	siteCollector, err := collector.New(collector.Options{
-		Store: dbStore, Registry: registry, Fetcher: siteFetcher, Logger: logger,
+		Store: dbStore, Registry: registry, Fetcher: siteFetcher, Logger: logger, MaxHTTPConcurrency: cfg.HTTPConcurrency,
 	})
 	if err != nil {
 		return fmt.Errorf("build collector: %w", err)
@@ -109,10 +111,12 @@ func run() error {
 	if err := siteCollector.ReloadMatcher(context.Background()); err != nil {
 		return fmt.Errorf("refresh model matches: %w", err)
 	}
-	siteScheduler := scheduler.New(dbStore, siteCollector, logger, time.Now)
+	siteScheduler := scheduler.NewWithCollectionTimeout(dbStore, siteCollector, logger, time.Now, cfg.CollectionTimeout)
 	handler, err := httpserver.NewHandler(httpserver.Options{
 		Logger:       logger,
 		Version:      version,
+		Commit:       commit,
+		BuildDate:    buildDate,
 		Store:        dbStore,
 		Auth:         auth,
 		Collector:    siteCollector,
@@ -142,7 +146,7 @@ func run() error {
 
 	stopContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go runMaintenance(stopContext, dbStore, logger)
+	go runMaintenance(stopContext, dbStore, logger, cfg.MaintenanceInterval)
 	siteScheduler.Start(stopContext)
 
 	select {
@@ -181,8 +185,11 @@ func loadOrCreateAdminPassword(dataDir string) (string, error) {
 	return password, nil
 }
 
-func runMaintenance(ctx context.Context, dbStore *store.Store, logger *slog.Logger) {
-	ticker := time.NewTicker(30 * time.Minute)
+func runMaintenance(ctx context.Context, dbStore *store.Store, logger *slog.Logger, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Minute
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {

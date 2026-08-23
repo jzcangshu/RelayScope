@@ -27,17 +27,24 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("unexpected shutdown timeout: %v", cfg.ShutdownTimeout)
 	}
+	if cfg.HTTPConcurrency != 3 || cfg.CollectionTimeout != 3*time.Minute || cfg.HTTPTimeout != 20*time.Second || cfg.MaintenanceInterval != 30*time.Minute {
+		t.Fatalf("unexpected operational defaults: %+v", cfg)
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"RELAYPULSE_LISTEN_ADDR":      "localhost:9090",
-		"RELAYPULSE_DATA_DIR":         "var/state",
-		"RELAYPULSE_LOG_LEVEL":        "debug",
-		"RELAYPULSE_SHUTDOWN_TIMEOUT": "3s",
-		"RELAYPULSE_PUBLIC_URL":       "https://status.example.com/",
+		"RELAYPULSE_LISTEN_ADDR":          "localhost:9090",
+		"RELAYPULSE_DATA_DIR":             "var/state",
+		"RELAYPULSE_LOG_LEVEL":            "debug",
+		"RELAYPULSE_SHUTDOWN_TIMEOUT":     "3s",
+		"RELAYPULSE_PUBLIC_URL":           "https://status.example.com/",
+		"RELAYPULSE_HTTP_CONCURRENCY":     "5",
+		"RELAYPULSE_COLLECTION_TIMEOUT":   "90s",
+		"RELAYPULSE_HTTP_TIMEOUT":         "12s",
+		"RELAYPULSE_MAINTENANCE_INTERVAL": "2h",
 	}
 	cfg, err := load(func(key string) (string, bool) {
 		value, ok := values[key]
@@ -56,6 +63,9 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.PublicURL != "https://status.example.com" {
 		t.Fatalf("public URL = %q", cfg.PublicURL)
 	}
+	if cfg.HTTPConcurrency != 5 || cfg.CollectionTimeout != 90*time.Second || cfg.HTTPTimeout != 12*time.Second || cfg.MaintenanceInterval != 2*time.Hour {
+		t.Fatalf("operational overrides not applied: %+v", cfg)
+	}
 }
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
@@ -70,6 +80,10 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{name: "data directory", key: "RELAYPULSE_DATA_DIR", value: "."},
 		{name: "log level", key: "RELAYPULSE_LOG_LEVEL", value: "verbose"},
 		{name: "shutdown timeout", key: "RELAYPULSE_SHUTDOWN_TIMEOUT", value: "0s"},
+		{name: "HTTP concurrency", key: "RELAYPULSE_HTTP_CONCURRENCY", value: "0"},
+		{name: "collection timeout", key: "RELAYPULSE_COLLECTION_TIMEOUT", value: "500ms"},
+		{name: "HTTP timeout", key: "RELAYPULSE_HTTP_TIMEOUT", value: "0s"},
+		{name: "maintenance interval", key: "RELAYPULSE_MAINTENANCE_INTERVAL", value: "30s"},
 		{name: "public URL scheme", key: "RELAYPULSE_PUBLIC_URL", value: "ftp://example.com"},
 		{name: "public URL credentials", key: "RELAYPULSE_PUBLIC_URL", value: "https://user@example.com"},
 		{name: "public URL query", key: "RELAYPULSE_PUBLIC_URL", value: "https://example.com/?token=x"},

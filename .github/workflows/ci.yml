@@ -49,7 +49,7 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Frontend tests
-        run: node --test web/public/dashboard.test.cjs extension/session-sync/capture.test.cjs
+        run: node --test web/public/dashboard.test.cjs web/admin/admin.test.cjs extension/session-sync/capture.test.cjs
 
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /tmp/relaypulse ./cmd/relaypulse

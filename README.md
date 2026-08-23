@@ -56,6 +56,10 @@ All configuration is via environment variables. Key ones:
 | `RELAYPULSE_PUBLIC_URL` | _empty_ | Canonical public URL (OAuth callbacks) |
 | `RELAYPULSE_SESSION_ENCRYPTION_KEY` | _empty_ | Key for encrypting imported site sessions |
 | `RELAYPULSE_FLARESOLVERR_ENDPOINT` | _empty_ | Optional FlareSolverr endpoint (loopback) |
+| `RELAYPULSE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations |
+| `RELAYPULSE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
+| `RELAYPULSE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
+| `RELAYPULSE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval |
 
 See `docs/development.md` for the complete list and `deploy/relaypulse.env.example` for a template.
 
