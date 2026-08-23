@@ -113,7 +113,7 @@ func TestCollectSiteKeepsPreviousSnapshotWhenAllDetailsFail(t *testing.T) {
 		SiteID: site.ID, ObservedAt: now.Add(-20 * time.Minute), CollectedAt: now.Add(-20 * time.Minute), CatalogComplete: true,
 		Models: []domain.ModelObservation{{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceFailed}}}},
 	}
-	if _, err := dbStore.ApplyCollection(ctx, seed, strings.ToLower); err != nil {
+	if _, _, err := dbStore.ApplyCollection(ctx, seed, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	registry, err := adapter.NewRegistry(failedDetailAdapter{})

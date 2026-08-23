@@ -29,7 +29,7 @@ func TestRefreshMatchesSupportsConcurrentCollectors(t *testing.T) {
 		})
 	}
 	collection := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true, Models: models}
-	if _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	if err := dbStore.CreateRule(ctx, matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Enabled: true}); err != nil {
@@ -53,7 +53,7 @@ func TestRefreshMatchesSupportsConcurrentCollectors(t *testing.T) {
 		go func() {
 			defer wait.Done()
 			<-start
-			errors <- dbStore.RefreshMatches(ctx, engine, now)
+			errors <- dbStore.RefreshAllMatches(ctx, engine, now)
 		}()
 	}
 	close(start)
@@ -63,6 +63,74 @@ func TestRefreshMatchesSupportsConcurrentCollectors(t *testing.T) {
 		if err != nil {
 			t.Fatalf("concurrent match refresh failed: %v", err)
 		}
+	}
+}
+
+func TestRefreshMatchesForRawModelsTouchesOnlyGivenModels(t *testing.T) {
+	dbStore := openTestStore(t)
+	ctx := context.Background()
+	site := createTestSite(t, dbStore)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	models := []domain.ModelObservation{
+		{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}},
+		{RawName: "glm-5", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}},
+	}
+	collection := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true, Models: models}
+	_, affected, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(affected) != len(models) {
+		t.Fatalf("affected raw model count = %d, want %d", len(affected), len(models))
+	}
+
+	if err := dbStore.CreateRule(ctx, matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbStore.CreateRule(ctx, matcher.Rule{Provider: "GLM", CanonicalName: "glm-5", RequiredTerms: []string{"glm", "5"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	rules, err := dbStore.ListRules(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := matcher.New(rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dbStore.RefreshAllMatches(ctx, engine, now); err != nil {
+		t.Fatal(err)
+	}
+	countMatches := func(rawModelID int64) int {
+		t.Helper()
+		var count int
+		if err := dbStore.DB().QueryRow(`SELECT COUNT(*) FROM model_matches WHERE raw_model_id = ?`, rawModelID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	if countMatches(affected[0]) != 1 || countMatches(affected[1]) != 1 {
+		t.Fatalf("expected one match per model after full refresh")
+	}
+
+	// Corrupt both models' rows; the incremental refresh must restore only the
+	// requested model and leave the other untouched.
+	if _, err := dbStore.DB().Exec(`DELETE FROM model_matches WHERE raw_model_id IN (?, ?)`, affected[0], affected[1]); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbStore.RefreshMatchesForRawModels(ctx, engine, []int64{affected[0]}, now); err != nil {
+		t.Fatal(err)
+	}
+	if countMatches(affected[0]) != 1 {
+		t.Fatalf("requested model was not refreshed")
+	}
+	if countMatches(affected[1]) != 0 {
+		t.Fatalf("non-requested model was modified by incremental refresh")
+	}
+
+	if err := dbStore.RefreshMatchesForRawModels(ctx, engine, nil, now); err != nil {
+		t.Fatalf("empty id list should be a no-op, got %v", err)
 	}
 }
 
@@ -281,7 +349,7 @@ func TestApplyCollectionIsIdempotentAndPreservesNullMetrics(t *testing.T) {
 	}
 
 	for expectedRevision := int64(1); expectedRevision <= 2; expectedRevision++ {
-		revision, err := store.ApplyCollection(ctx, collection, strings.ToLower)
+		revision, _, err := store.ApplyCollection(ctx, collection, strings.ToLower)
 		if err != nil {
 			t.Fatalf("apply collection: %v", err)
 		}
@@ -316,19 +384,19 @@ func TestCompleteCatalogMarksModelRemovedAfterThreeOmissions(t *testing.T) {
 		SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true,
 		Models: []domain.ModelObservation{{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}}},
 	}
-	if _, err := store.ApplyCollection(ctx, initial, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, initial, strings.ToLower); err != nil {
 		t.Fatalf("seed model: %v", err)
 	}
 
 	partial := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now.Add(time.Minute), CatalogComplete: false}
-	if _, err := store.ApplyCollection(ctx, partial, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, partial, strings.ToLower); err != nil {
 		t.Fatalf("apply partial catalog: %v", err)
 	}
 	assertRemovalEvidence(t, store, 0, false)
 
 	for omission := 1; omission <= 3; omission++ {
 		complete := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now.Add(time.Duration(omission+1) * time.Minute), CatalogComplete: true}
-		if _, err := store.ApplyCollection(ctx, complete, strings.ToLower); err != nil {
+		if _, _, err := store.ApplyCollection(ctx, complete, strings.ToLower); err != nil {
 			t.Fatalf("apply omission %d: %v", omission, err)
 		}
 	}
@@ -351,7 +419,7 @@ func TestModelHistoryCoverageMergesOverlapAndResetsAfterGap(t *testing.T) {
 				Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}},
 			}},
 		}
-		if _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+		if _, _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 			t.Fatalf("apply collection: %v", err)
 		}
 	}
@@ -408,7 +476,7 @@ func TestPresenceCatalogMarksOmittedModelFailedWithoutRemovingPrice(t *testing.T
 			{RawName: "gpt-5.6-terra", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}},
 		},
 	}
-	if _, err := dbStore.ApplyCollection(ctx, initial, strings.ToLower); err != nil {
+	if _, _, err := dbStore.ApplyCollection(ctx, initial, strings.ToLower); err != nil {
 		t.Fatalf("seed presence catalog: %v", err)
 	}
 
@@ -417,7 +485,7 @@ func TestPresenceCatalogMarksOmittedModelFailedWithoutRemovingPrice(t *testing.T
 		CatalogComplete: true, MissingCatalogState: domain.ServiceFailed,
 		Models: []domain.ModelObservation{{RawName: "gpt-5.6-terra", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}}},
 	}
-	if _, err := dbStore.ApplyCollection(ctx, next, strings.ToLower); err != nil {
+	if _, _, err := dbStore.ApplyCollection(ctx, next, strings.ToLower); err != nil {
 		t.Fatalf("apply presence omission: %v", err)
 	}
 
@@ -455,7 +523,7 @@ func TestCleanupRemovesOnlyExpiredHistory(t *testing.T) {
 			},
 		}}}},
 	}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatalf("apply collection: %v", err)
 	}
 
@@ -478,7 +546,7 @@ func TestPublicRowsMarkOldSnapshotStale(t *testing.T) {
 	}
 	old := time.Now().UTC().Add(-time.Hour)
 	collection := domain.Collection{SiteID: site.ID, ObservedAt: old, CollectedAt: old, CatalogComplete: true, Models: []domain.ModelObservation{{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}}}}
-	if _, err := store.ApplyCollection(context.Background(), collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(context.Background(), collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	rules, err := store.ListRules(context.Background())
@@ -489,7 +557,7 @@ func TestPublicRowsMarkOldSnapshotStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(context.Background(), engine, old); err != nil {
+	if err := store.RefreshAllMatches(context.Background(), engine, old); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := store.QueryPublicRows(context.Background(), "", "")
@@ -513,7 +581,7 @@ func TestPublicRowsExpireOldSourceSampleWithoutExpiringCollection(t *testing.T) 
 			RawName: "default", ServiceState: domain.ServiceHealthy, ObservedAt: sampleAt,
 		}}}},
 	}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateRule(ctx, matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Enabled: true}); err != nil {
@@ -527,7 +595,7 @@ func TestPublicRowsExpireOldSourceSampleWithoutExpiringCollection(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(ctx, engine, now); err != nil {
+	if err := store.RefreshAllMatches(ctx, engine, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -594,7 +662,7 @@ func TestPublicRowsHideOnlyMatureAuthoritativeNoSampleModels(t *testing.T) {
 				SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true,
 				Models: []domain.ModelObservation{model},
 			}
-			if _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+			if _, _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := dbStore.DB().Exec(`UPDATE raw_models SET first_seen_at = ? WHERE site_id = ?`, now.Add(-test.modelAge).UnixMilli(), site.ID); err != nil {
@@ -611,7 +679,7 @@ func TestPublicRowsHideOnlyMatureAuthoritativeNoSampleModels(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := dbStore.RefreshMatches(ctx, engine, now); err != nil {
+			if err := dbStore.RefreshAllMatches(ctx, engine, now); err != nil {
 				t.Fatal(err)
 			}
 			if test.failedSite {
@@ -641,7 +709,7 @@ func TestHiddenNoSampleModelReappearsAfterSample(t *testing.T) {
 		Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}},
 	}
 	collection := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true, Models: []domain.ModelObservation{model}}
-	if _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := dbStore.DB().Exec(`UPDATE raw_models SET first_seen_at = ? WHERE site_id = ?`, now.Add(-25*time.Hour).UnixMilli(), site.ID); err != nil {
@@ -658,7 +726,7 @@ func TestHiddenNoSampleModelReappearsAfterSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dbStore.RefreshMatches(ctx, engine, now); err != nil {
+	if err := dbStore.RefreshAllMatches(ctx, engine, now); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := dbStore.QueryPublicRows(ctx, "", "")
@@ -675,7 +743,7 @@ func TestHiddenNoSampleModelReappearsAfterSample(t *testing.T) {
 		Metrics: domain.Metrics{RequestCount: testInt64Pointer(1), SuccessRatio: testFloat64Pointer(1)},
 	}}
 	collection.ObservedAt, collection.CollectedAt, collection.Models = next, next, []domain.ModelObservation{model}
-	if _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := dbStore.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	rows, err = dbStore.QueryPublicRows(ctx, "", "")
@@ -727,7 +795,7 @@ func TestPublicHistoryReturnsOnlyMatchedRecentBuckets(t *testing.T) {
 		{Start: now.Add(-25 * time.Hour), End: now.Add(-24*time.Hour - time.Minute), Resolution: time.Hour, Metrics: domain.Metrics{SuccessRatio: &ratio}},
 		{Start: now.Add(-time.Hour), End: now, Resolution: time.Hour, Metrics: domain.Metrics{SuccessRatio: &ratio}},
 	}}}}}}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateRule(ctx, matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Enabled: true}); err != nil {
@@ -741,7 +809,7 @@ func TestPublicHistoryReturnsOnlyMatchedRecentBuckets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(ctx, engine, now); err != nil {
+	if err := store.RefreshAllMatches(ctx, engine, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -770,7 +838,7 @@ func TestPublicHistoryCollapsesGroupsIntoBestHalfHourState(t *testing.T) {
 		{RawName: "healthy", ServiceState: domain.ServiceHealthy, Buckets: []domain.TimeBucket{{Start: now.Add(-20 * time.Minute), End: now, Resolution: 20 * time.Minute, Metrics: domain.Metrics{SuccessRatio: &healthy}}}},
 		{RawName: "failed", ServiceState: domain.ServiceFailed, Buckets: []domain.TimeBucket{{Start: now.Add(-20 * time.Minute), End: now, Resolution: 20 * time.Minute, Metrics: domain.Metrics{SuccessRatio: &failed}}}},
 	}}}}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.CreateRule(ctx, matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "5", "6", "sol"}, Enabled: true}); err != nil {
@@ -784,7 +852,7 @@ func TestPublicHistoryCollapsesGroupsIntoBestHalfHourState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(ctx, engine, now); err != nil {
+	if err := store.RefreshAllMatches(ctx, engine, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -803,7 +871,7 @@ func TestRefreshMatchesKeepsConflictsWithoutPrimary(t *testing.T) {
 	site := createTestSite(t, store)
 	now := time.Now().UTC()
 	collection := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true, Models: []domain.ModelObservation{{RawName: "model-pro", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}}}}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	rules := []matcher.Rule{
@@ -823,7 +891,7 @@ func TestRefreshMatchesKeepsConflictsWithoutPrimary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(ctx, engine, now); err != nil {
+	if err := store.RefreshAllMatches(ctx, engine, now); err != nil {
 		t.Fatal(err)
 	}
 	var primaryCount int
@@ -858,7 +926,7 @@ func TestPublicRowsExposePricingFromSourceExtensions(t *testing.T) {
 			Groups: []domain.GroupObservation{{RawName: "free", ServiceState: domain.ServiceHealthy, Extension: pricing.GroupExtension(pricing.DisplayPrice{Available: true, Currency: "USD", CurrencySymbol: "$", InputPerMillion: &input, OutputPerMillion: &output, CacheReadPerMillion: &cacheRead, CacheWritePerMillion: &cacheWrite, GroupMultiplier: &multiplier})}},
 		}},
 	}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	rules, err := store.ListRules(ctx)
@@ -869,7 +937,7 @@ func TestPublicRowsExposePricingFromSourceExtensions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(ctx, engine, time.Now().UTC()); err != nil {
+	if err := store.RefreshAllMatches(ctx, engine, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := store.QueryPublicRows(ctx, "", "")
@@ -902,7 +970,7 @@ func TestPublicDetailGroupsExposeCurrentPricingWithoutHistory(t *testing.T) {
 			}},
 		}},
 	}
-	if _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
+	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)
 	}
 	rules, err := store.ListRules(ctx)
@@ -913,7 +981,7 @@ func TestPublicDetailGroupsExposeCurrentPricingWithoutHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RefreshMatches(ctx, engine, now); err != nil {
+	if err := store.RefreshAllMatches(ctx, engine, now); err != nil {
 		t.Fatal(err)
 	}
 

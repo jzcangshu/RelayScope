@@ -518,7 +518,9 @@ func (store *Store) ListRules(ctx context.Context) ([]matcher.Rule, error) {
 	return rules, nil
 }
 
-func (store *Store) RefreshMatches(ctx context.Context, engine *matcher.Engine, now time.Time) error {
+// RefreshAllMatches recomputes matches for every non-removed raw model.
+// It runs after rule changes (ReloadMatcher), not after every collection.
+func (store *Store) RefreshAllMatches(ctx context.Context, engine *matcher.Engine, now time.Time) error {
 	if engine == nil {
 		return errors.New("matcher engine is required")
 	}
@@ -526,24 +528,60 @@ func (store *Store) RefreshMatches(ctx context.Context, engine *matcher.Engine, 
 	if err != nil {
 		return fmt.Errorf("list raw models for matching: %w", err)
 	}
-	type rawModel struct {
-		id   int64
-		name string
+	rawModels, err := scanRawMatchTargets(rows)
+	if err != nil {
+		return err
 	}
-	var rawModels []rawModel
+	return store.refreshMatches(ctx, engine, rawModels, now)
+}
+
+// RefreshMatchesForRawModels recomputes matches only for the given raw models,
+// keeping per-collection refresh cost proportional to the collected models.
+func (store *Store) RefreshMatchesForRawModels(ctx context.Context, engine *matcher.Engine, rawModelIDs []int64, now time.Time) error {
+	if engine == nil {
+		return errors.New("matcher engine is required")
+	}
+	if len(rawModelIDs) == 0 {
+		return nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(rawModelIDs)), ",")
+	args := make([]any, len(rawModelIDs))
+	for index, id := range rawModelIDs {
+		args[index] = id
+	}
+	rows, err := store.db.QueryContext(ctx, `SELECT id, raw_name FROM raw_models WHERE removed_at IS NULL AND id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return fmt.Errorf("list raw models for matching: %w", err)
+	}
+	rawModels, err := scanRawMatchTargets(rows)
+	if err != nil {
+		return err
+	}
+	return store.refreshMatches(ctx, engine, rawModels, now)
+}
+
+type rawMatchTarget struct {
+	id   int64
+	name string
+}
+
+func scanRawMatchTargets(rows *sql.Rows) ([]rawMatchTarget, error) {
+	defer rows.Close()
+	var rawModels []rawMatchTarget
 	for rows.Next() {
-		var raw rawModel
+		var raw rawMatchTarget
 		if err := rows.Scan(&raw.id, &raw.name); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan raw model for matching: %w", err)
+			return nil, fmt.Errorf("scan raw model for matching: %w", err)
 		}
 		rawModels = append(rawModels, raw)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
-		return fmt.Errorf("iterate raw models for matching: %w", err)
+		return nil, fmt.Errorf("iterate raw models for matching: %w", err)
 	}
-	rows.Close()
+	return rawModels, nil
+}
+
+func (store *Store) refreshMatches(ctx context.Context, engine *matcher.Engine, rawModels []rawMatchTarget, now time.Time) error {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin match refresh: %w", err)
@@ -879,9 +917,9 @@ func scanSites(rows siteRows) ([]Site, error) {
 	return sites, nil
 }
 
-func (store *Store) ApplyCollection(ctx context.Context, collection domain.Collection, normalize func(string) string) (int64, error) {
+func (store *Store) ApplyCollection(ctx context.Context, collection domain.Collection, normalize func(string) string) (int64, []int64, error) {
 	if err := collection.Validate(); err != nil {
-		return 0, fmt.Errorf("validate collection: %w", err)
+		return 0, nil, fmt.Errorf("validate collection: %w", err)
 	}
 	if normalize == nil {
 		normalize = strings.ToLower
@@ -895,26 +933,28 @@ func (store *Store) ApplyCollection(ctx context.Context, collection domain.Colle
 
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin collection transaction: %w", err)
+		return 0, nil, fmt.Errorf("begin collection transaction: %w", err)
 	}
 	defer tx.Rollback()
 
+	affectedRawModels := make([]int64, 0, len(collection.Models))
 	for _, model := range collection.Models {
 		modelID, err := upsertRawModel(ctx, tx, collection.SiteID, model, collection.CollectedAt, normalize)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
+		affectedRawModels = append(affectedRawModels, modelID)
 		for _, group := range model.Groups {
 			groupID, err := upsertGroup(ctx, tx, modelID, group, collection.CollectedAt)
 			if err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 			if err := upsertSnapshot(ctx, tx, groupID, collection.RunID, collection, group); err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 			for _, bucket := range group.Buckets {
 				if err := upsertBucket(ctx, tx, groupID, collection.CollectedAt, bucket); err != nil {
-					return 0, err
+					return 0, nil, err
 				}
 			}
 		}
@@ -923,25 +963,25 @@ func (store *Store) ApplyCollection(ctx context.Context, collection domain.Colle
 	if collection.CatalogComplete {
 		if collection.MissingCatalogState != "" {
 			if err := applyMissingCatalogState(ctx, tx, collection); err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 		} else if err := updateAbsenceEvidence(ctx, tx, collection.SiteID, collection.CatalogRawNames, collection.CollectedAt); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE sites SET acquisition_state = ?, last_success_at = ?, updated_at = ? WHERE id = ?`,
 		domain.AcquisitionFresh, unixMilli(collection.CollectedAt), unixMilli(collection.CollectedAt), collection.SiteID); err != nil {
-		return 0, fmt.Errorf("update site success: %w", err)
+		return 0, nil, fmt.Errorf("update site success: %w", err)
 	}
 
 	revision, err := incrementRevision(ctx, tx)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit collection: %w", err)
+		return 0, nil, fmt.Errorf("commit collection: %w", err)
 	}
-	return revision, nil
+	return revision, affectedRawModels, nil
 }
 
 func (store *Store) Revision(ctx context.Context) (int64, error) {

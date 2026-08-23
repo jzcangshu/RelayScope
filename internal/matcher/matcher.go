@@ -40,8 +40,11 @@ type Engine struct {
 }
 
 type compiledRule struct {
-	rule    Rule
-	pattern *regexp.Regexp
+	rule          Rule
+	pattern       *regexp.Regexp
+	requiredTerms []string
+	anyTerms      []string
+	excludedTerms []string
 }
 
 func New(rules []Rule) (*Engine, error) {
@@ -50,15 +53,20 @@ func New(rules []Rule) (*Engine, error) {
 		if strings.TrimSpace(rule.CanonicalName) == "" {
 			return nil, fmt.Errorf("rule canonical name is required")
 		}
-		if rule.Pattern == "" {
-			compiled = append(compiled, compiledRule{rule: rule})
-			continue
+		entry := compiledRule{
+			rule:          rule,
+			requiredTerms: normalizeTerms(rule.RequiredTerms),
+			anyTerms:      normalizeTerms(append(append([]string{}, rule.AnyTerms...), rule.Aliases...)),
+			excludedTerms: normalizeTerms(rule.ExcludedTerms),
 		}
-		pattern, err := regexp.Compile(rule.Pattern)
-		if err != nil {
-			return nil, fmt.Errorf("compile rule %q pattern: %w", rule.CanonicalName, err)
+		if rule.Pattern != "" {
+			pattern, err := regexp.Compile(rule.Pattern)
+			if err != nil {
+				return nil, fmt.Errorf("compile rule %q pattern: %w", rule.CanonicalName, err)
+			}
+			entry.pattern = pattern
 		}
-		compiled = append(compiled, compiledRule{rule: rule, pattern: pattern})
+		compiled = append(compiled, entry)
 	}
 	return &Engine{rules: compiled}, nil
 }
@@ -106,21 +114,16 @@ func Normalize(value string) string {
 }
 
 func matchRule(compiled compiledRule, rawName, normalized string) (bool, string) {
-	rule := compiled.rule
-	required := normalizeTerms(rule.RequiredTerms)
-	any := normalizeTerms(append(append([]string{}, rule.AnyTerms...), rule.Aliases...))
-	excluded := normalizeTerms(rule.ExcludedTerms)
-
-	matchedRequired := make([]string, 0, len(required))
-	for _, term := range required {
+	matchedRequired := make([]string, 0, len(compiled.requiredTerms))
+	for _, term := range compiled.requiredTerms {
 		if !containsTerm(normalized, term) {
 			return false, ""
 		}
 		matchedRequired = append(matchedRequired, term)
 	}
-	if len(any) > 0 {
+	if len(compiled.anyTerms) > 0 {
 		matchedAny := ""
-		for _, term := range any {
+		for _, term := range compiled.anyTerms {
 			if containsTerm(normalized, term) {
 				matchedAny = term
 				break
@@ -131,7 +134,7 @@ func matchRule(compiled compiledRule, rawName, normalized string) (bool, string)
 		}
 		matchedRequired = append(matchedRequired, "any:"+matchedAny)
 	}
-	for _, term := range excluded {
+	for _, term := range compiled.excludedTerms {
 		if containsTerm(normalized, term) {
 			return false, ""
 		}

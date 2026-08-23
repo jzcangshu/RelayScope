@@ -125,12 +125,12 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	if err := collection.Validate(); err != nil {
 		return collector.finishFailure(ctx, site, runID, "invalid_observation", err.Error(), now)
 	}
-	revision, err := collector.store.ApplyCollection(ctx, collection, normalizeRawName)
+	revision, affectedRawModels, err := collector.store.ApplyCollection(ctx, collection, normalizeRawName)
 	if err != nil {
 		return collector.finishFailure(ctx, site, runID, "store_failed", err.Error(), now)
 	}
 	collector.matcherMu.RLock()
-	matchErr := collector.store.RefreshMatches(ctx, collector.matcher, now)
+	matchErr := collector.store.RefreshMatchesForRawModels(ctx, collector.matcher, affectedRawModels, now)
 	collector.matcherMu.RUnlock()
 	if matchErr != nil {
 		return collector.finishFailure(ctx, site, runID, "match_refresh_failed", matchErr.Error(), now)
@@ -181,7 +181,7 @@ func (collector *Collector) ReloadMatcher(ctx context.Context) error {
 	collector.matcherMu.Lock()
 	collector.matcher = engine
 	collector.matcherMu.Unlock()
-	if err := collector.store.RefreshMatches(ctx, engine, time.Now().UTC()); err != nil {
+	if err := collector.store.RefreshAllMatches(ctx, engine, time.Now().UTC()); err != nil {
 		return err
 	}
 	return collector.store.BumpRevision(ctx)
