@@ -10,6 +10,8 @@
   <main>
     <header><strong>RelayPulse</strong><span>访问令牌同步</span></header>
     <section id="sync-panel">
+      <label for="pairing-code">后台配对码</label>
+      <div class="pairing-row"><input id="pairing-code" type="text" inputmode="text" autocomplete="off" placeholder="粘贴十分钟配对码"><button id="pair" type="button">连接</button></div>
       <div class="summary"><strong id="count">0 个站点待更新</strong><button id="refresh" class="icon" type="button" title="刷新">↻</button></div>
       <div id="sites"></div>
       <label for="backup">All API Hub 账号备份</label>

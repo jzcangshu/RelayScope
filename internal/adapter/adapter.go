@@ -30,7 +30,7 @@ func (err *FetchError) Error() string {
 	if err.Err != nil {
 		return err.Err.Error()
 	}
-	return fmt.Sprintf("fetch %s returned HTTP %d", err.URL, err.StatusCode)
+	return fmt.Sprintf("fetch returned HTTP %d", err.StatusCode)
 }
 
 func (err *FetchError) Unwrap() error { return err.Err }
@@ -168,7 +168,7 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, nil, fmt.Errorf("fetch %s: %w", rawURL, err)
+		return nil, nil, fmt.Errorf("fetch request failed: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
@@ -189,7 +189,7 @@ func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte,
 			URL: rawURL, StatusCode: response.StatusCode,
 			Challenge:     challenge,
 			LoginRequired: response.StatusCode == http.StatusUnauthorized,
-			Err:           fmt.Errorf("fetch %s returned HTTP %d", rawURL, response.StatusCode),
+			Err:           fmt.Errorf("fetch returned HTTP %d", response.StatusCode),
 		}
 	}
 	maxBytes := fetcher.MaxBytes
@@ -235,7 +235,7 @@ func (fetcher HTTPFetcher) requestWithChallenge(ctx context.Context, rawURL stri
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("retry fetch %s: %w", rawURL, err)
+		return nil, fmt.Errorf("retry fetch failed: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
@@ -244,7 +244,7 @@ func (fetcher HTTPFetcher) requestWithChallenge(ctx context.Context, rawURL stri
 		return nil, &FetchError{
 			URL: rawURL, StatusCode: response.StatusCode, Challenge: challenge, ChallengeFailed: challenge,
 			LoginRequired: response.StatusCode == http.StatusUnauthorized,
-			Err:           fmt.Errorf("retry fetch %s returned HTTP %d", rawURL, response.StatusCode),
+			Err:           fmt.Errorf("retry fetch returned HTTP %d", response.StatusCode),
 		}
 	}
 	maxBytes := fetcher.MaxBytes

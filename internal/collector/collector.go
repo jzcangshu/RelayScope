@@ -111,9 +111,14 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 		matched := len(collector.matcher.Preview(model.RawName).Matches) > 0
 		collector.matcherMu.RUnlock()
 		if matched {
-			filteredModels = append(filteredModels, model)
 			matchedNames = append(matchedNames, model.RawName)
+		} else {
+			// Keep the raw model identity so administrators can review unmatched
+			// names.  Unmatched models do not need group snapshots or detail
+			// requests until a rule is added for them.
+			model.Groups = nil
 		}
+		filteredModels = append(filteredModels, model)
 	}
 	collection.Models = filteredModels
 	if detailCollector, ok := adapterImpl.(adapter.DetailCollector); ok {
@@ -244,8 +249,14 @@ func (collector *Collector) CollectNow(ctx context.Context, siteID int64) error 
 }
 
 func (collector *Collector) finishFailure(ctx context.Context, site store.Site, runID int64, code, message string, now time.Time) error {
+	persistCtx := ctx
+	var cancel context.CancelFunc
+	if ctx.Err() != nil {
+		persistCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+	}
 	if runID > 0 {
-		if err := collector.store.FinishCollectionRun(ctx, runID, "failed", false, 0, 0, code, message, now); err != nil {
+		if err := collector.store.FinishCollectionRun(persistCtx, runID, "failed", false, 0, 0, code, message, now); err != nil {
 			collector.logger.Error("finish failed run failed", "site_id", site.ID, "error", err)
 		}
 	}
@@ -258,7 +269,7 @@ func (collector *Collector) finishFailure(ctx context.Context, site store.Site, 
 	case "challenge_failed":
 		state = domain.AcquisitionChallengeFailed
 	}
-	if err := collector.store.SetAcquisitionState(ctx, site.ID, state, now); err != nil {
+	if err := collector.store.SetAcquisitionState(persistCtx, site.ID, state, now); err != nil {
 		collector.logger.Error("set failed acquisition state failed", "site_id", site.ID, "error", err)
 	}
 	collector.logger.Warn("site collection failed", "site_id", site.ID, "code", code, "error", message)

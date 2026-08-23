@@ -83,7 +83,9 @@ A `sites.example.json` is provided as a reference for the configuration format.
 
 ## Project status
 
-RelayPulse is in active development toward its first public release. The core pipeline is stable; the admin console and documentation are being refined. See [CHANGELOG.md](CHANGELOG.md) for progress.
+RelayPulse is prepared for its first public release. Version tags publish the
+CGO-free container image; review the operations checklist before deployment.
+See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## License
 

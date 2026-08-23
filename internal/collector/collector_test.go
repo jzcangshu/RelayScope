@@ -56,6 +56,86 @@ func TestAcquireHTTPHonorsCancellationWhenAllSlotsAreBusy(t *testing.T) {
 	}
 }
 
+func TestCollectFailurePersistsAfterContextCancellation(t *testing.T) {
+	dbStore := openCollectorStore(t)
+	site, err := dbStore.CreateSite(context.Background(), store.Site{
+		Name: "cancelled", BaseURL: "https://cancelled.example", SourceURL: "https://cancelled.example/status", AdapterKey: "test", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, err := dbStore.StartCollectionRun(context.Background(), site.ID, site.AdapterKey, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := adapter.NewRegistry(adapter.NewAPIAdapter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fakeJSONFetcher{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = collector.finishFailure(ctx, site, runID, "collection_cancelled", "context canceled", time.Now().UTC())
+	runs, err := dbStore.ListCollectionRuns(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 || runs[0].Status != "failed" || runs[0].ErrorCode != "collection_cancelled" {
+		t.Fatalf("cancelled run = %+v", runs)
+	}
+}
+
+type unmatchedCatalogAdapter struct{}
+
+func (unmatchedCatalogAdapter) Key() string         { return "unmatched-catalog" }
+func (unmatchedCatalogAdapter) DisplayName() string { return "unmatched catalog" }
+func (unmatchedCatalogAdapter) ConfigSchema() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
+}
+func (unmatchedCatalogAdapter) Collect(_ context.Context, site adapter.Site, _ adapter.Fetcher, now time.Time) (domain.Collection, error) {
+	ratio := 1.0
+	return domain.Collection{
+		SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true,
+		CatalogRawNames: []string{"known-model", "unmatched-model"},
+		Models: []domain.ModelObservation{
+			{RawName: "known-model", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy, Metrics: domain.Metrics{SuccessRatio: &ratio}}}},
+			{RawName: "unmatched-model", Provider: "Unknown"},
+		},
+	}, nil
+}
+
+func TestCollectSitePersistsUnmatchedModelIdentity(t *testing.T) {
+	dbStore := openCollectorStore(t)
+	if err := dbStore.CreateRule(context.Background(), matcher.Rule{Provider: "Known", CanonicalName: "known-model", RequiredTerms: []string{"known", "model"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "unmatched", BaseURL: "https://unmatched.example", SourceURL: "https://unmatched.example/status", AdapterKey: "unmatched-catalog", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := adapter.NewRegistry(unmatchedCatalogAdapter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fakeJSONFetcher{}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := collector.CollectSite(context.Background(), site, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	items, err := dbStore.ListUnmatchedModels(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].RawModelName != "unmatched-model" || items[0].SiteID != site.ID {
+		t.Fatalf("unmatched models = %+v", items)
+	}
+}
+
 type partialDetailAdapter struct{}
 
 func (partialDetailAdapter) Key() string         { return "partial-detail" }

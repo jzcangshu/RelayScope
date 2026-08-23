@@ -56,6 +56,7 @@ func (s *Service) Begin(w http.ResponseWriter) error {
 		return err
 	}
 	s.mu.Lock()
+	s.cleanupLocked(time.Now())
 	s.states[state] = time.Now().Add(10 * time.Minute)
 	s.mu.Unlock()
 	q := url.Values{"client_id": {s.cfg.ClientID}, "response_type": {"code"}, "redirect_uri": {s.cfg.CallbackURL}, "scope": {"openid profile"}, "state": {state}}
@@ -68,6 +69,7 @@ func (s *Service) Callback(ctx context.Context, code, state string) (store.User,
 		return store.User{}, errors.New("linuxdo oauth is not configured")
 	}
 	s.mu.Lock()
+	s.cleanupLocked(time.Now())
 	expires, ok := s.states[state]
 	delete(s.states, state)
 	s.mu.Unlock()
@@ -125,6 +127,7 @@ func (s *Service) StartSession(user store.User) (string, time.Time, error) {
 	}
 	expires := time.Now().Add(30 * 24 * time.Hour)
 	s.mu.Lock()
+	s.cleanupLocked(time.Now())
 	s.sessions[token] = session{UserID: user.ID, ExpiresAt: expires}
 	s.mu.Unlock()
 	return token, expires, nil
@@ -144,3 +147,16 @@ func (s *Service) UserBySession(token string) (store.User, bool) {
 	return user, err == nil
 }
 func (s *Service) Logout(token string) { s.mu.Lock(); delete(s.sessions, token); s.mu.Unlock() }
+
+func (s *Service) cleanupLocked(now time.Time) {
+	for state, expiresAt := range s.states {
+		if !expiresAt.After(now) {
+			delete(s.states, state)
+		}
+	}
+	for token, value := range s.sessions {
+		if !value.ExpiresAt.After(now) {
+			delete(s.sessions, token)
+		}
+	}
+}

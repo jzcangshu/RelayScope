@@ -882,6 +882,7 @@ func TestPublicHistoryReturnsOnlyMatchedRecentBuckets(t *testing.T) {
 	collection := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true, Models: []domain.ModelObservation{{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "plus", ServiceState: domain.ServiceHealthy, Buckets: []domain.TimeBucket{
 		{Start: now.Add(-25 * time.Hour), End: now.Add(-24*time.Hour - time.Minute), Resolution: time.Hour, Metrics: domain.Metrics{SuccessRatio: &ratio}},
 		{Start: now.Add(-time.Hour), End: now, Resolution: time.Hour, Metrics: domain.Metrics{SuccessRatio: &ratio}},
+		{Start: now.Add(25 * time.Hour), End: now.Add(26 * time.Hour), Resolution: time.Hour, Metrics: domain.Metrics{SuccessRatio: &ratio}},
 	}}}}}}
 	if _, _, err := store.ApplyCollection(ctx, collection, strings.ToLower); err != nil {
 		t.Fatal(err)

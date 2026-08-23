@@ -66,6 +66,9 @@ func (vault *Vault) Encrypt(data Data) (nonce, ciphertext []byte, err error) {
 	if vault == nil || len(vault.key) != 32 {
 		return nil, nil, errors.New("session vault is not configured")
 	}
+	if data.AuthType == "" && data.AccessToken != "" {
+		data.AuthType = AuthTypeNewAPIToken
+	}
 	if err := validateData(data); err != nil {
 		return nil, nil, err
 	}

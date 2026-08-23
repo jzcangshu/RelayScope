@@ -4,7 +4,7 @@ All large project tooling and caches are kept inside the repository on drive D a
 
 ## Go toolchain
 
-The validated local toolchain is Go 1.26.5 for Windows amd64. It is extracted to `.tools/go`. The downloaded archive is retained at `.tools/go1.26.5.windows-amd64.zip` because the workspace policy forbids deleting files.
+The validated local toolchain is Go 1.26.5 for Windows amd64. When present, it can be extracted to `.tools/go`; the helper scripts prefer that copy and fall back to a Go installation on `PATH`, which keeps a clean clone usable without committing a toolchain.
 
 Expected SHA-256:
 
@@ -145,10 +145,10 @@ OAuth 登录的人机验证不由 RelayPulse 自动处理。管理员在本地 C
 
 Load `extension/session-sync` as an unpacked Manifest V3 extension. In the
 administrator console choose **浏览器同步**, copy the ten-minute pairing code,
-and enter it with the RelayPulse origin in the extension. The extension asks
-for host access only to that origin and the pending sites returned by the
-server. It never receives the administrator password or administrator cookie.
+and enter it with the RelayPulse origin in the extension. It never receives
+the administrator password or administrator cookie.
 
 The sync token is bound to the extension origin, expires after thirty minutes,
-and is consumed after one successful batch. The server stores imported bundles
-through the existing encrypted session vault.
+and is consumed after one successful batch. The extension requests host access
+only for the listed pending site origins when the operator opens those pages.
+The server stores imported bundles through the existing encrypted session vault.

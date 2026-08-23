@@ -24,7 +24,7 @@
 （改为示例种子）；生产域名占位符化；前端文案中性化；OAuth 提供者解耦
 （users.provider+external_id、RELAYPULSE_OAUTH_*）；删除死代码。
 
-## Phase 1 — 架构偿债
+## Phase 1 — 架构偿债 ✅（已完成）
 
 ### 1.1 RefreshMatches 增量化（最高优先级）
 
@@ -133,4 +133,3 @@ i18n 国际化；合成探测（打真实模型请求）；跨站综合评分；
 - ReloadMatcher 在释放写锁后才调 RefreshAllMatches，与并发采集的增量刷新可能重复工作
   （自愈性质，暂不改；若 Phase 2 拆分时顺路可加 in-flight 合并）。
 - collector worker goroutine 无 panic recovery（未列入任何阶段，保持现状）。
-- 登录限流 maxFailures map 无过期清理（轻微内存泄漏；Phase 2 server 拆分时处理）。

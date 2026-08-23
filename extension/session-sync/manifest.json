@@ -3,8 +3,8 @@
   "name": "RelayPulse 访问令牌同步",
   "version": "0.5.0",
   "description": "仅将待更新站点的访问令牌同步到 RelayPulse。",
-  "permissions": ["scripting", "sidePanel", "tabs"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["scripting", "sidePanel", "storage", "tabs"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "打开 RelayPulse 访问令牌同步"
   },

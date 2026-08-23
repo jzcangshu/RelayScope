@@ -3,7 +3,6 @@ package httpserver
 import (
 	"context"
 	"net/http"
-	"relaypulse/internal/admin"
 	"relaypulse/internal/domain"
 	"relaypulse/internal/linuxdo"
 	"relaypulse/internal/session"
@@ -23,17 +22,14 @@ func linuxDOUser(service *linuxdo.Service, request *http.Request) (store.User, b
 	return service.UserBySession(cookie.Value)
 }
 
-func authorizeSessionSync(request *http.Request, manager *session.SyncManager, auth *admin.Auth) (string, string, bool, bool) {
+func authorizeSessionSync(request *http.Request, manager *session.SyncManager) (string, string, bool) {
 	origin := request.Header.Get("Origin")
-	if session.ValidExtensionOrigin(origin) && auth != nil && auth.VerifyPassword(request.Header.Get("X-RelayPulse-Sync-Password")) {
-		return origin, "", true, true
-	}
 	authorization := strings.TrimSpace(request.Header.Get("Authorization"))
 	if !strings.HasPrefix(authorization, "Bearer ") {
-		return origin, "", false, false
+		return origin, "", false
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
-	return origin, token, false, manager != nil && manager.Authorize(token, origin)
+	return origin, token, manager != nil && manager.Authorize(token, origin)
 }
 
 func setExtensionCORS(writer http.ResponseWriter, origin string) {

@@ -41,6 +41,28 @@ func TestVaultRoundTripAndTamperRejection(t *testing.T) {
 	}
 }
 
+func TestVaultInfersNewAPIAuthTypeBeforeEncryption(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	vault, err := NewVault(base64.RawURLEncoding.EncodeToString(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce, ciphertext, err := vault.Encrypt(Data{AccessToken: "access", UserID: "42"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := vault.Decrypt(nonce, ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.AuthType != AuthTypeNewAPIToken {
+		t.Fatalf("auth type = %q, want %q", decoded.AuthType, AuthTypeNewAPIToken)
+	}
+}
+
 func TestVaultPersistsEncryptedSession(t *testing.T) {
 	key := make([]byte, 32)
 	rand.Read(key)

@@ -103,7 +103,7 @@ Public updates use a revision-aware conditional poll every 30 to 60 seconds. Web
 
 ## Security
 
-- Administrator authentication uses a strong generated password, an adaptive password hash, secure cookie sessions, CSRF protection, and login rate limiting.
+- Administrator authentication uses a strong generated password, an adaptive password hash, secure cookie sessions, CSRF protection, and login rate limiting. Browser session sync uses a short-lived, origin-bound pairing token; the extension never receives the administrator password.
 - Site credentials and cookies use authenticated encryption with a key supplied outside the database.
 - Logs redact cookies, authorization headers, API keys, and query values known to contain credentials.
 - FlareSolverr binds only to loopback and is never exposed publicly.

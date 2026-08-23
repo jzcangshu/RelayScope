@@ -1,7 +1,6 @@
 importScripts('config.js', 'capture.js');
 
 const DEFAULT_SERVER = self.RELAYPULSE_SERVER || 'http://127.0.0.1:8080';
-const BUILTIN_PASSWORD = self.RELAYPULSE_ADMIN_PASSWORD || '';
 
 const normalizeServer = (value) => String(value || '').trim().replace(/\/$/, '');
 
@@ -20,7 +19,21 @@ async function api(path, options = {}) {
 }
 
 async function pending() {
-  return api('/api/v1/session-sync/pending', { method: 'POST', body: JSON.stringify({ password: BUILTIN_PASSWORD }) });
+  const token = await getToken();
+  if (!token) throw new Error('请先输入后台生成的配对码。');
+  return api('/api/v1/session-sync/pending', { headers: { Authorization: `Bearer ${token}` } });
+}
+
+async function getToken() {
+  const stored = await chrome.storage.local.get(['relaypulseSyncToken', 'relaypulseSyncServer']);
+  return stored.relaypulseSyncServer === DEFAULT_SERVER ? String(stored.relaypulseSyncToken || '') : '';
+}
+
+async function pair(code) {
+  const origin = `chrome-extension://${chrome.runtime.id}`;
+  const result = await api('/api/v1/session-sync/exchange', { method: 'POST', body: JSON.stringify({ code }), headers: { Origin: origin } });
+  await chrome.storage.local.set({ relaypulseSyncToken: result.token, relaypulseSyncServer: DEFAULT_SERVER });
+  return result;
 }
 
 async function openSites(sites) {
@@ -70,7 +83,10 @@ async function capture(sites, accountCredentials) {
   if (!bundles.length) {
     return { imported: 0, results: [], skipped };
   }
-  const result = await api('/api/v1/session-sync/batch', { method: 'POST', body: JSON.stringify({ password: BUILTIN_PASSWORD, bundles }) });
+  const token = await getToken();
+  if (!token) throw new Error('请先输入后台生成的配对码。');
+  const result = await api('/api/v1/session-sync/batch', { method: 'POST', body: JSON.stringify({ bundles }), headers: { Authorization: `Bearer ${token}` } });
+  await chrome.storage.local.remove('relaypulseSyncToken');
   return { ...result, skipped };
 }
 
@@ -78,6 +94,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const run = async () => {
     switch (message.type) {
       case 'state': return { server: DEFAULT_SERVER };
+      case 'pair': return pair(String(message.code || '').trim());
       case 'pending': return pending();
       case 'open': return openSites(message.sites || []);
       case 'capture': return capture(message.sites || [], message.accountCredentials || {});

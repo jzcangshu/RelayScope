@@ -11,7 +11,15 @@ const send = (message) => new Promise((resolve, reject) => {
 });
 
 async function requestOrigins(origins) {
-  for (const value of origins) new URL(value);
+  const patterns = [];
+  for (const value of origins) {
+    const parsed = new URL(value);
+    patterns.push(`${parsed.origin}/*`);
+  }
+  if (chrome.permissions?.request && patterns.length) {
+    const granted = await chrome.permissions.request({ origins: [...new Set(patterns)] });
+    if (!granted) throw new Error('需要授予待监测站点的临时访问权限。');
+  }
 }
 
 function show(message, error = false) {
@@ -69,12 +77,24 @@ async function connect() {
   try {
     $('#reconnect').hidden = true;
     await loadPending();
-    await openPendingSites();
   } catch (error) {
     show(error.message, true);
     $('#reconnect').hidden = false;
   }
 }
+$('#pair').onclick = async () => {
+  const code = $('#pairing-code').value.trim();
+  if (!code) return show('请粘贴后台生成的配对码。', true);
+  try {
+    const state = await send({ type: 'state' });
+    await requestOrigins([state.server]);
+    await send({ type: 'pair', code });
+    show('已连接，正在读取待同步站点。');
+    await loadPending();
+  } catch (error) {
+    show(error.message, true);
+  }
+};
 $('#reconnect').onclick = connect;
 $('#refresh').onclick = loadPending;
 $('#open').onclick = async () => {
@@ -111,7 +131,11 @@ $('#sync').onclick = async () => {
     const result = await send({ type: 'capture', sites: pendingSites, accountCredentials });
     const failures = (result.results || []).filter((item) => !item.ok);
     const skipped = result.skipped || [];
-    await loadPending();
+    pendingSites = [];
+    renderSites(pendingSites);
+    $('#count').textContent = '0 个站点待更新';
+    $('#open').disabled = true;
+    $('#sync').disabled = true;
     const details = [`已导入 ${result.imported} 个站点`];
     if (failures.length) details.push(`${failures.length} 个采集验证失败`);
     if (skipped.length) details.push(`${skipped.length} 个因无匹配令牌或登录态而跳过`);

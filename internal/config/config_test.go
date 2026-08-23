@@ -77,6 +77,8 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		value string
 	}{
 		{name: "listen address", key: "RELAYPULSE_LISTEN_ADDR", value: "public.example:8080"},
+		{name: "listen port text", key: "RELAYPULSE_LISTEN_ADDR", value: "127.0.0.1:abc"},
+		{name: "listen port range", key: "RELAYPULSE_LISTEN_ADDR", value: "127.0.0.1:65536"},
 		{name: "data directory", key: "RELAYPULSE_DATA_DIR", value: "."},
 		{name: "log level", key: "RELAYPULSE_LOG_LEVEL", value: "verbose"},
 		{name: "shutdown timeout", key: "RELAYPULSE_SHUTDOWN_TIMEOUT", value: "0s"},
@@ -88,6 +90,7 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{name: "public URL credentials", key: "RELAYPULSE_PUBLIC_URL", value: "https://user@example.com"},
 		{name: "public URL query", key: "RELAYPULSE_PUBLIC_URL", value: "https://example.com/?token=x"},
 		{name: "public URL path", key: "RELAYPULSE_PUBLIC_URL", value: "https://example.com/status"},
+		{name: "OAuth pair", key: "RELAYPULSE_OAUTH_CLIENT_ID", value: "client"},
 	}
 
 	for _, test := range tests {
@@ -96,6 +99,9 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 			_, err := load(func(key string) (string, bool) {
 				if key == test.key {
 					return test.value, true
+				}
+				if test.name == "OAuth pair" && key == "RELAYPULSE_OAUTH_CLIENT_SECRET" {
+					return "", false
 				}
 				return "", false
 			})

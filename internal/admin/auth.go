@@ -114,12 +114,6 @@ func (auth *Auth) Login(remoteAddr, password string) (string, bool) {
 	return token, true
 }
 
-func (auth *Auth) VerifyPassword(password string) bool {
-	auth.mu.Lock()
-	defer auth.mu.Unlock()
-	return bcrypt.CompareHashAndPassword(auth.passwordHash, []byte(password)) == nil
-}
-
 func (auth *Auth) Valid(token string) bool {
 	auth.mu.Lock()
 	defer auth.mu.Unlock()

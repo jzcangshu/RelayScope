@@ -143,18 +143,21 @@ func (store *Store) QueryPublicHistory(ctx context.Context, since time.Time) ([]
 	rows, err := store.db.QueryContext(ctx, `WITH RECURSIVE expanded AS (
 		SELECT site.id AS site_id, raw.raw_name,
 			`+ratioStateRankExpr+` AS state_rank,
-			(CAST(buckets.bucket_start / 1800000 AS INTEGER) * 1800000) AS slot_start,
+			CASE WHEN (CAST(buckets.bucket_start / 1800000 AS INTEGER) * 1800000) < ?
+				THEN (CAST(? / 1800000 AS INTEGER) * 1800000)
+				ELSE (CAST(buckets.bucket_start / 1800000 AS INTEGER) * 1800000) END AS slot_start,
 			buckets.bucket_end
 		FROM metric_buckets buckets
 		JOIN site_groups groups ON groups.id = buckets.group_id
 		JOIN raw_models raw ON raw.id = groups.raw_model_id
 		JOIN sites site ON site.id = raw.site_id
 		JOIN model_matches match ON match.raw_model_id = raw.id AND match.is_primary = 1
-		WHERE raw.removed_at IS NULL AND site.enabled = 1 AND site.deleted_at IS NULL AND buckets.bucket_end >= ?
+		WHERE raw.removed_at IS NULL AND site.enabled = 1 AND site.deleted_at IS NULL
+		  AND buckets.bucket_end >= ? AND buckets.bucket_start < ?
 		UNION ALL
 		SELECT site_id, raw_name, state_rank, slot_start + 1800000, bucket_end
 		FROM expanded
-		WHERE slot_start + 1800000 < bucket_end
+		WHERE slot_start + 1800000 < bucket_end AND slot_start + 1800000 < ?
 	)
 	SELECT site_id, raw_name,
 		CASE MIN(state_rank)
@@ -166,7 +169,7 @@ func (store *Store) QueryPublicHistory(ctx context.Context, since time.Time) ([]
 		slot_start, slot_start + 1800000
 	FROM expanded
 	GROUP BY site_id, raw_name, slot_start
-	ORDER BY site_id, raw_name, slot_start`, unixMilli(since))
+		ORDER BY site_id, raw_name, slot_start`, unixMilli(since), unixMilli(since), unixMilli(since), unixMilli(since.Add(publicSampleVisibilityWindow)), unixMilli(since.Add(publicSampleVisibilityWindow)))
 	if err != nil {
 		return nil, fmt.Errorf("query public history: %w", err)
 	}

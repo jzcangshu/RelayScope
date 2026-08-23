@@ -418,17 +418,16 @@ func TestExtensionSessionSyncPairingPendingAndBatchImport(t *testing.T) {
 	}
 	directPending := httptest.NewRequest(http.MethodGet, "/api/v1/session-sync/pending", nil)
 	directPending.Header.Set("Origin", origin)
-	directPending.Header.Set("X-RelayPulse-Sync-Password", "this-is-a-long-test-password")
 	directPendingResponse := httptest.NewRecorder()
 	handler.ServeHTTP(directPendingResponse, directPending)
-	if directPendingResponse.Code != http.StatusOK {
+	if directPendingResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("direct pending status = %d %s", directPendingResponse.Code, directPendingResponse.Body.String())
 	}
 	bodyPending := httptest.NewRequest(http.MethodPost, "/api/v1/session-sync/pending", strings.NewReader(`{"password":"this-is-a-long-test-password"}`))
 	bodyPending.Header.Set("Origin", origin)
 	bodyPendingResponse := httptest.NewRecorder()
 	handler.ServeHTTP(bodyPendingResponse, bodyPending)
-	if bodyPendingResponse.Code != http.StatusOK {
+	if bodyPendingResponse.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("body pending status = %d %s", bodyPendingResponse.Code, bodyPendingResponse.Body.String())
 	}
 	bodyBatch := `{"password":"this-is-a-long-test-password","bundles":[{"siteId":` + strconv.FormatInt(site.ID, 10) + `,"origin":"https://example.test","userAgent":"direct-agent","cookies":[{"name":"sid","value":"direct-secret"}]}]}`
@@ -436,7 +435,7 @@ func TestExtensionSessionSyncPairingPendingAndBatchImport(t *testing.T) {
 	directBatch.Header.Set("Origin", origin)
 	directBatchResponse := httptest.NewRecorder()
 	handler.ServeHTTP(directBatchResponse, directBatch)
-	if directBatchResponse.Code != http.StatusOK || !strings.Contains(directBatchResponse.Body.String(), `"imported":1`) {
+	if directBatchResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("direct batch status = %d %s", directBatchResponse.Code, directBatchResponse.Body.String())
 	}
 	if err := db.SetAcquisitionState(context.Background(), site.ID, domain.AcquisitionLoginExpired, now); err != nil {
@@ -648,6 +647,21 @@ func TestAdminSiteLifecycleFiltersAndRedactedSessionMetadata(t *testing.T) {
 	runs := request(http.MethodGet, "/api/v1/admin/runs?status=failed&limit=1", nil, false)
 	if runs.Code != http.StatusOK || !strings.Contains(runs.Body.String(), `"status":"failed"`) {
 		t.Fatalf("filtered runs = %d %s", runs.Code, runs.Body.String())
+	}
+	beforeUpdate, err := db.GetSite(ctx, site.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidUpdate := request(http.MethodPatch, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), strings.NewReader(`{"name":"must-not-partially-update","baseUrl":"not-a-url","sourceUrl":"https://lifecycle.example/status","adapterKey":"test","adapterConfig":"{}","enabled":true,"intervalSeconds":900,"jitterSeconds":0}`), true)
+	if invalidUpdate.Code != http.StatusBadRequest {
+		t.Fatalf("invalid update status = %d %s", invalidUpdate.Code, invalidUpdate.Body.String())
+	}
+	afterUpdate, err := db.GetSite(ctx, site.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterUpdate.Name != beforeUpdate.Name || afterUpdate.BaseURL != beforeUpdate.BaseURL {
+		t.Fatalf("invalid update partially changed site: before=%+v after=%+v", beforeUpdate, afterUpdate)
 	}
 	deleted := request(http.MethodDelete, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), nil, true)
 	if deleted.Code != http.StatusOK {

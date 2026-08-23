@@ -109,21 +109,25 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid site payload")
 				return
 			}
-			if err := options.Store.UpdateSite(request.Context(), id, payload.Name, payload.AdapterKey, payload.AdapterConfig, payload.Enabled, payload.SessionRequired, time.Duration(payload.IntervalSeconds)*time.Second, time.Duration(payload.JitterSeconds)*time.Second); err != nil {
+			current, err := options.Store.GetSite(request.Context(), id)
+			if err != nil {
 				writeError(writer, http.StatusBadRequest, "update site")
 				return
 			}
-			if strings.TrimSpace(payload.BaseURL) != "" || strings.TrimSpace(payload.SourceURL) != "" {
-				if err := options.Store.UpdateSiteURLs(request.Context(), id, payload.BaseURL, payload.SourceURL); err != nil {
-					writeError(writer, http.StatusBadRequest, "update site URLs")
-					return
-				}
+			baseURL, sourceURL := payload.BaseURL, payload.SourceURL
+			if strings.TrimSpace(baseURL) == "" {
+				baseURL = current.BaseURL
 			}
+			if strings.TrimSpace(sourceURL) == "" {
+				sourceURL = current.SourceURL
+			}
+			failureReason := current.CustomFailureReason
 			if payload.CustomFailureReason != nil {
-				if err := options.Store.UpdateSiteFailureReason(request.Context(), id, *payload.CustomFailureReason); err != nil {
-					writeError(writer, http.StatusBadRequest, "update site failure reason")
-					return
-				}
+				failureReason = *payload.CustomFailureReason
+			}
+			if err := options.Store.UpdateSiteDetails(request.Context(), id, payload.Name, baseURL, sourceURL, payload.AdapterKey, payload.AdapterConfig, payload.Enabled, valueOrBool(payload.SessionRequired, current.SessionRequired), time.Duration(payload.IntervalSeconds)*time.Second, time.Duration(payload.JitterSeconds)*time.Second, failureReason); err != nil {
+				writeError(writer, http.StatusBadRequest, "update site")
+				return
 			}
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
@@ -379,6 +383,13 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
 	}
+}
+
+func valueOrBool(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
+	}
+	return *value
 }
 
 func parseRunFilters(request *http.Request) (store.RunFilters, error) {

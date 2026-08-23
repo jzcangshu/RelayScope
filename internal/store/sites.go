@@ -40,6 +40,48 @@ func (store *Store) UpdateSite(ctx context.Context, siteID int64, name, adapterK
 	return nil
 }
 
+// UpdateSiteDetails applies all editable site fields in one transaction so a
+// malformed URL or failure reason cannot leave a partially updated site.
+func (store *Store) UpdateSiteDetails(ctx context.Context, siteID int64, name, baseURL, sourceURL, adapterKey, adapterConfig string, enabled bool, sessionRequired bool, interval, jitter time.Duration, failureReason string) error {
+	if siteID <= 0 || strings.TrimSpace(name) == "" || strings.TrimSpace(adapterKey) == "" || interval < 5*time.Minute || jitter < 0 {
+		return errors.New("invalid site update")
+	}
+	baseURL, sourceURL = strings.TrimSpace(baseURL), strings.TrimSpace(sourceURL)
+	if err := validateSiteURL("base URL", baseURL); err != nil {
+		return err
+	}
+	if err := validateSiteURL("source URL", sourceURL); err != nil {
+		return err
+	}
+	if strings.TrimSpace(adapterConfig) == "" {
+		adapterConfig = "{}"
+	}
+	failureReason = strings.TrimSpace(failureReason)
+	if len([]rune(failureReason)) > 500 {
+		return errors.New("custom failure reason is too long")
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin site details update: %w", err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE sites SET name = ?, base_url = ?, source_url = ?, adapter_key = ?, adapter_config = ?, custom_failure_reason = ?, enabled = ?, session_required = ?, interval_seconds = ?, jitter_seconds = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		name, baseURL, sourceURL, adapterKey, adapterConfig, failureReason, boolInt(enabled), boolInt(sessionRequired), int64(interval/time.Second), int64(jitter/time.Second), unixMilli(time.Now().UTC()), siteID)
+	if err != nil {
+		return fmt.Errorf("update site details: %w", err)
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return errors.New("site not found")
+	}
+	if _, err := incrementRevision(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit site details update: %w", err)
+	}
+	return nil
+}
+
 func (store *Store) UpdateSiteFailureReason(ctx context.Context, siteID int64, reason string) error {
 	if siteID <= 0 {
 		return errors.New("invalid site ID")
@@ -254,11 +296,11 @@ func (store *Store) UpdateSiteURLs(ctx context.Context, siteID int64, baseURL, s
 		return errors.New("invalid site ID")
 	}
 	baseURL, sourceURL = strings.TrimSpace(baseURL), strings.TrimSpace(sourceURL)
-	for name, value := range map[string]string{"base URL": baseURL, "source URL": sourceURL} {
-		parsed, err := url.Parse(value)
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
-			return fmt.Errorf("invalid %s", name)
-		}
+	if err := validateSiteURL("base URL", baseURL); err != nil {
+		return err
+	}
+	if err := validateSiteURL("source URL", sourceURL); err != nil {
+		return err
 	}
 	result, err := store.db.ExecContext(ctx, `UPDATE sites SET base_url = ?, source_url = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`, baseURL, sourceURL, unixMilli(time.Now().UTC()), siteID)
 	if err != nil {
@@ -266,6 +308,14 @@ func (store *Store) UpdateSiteURLs(ctx context.Context, siteID int64, baseURL, s
 	}
 	if count, _ := result.RowsAffected(); count == 0 {
 		return errors.New("site not found")
+	}
+	return nil
+}
+
+func validateSiteURL(name, value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return fmt.Errorf("invalid %s", name)
 	}
 	return nil
 }

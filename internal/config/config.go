@@ -65,6 +65,12 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 	if err := validatePublicURL(cfg.PublicURL); err != nil {
 		return Config{}, fmt.Errorf("RELAYPULSE_PUBLIC_URL: %w", err)
 	}
+	if (cfg.OAuthClientID == "") != (cfg.OAuthClientSecret == "") {
+		return Config{}, errors.New("RELAYPULSE_OAUTH_CLIENT_ID and RELAYPULSE_OAUTH_CLIENT_SECRET must be configured together")
+	}
+	if (cfg.OAuthClientID != "" || cfg.OAuthClientSecret != "") && cfg.PublicURL == "" {
+		return Config{}, errors.New("RELAYPULSE_PUBLIC_URL is required when OAuth is configured")
+	}
 
 	cleanDataDir := filepath.Clean(strings.TrimSpace(cfg.DataDir))
 	if cleanDataDir == "." || cleanDataDir == "" {
@@ -142,6 +148,10 @@ func validateListenAddr(address string) error {
 	}
 	if port == "" {
 		return errors.New("port is required")
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return errors.New("port must be between 1 and 65535")
 	}
 	if host != "" && net.ParseIP(host) == nil && host != "localhost" {
 		return errors.New("host must be an IP address or localhost")

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -126,7 +127,7 @@ func NewHandler(options Options) (http.Handler, error) {
 					return
 				}
 				setExtensionCORS(writer, origin)
-				writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-RelayPulse-Sync-Password")
+				writer.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 				writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 				writer.WriteHeader(http.StatusNoContent)
 			})
@@ -170,7 +171,11 @@ func NewHandler(options Options) (http.Handler, error) {
 				writeError(writer, http.StatusBadRequest, "invalid login payload")
 				return
 			}
-			if _, ok := options.Auth.Login(request.RemoteAddr, payload.Password); !ok {
+			remoteHost, _, splitErr := net.SplitHostPort(request.RemoteAddr)
+			if splitErr != nil {
+				remoteHost = request.RemoteAddr
+			}
+			if _, ok := options.Auth.Login(remoteHost, payload.Password); !ok {
 				writeError(writer, http.StatusUnauthorized, "管理员密码错误")
 				return
 			}
@@ -182,31 +187,12 @@ func NewHandler(options Options) (http.Handler, error) {
 			writeJSON(writer, map[string]any{"token": token, "expiresAt": expiresAt})
 		})
 		mux.HandleFunc("GET /api/v1/session-sync/pending", func(writer http.ResponseWriter, request *http.Request) {
-			origin, _, _, ok := authorizeSessionSync(request, options.SessionSync, options.Auth)
+			origin, _, ok := authorizeSessionSync(request, options.SessionSync)
 			if session.ValidExtensionOrigin(origin) {
 				setExtensionCORS(writer, origin)
 			}
 			if !ok {
 				writeError(writer, http.StatusUnauthorized, "invalid session sync token")
-				return
-			}
-			items, err := pendingSessionSites(request.Context(), options.Store, options.Now())
-			if err != nil {
-				writeError(writer, http.StatusInternalServerError, "query pending sessions")
-				return
-			}
-			writeJSON(writer, map[string]any{"sites": items})
-		})
-		mux.HandleFunc("POST /api/v1/session-sync/pending", func(writer http.ResponseWriter, request *http.Request) {
-			origin := request.Header.Get("Origin")
-			if session.ValidExtensionOrigin(origin) {
-				setExtensionCORS(writer, origin)
-			}
-			var payload struct {
-				Password string `json:"password"`
-			}
-			if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8<<10)).Decode(&payload); err != nil || options.Auth == nil || !options.Auth.VerifyPassword(payload.Password) {
-				writeError(writer, http.StatusUnauthorized, "invalid session sync credential")
 				return
 			}
 			items, err := pendingSessionSites(request.Context(), options.Store, options.Now())
@@ -222,17 +208,13 @@ func NewHandler(options Options) (http.Handler, error) {
 				setExtensionCORS(writer, origin)
 			}
 			var payload struct {
-				Password string              `json:"password"`
-				Bundles  []sessionSyncBundle `json:"bundles"`
+				Bundles []sessionSyncBundle `json:"bundles"`
 			}
 			if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 512<<10)).Decode(&payload); err != nil || len(payload.Bundles) == 0 || len(payload.Bundles) > 30 {
 				writeError(writer, http.StatusBadRequest, "invalid session batch")
 				return
 			}
-			token, direct, ok := "", true, options.Auth != nil && options.Auth.VerifyPassword(payload.Password)
-			if !ok {
-				_, token, direct, ok = authorizeSessionSync(request, options.SessionSync, options.Auth)
-			}
+			origin, token, ok := authorizeSessionSync(request, options.SessionSync)
 			if !ok || options.SessionVault == nil {
 				writeError(writer, http.StatusUnauthorized, "invalid session sync credential")
 				return
@@ -264,14 +246,12 @@ func NewHandler(options Options) (http.Handler, error) {
 					return
 				}
 			}
-			if !direct && !options.SessionSync.Claim(token, origin) {
+			if !options.SessionSync.Claim(token, origin) {
 				writeError(writer, http.StatusUnauthorized, "session sync token already in use")
 				return
 			}
 			saved := false
-			if !direct {
-				defer func() { options.SessionSync.Finish(token, origin, saved) }()
-			}
+			defer func() { options.SessionSync.Finish(token, origin, saved) }()
 			items := make([]session.BatchItem, 0, len(payload.Bundles))
 			for _, bundle := range payload.Bundles {
 				items = append(items, session.BatchItem{SiteID: bundle.SiteID, Data: bundle.Data})
