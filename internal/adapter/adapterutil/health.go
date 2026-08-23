@@ -32,9 +32,9 @@ func RatioToServiceState(ratio *float64) domain.ServiceState {
 	return domain.ServiceFailed
 }
 
-// NormalizeRatio returns a ratio in the 0-1 range. If the input is already
-// <= 1 it is returned as-is; otherwise it is assumed to be a percentage
-// (e.g. 85 meaning 0.85).
+// NormalizeRatio converts percentage-style values to ratios. If the input is
+// already <= 1 it is returned as-is; otherwise it is assumed to be a
+// percentage (e.g. 85 meaning 0.85). It intentionally does not clamp values.
 func NormalizeRatio(value *float64) *float64 {
 	if value == nil {
 		return nil
