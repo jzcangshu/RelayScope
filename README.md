@@ -4,9 +4,9 @@
 
 ![RelayPulse](docs/assets/relaypulse-hero-rounded.png)
 
-RelayPulse 采集各个中转站已经公开的数据——状态页、模型市场、定价接口中的可用性、模型目录与价格信息。它**不会**发起付费的模型调用来做探测；只保留短期滚动历史，完整保留每个站点的原始模型名与分组名，并呈现统一的跨站点视图。
+RelayPulse 是一个面向 AI API 中转站的，轻量化模型健康度聚合监测系统。
 
-![站点页面截图](docs/assets/dashboard-light.png)
+支持采集：状态页、模型市场、各分组可用性、模型目录与价格信息。它**不会**发起付费的模型调用来做探测；只保留短期滚动历史，完整保留每个站点的原始模型名与分组名，并呈现统一的跨站点视图。
 
 [![CI](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -22,6 +22,8 @@ RelayPulse 采集各个中转站已经公开的数据——状态页、模型市
 | 「代价是多少？」 | 在采集健康数据的同时捕获价格，且不发起任何付费 API 调用 |
 
 它把**服务健康**（healthy / degraded / failed / no_samples）与**采集健康**（fresh / stale / collecting / login_expired / challenge_pending）区分开，采集失败永远不会被伪装成服务故障。
+
+![站点页面截图](docs/assets/dashboard-light.png)
 
 ## 功能特性
 
