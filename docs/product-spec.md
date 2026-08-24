@@ -1,5 +1,7 @@
 # RelayPulse Product Specification
 
+**English** | [中文](product-spec.zh-CN.md)
+
 ## Purpose
 
 RelayPulse answers two practical questions for users of AI API relay sites:

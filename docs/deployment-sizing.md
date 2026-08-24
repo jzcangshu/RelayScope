@@ -1,5 +1,7 @@
 # Deployment sizing
 
+**English** | [中文](deployment-sizing.zh-CN.md)
+
 This document describes the measured resource envelope and the assumptions
 behind the supported deployment sizes. It is a sizing guide, not a promise
 that arbitrary adapters or challenge workloads fit the same envelope.

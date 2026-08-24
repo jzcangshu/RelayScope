@@ -1,5 +1,7 @@
 # Operations checklist
 
+**English** | [中文](operations.zh-CN.md)
+
 ## Before first deployment
 
 - Create `/var/lib/relaypulse` with mode `0700` and ownership `relaypulse`.

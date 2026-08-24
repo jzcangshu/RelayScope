@@ -1,5 +1,7 @@
 # Data Contract
 
+**English** | [中文](data-contract.zh-CN.md)
+
 ## Identity hierarchy
 
 The public hierarchy is a query projection, not nested stored JSON:

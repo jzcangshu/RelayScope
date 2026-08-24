@@ -1,5 +1,7 @@
 # Local development
 
+**English** | [中文](development.zh-CN.md)
+
 All large project tooling and caches are kept inside the repository on drive D and ignored by Git.
 
 ## Go toolchain
