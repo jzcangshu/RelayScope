@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the server accepts both GET and POST on `/api/v1/session-sync/pending`.
 - Extension error messages now surface the server's `error` field instead of a
   generic status code.
+- A successful model-probe report that contains no models is now treated as an
+  empty catalog: every previously known model of the site is marked
+  unavailable instead of the collection failing with `adapter_collect_failed`.
+
+### Changed
+- The administrator session-import prompt and the operations docs describe the
+  session JSON contract generically (auth types, cookies, refresh rotation)
+  instead of calling out one specific site.
 
 ## [v0.1.1] - 2026-08-24
 

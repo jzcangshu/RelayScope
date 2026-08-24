@@ -93,11 +93,11 @@ func (adapter ModelProbeAdapter) Collect(ctx context.Context, site Site, fetcher
 		}
 		return domain.Collection{}, fmt.Errorf("%s", message)
 	}
-	if len(response.Data.Models) == 0 {
-		return domain.Collection{}, fmt.Errorf("model-probe response contained no models")
-	}
 
 	collection := domain.Collection{SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true}
+	if len(response.Data.Models) == 0 {
+		return markEmptyProbeCatalog(collection), nil
+	}
 	for _, source := range response.Data.Models {
 		name := strings.TrimSpace(source.ModelName)
 		if name == "" {
@@ -136,7 +136,7 @@ func (adapter ModelProbeAdapter) Collect(ctx context.Context, site Site, fetcher
 		collection.Models = append(collection.Models, observation)
 	}
 	if len(collection.Models) == 0 {
-		return domain.Collection{}, fmt.Errorf("model-probe response contained no valid models")
+		return markEmptyProbeCatalog(collection), nil
 	}
 	collection.CatalogRawNames = make([]string, 0, len(collection.Models))
 	for _, model := range collection.Models {
@@ -148,6 +148,13 @@ func (adapter ModelProbeAdapter) Collect(ctx context.Context, site Site, fetcher
 		}
 	}
 	return collection, nil
+}
+
+// markEmptyProbeCatalog turns a successful but empty probe report into an
+// empty catalog whose absent models are all marked failed by the store.
+func markEmptyProbeCatalog(collection domain.Collection) domain.Collection {
+	collection.MissingCatalogState = domain.ServiceFailed
+	return collection
 }
 
 func modelProbeWindowMetrics(window modelProbeWindow, averageMS *float64) domain.Metrics {

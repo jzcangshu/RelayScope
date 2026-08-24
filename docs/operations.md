@@ -61,6 +61,15 @@ health endpoints and the admin run view after restart.
   application. Prefer HTTPS before using administrator or session-sync paths
   on an untrusted network.
 
+## Manual session import
+
+The JSON pasted into the administrator “会话” dialog is encrypted at rest. The
+generic fields are `userAgent` and `cookies` (an array of `{"name", "value"}`).
+Sites of the NewAPI family use `authType: "newapi_token"` plus `accessToken`
+and `userId`; including a `new_api_refresh` cookie lets the server rotate the
+access token before it expires — without it, the session must be re-imported
+once the token lapses.
+
 ## Recovery semantics
 
 A collection failure never overwrites the last successful service snapshot.

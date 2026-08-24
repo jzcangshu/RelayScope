@@ -45,6 +45,36 @@ func TestModelProbePreservesLoginErrors(t *testing.T) {
 	}
 }
 
+func TestModelProbeEmptyReportMarksAllModelsUnavailable(t *testing.T) {
+	now := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
+	for name, payload := range map[string]string{
+		"empty models": `{"success":true,"data":{"models":[]}}`,
+		"blank names":  `{"success":true,"data":{"models":[{"model_name":"  "}]}}`,
+	} {
+		collection, err := (ModelProbeAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{
+			"https://example.test/api/model_probe/status": []byte(payload),
+		}}, now)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(collection.Models) != 0 || !collection.CatalogComplete || collection.MissingCatalogState != domain.ServiceFailed {
+			t.Fatalf("%s: expected empty catalog marked failed: %+v", name, collection)
+		}
+		if err := collection.Validate(); err != nil {
+			t.Fatalf("%s: invalid collection: %v", name, err)
+		}
+	}
+}
+
+func TestModelProbeUnsuccessfulResponseStillFails(t *testing.T) {
+	_, err := (ModelProbeAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/model_probe/status": []byte(`{"success":false,"message":"probe disabled"}`),
+	}}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "probe disabled") {
+		t.Fatalf("expected unsuccessful response error, got %v", err)
+	}
+}
+
 func itoa(value int64) string {
 	return fmt.Sprintf("%d", value)
 }

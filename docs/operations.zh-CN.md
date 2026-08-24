@@ -40,6 +40,10 @@
 - 访问令牌扩展只能指向配置好的 RelayPulse 源。它上传待接入列表中来源完全匹配的条目，绝不上传账号备份的其余内容。
 - `deploy/nginx-monitor.conf` 中 80 端口的虚拟主机会转发整个应用。在不可信网络上使用管理后台或会话同步路径之前，应优先使用 HTTPS。
 
+## 手动导入会话 JSON
+
+管理后台“会话”入口粘贴的 JSON 会加密存储。通用字段为 `userAgent` 和 `cookies`（`{"name","value"}` 数组）。NewAPI 系站点使用 `authType: "newapi_token"` 并附带 `accessToken`、`userId`；包含 `new_api_refresh` Cookie 时，服务端会在访问令牌过期前自动续期——缺少该 Cookie 时令牌到期后需要重新导入。
+
 ## 恢复语义
 
 采集失败绝不会覆盖最近一次成功的服务快照。公开页面单独标注采集新鲜度，因此用户能分辨是模型本身不健康，还是监测程序暂时读不到来源站点。
