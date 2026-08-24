@@ -2,7 +2,7 @@
 
 **[English](README_EN.md)** | 中文
 
-![RelayPulse](docs/assets/relaypulse-hero-rounded.png)
+![RelayPulse](docs/assets/relaypulse-hero-rounded.jpg)
 
 RelayPulse 是一个面向 AI API 中转站的，轻量化模型健康度聚合监测系统。
 
@@ -107,3 +107,19 @@ RelayPulse 已为首个公开发布做好准备。版本 tag 会发布无 CGO �
 ## 许可证
 
 [MIT](LICENSE) — RelayPulse contributors。
+
+## LinuxDo 社区
+
+<div align="center">
+  <a href="https://linux.do" target="_blank">
+    <img src="https://cdn3.ldstatic.com/original/4X/c/c/d/ccd8c210609d498cbeb3d5201d4c259348447562.png" alt="LinuxDo" height="60">
+  </a>
+  <p>
+    <a href="https://linux.do" target="_blank"><strong>LinuxDo 社区</strong></a><br>
+  </p>
+    <p>@蕉灼の仓鼠</p>
+    <p>本人长期活跃于L站;</p>
+    <p>这里的人很好说话又好听;</p>
+    <p>欢迎都来加入L站大家庭。 </p>
+
+</div>
