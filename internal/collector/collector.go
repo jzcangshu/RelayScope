@@ -107,7 +107,10 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	if !collection.CatalogComplete || !catalogProvided {
 		collection.CatalogRawNames = make([]string, 0, len(collection.Models))
 	}
-	if collection.CatalogComplete && len(collection.Models) == 0 {
+	// An explicit missing-catalog state means the adapter understood the empty
+	// result and wants absent models marked accordingly; only silent emptiness
+	// stays a failure.
+	if collection.CatalogComplete && len(collection.Models) == 0 && collection.MissingCatalogState == "" {
 		return collector.finishFailure(ctx, site, runID, "catalog_incomplete", "catalog contained no valid models", now)
 	}
 	filteredModels := make([]domain.ModelObservation, 0, len(collection.Models))

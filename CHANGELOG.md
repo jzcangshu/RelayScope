@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A successful model-probe report that contains no models is now treated as an
   empty catalog: every previously known model of the site is marked
   unavailable instead of the collection failing with `adapter_collect_failed`.
+  The collector accepts an empty catalog when the adapter explicitly declares
+  how absent models should be marked; silent emptiness still fails the run.
 
 ### Changed
 - The administrator session-import prompt and the operations docs describe the

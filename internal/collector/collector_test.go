@@ -274,6 +274,86 @@ func TestCollectSiteKeepsPreviousSnapshotWhenAllDetailsFail(t *testing.T) {
 	}
 }
 
+type scriptedProbeFetcher struct {
+	bodies [][]byte
+	index  int
+}
+
+func (fetcher *scriptedProbeFetcher) GetJSON(_ context.Context, _ string, target any) error {
+	body, err := fetcher.next()
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, target)
+}
+
+func (fetcher *scriptedProbeFetcher) GetBytes(_ context.Context, _ string) ([]byte, http.Header, error) {
+	body, err := fetcher.next()
+	if err != nil {
+		return nil, http.Header{}, err
+	}
+	return body, http.Header{}, nil
+}
+
+func (fetcher *scriptedProbeFetcher) next() ([]byte, error) {
+	if fetcher.index >= len(fetcher.bodies) {
+		return nil, errors.New("no scripted response left")
+	}
+	body := fetcher.bodies[fetcher.index]
+	fetcher.index++
+	return body, nil
+}
+
+func TestCollectSiteAcceptsIntentionalEmptyCatalog(t *testing.T) {
+	t.Parallel()
+
+	dbStore := openCollectorStore(t)
+	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "probe", BaseURL: "https://example.test", SourceURL: "https://example.test/probe", AdapterKey: "model-probe", AdapterConfig: `{}`, Enabled: true, Interval: 20 * time.Minute})
+	if err != nil {
+		t.Fatalf("create site: %v", err)
+	}
+	registry, err := adapter.NewRegistry(adapter.ModelProbeAdapter{})
+	if err != nil {
+		t.Fatalf("registry: %v", err)
+	}
+	fetcher := &scriptedProbeFetcher{bodies: [][]byte{
+		[]byte(`{"success":true,"data":{"models":[{"model_name":"gemini-3.5-flash","status":"available","window_24h":{"requests":10,"success":10}}]}}`),
+		[]byte(`{"data":[{"model_name":"gemini-3.5-flash","model_ratio":2,"completion_ratio":3,"enable_groups":["free"]}]}`),
+		[]byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_symbol":"$"}}`),
+		[]byte(`{"success":true,"data":{"models":[]}}`),
+	}}
+	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fetcher, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatalf("collector: %v", err)
+	}
+	now := time.Now().UTC()
+	for round, wantModels := range []int{1, 0} {
+		if err := collector.CollectSite(context.Background(), site, now.Add(time.Duration(round)*time.Minute)); err != nil {
+			t.Fatalf("collect round %d: %v", round, err)
+		}
+		runs, runErr := dbStore.ListCollectionRunsFiltered(context.Background(), store.RunFilters{SiteID: site.ID, Limit: 1})
+		if runErr != nil || len(runs) != 1 {
+			t.Fatalf("list runs round %d: %v", round, runErr)
+		}
+		if runs[0].Status != "success" || runs[0].ModelsSeen != wantModels {
+			t.Fatalf("round %d run status = %s models = %d, want success/%d", round, runs[0].Status, runs[0].ModelsSeen, wantModels)
+		}
+	}
+	sites, err := dbStore.ListAllSites(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state domain.AcquisitionState
+	for _, item := range sites {
+		if item.ID == site.ID {
+			state = item.AcquisitionState
+		}
+	}
+	if state != domain.AcquisitionFresh {
+		t.Fatalf("acquisition state after empty catalog = %q, want fresh", state)
+	}
+}
+
 type fakeJSONFetcher struct{ body []byte }
 
 func (fetcher fakeJSONFetcher) GetJSON(_ context.Context, _ string, target any) error {
