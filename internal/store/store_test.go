@@ -644,6 +644,48 @@ func TestPresenceCatalogMarksOmittedModelFailedWithoutRemovingPrice(t *testing.T
 	}
 }
 
+func TestMissingCatalogPassMarksPreviouslyRemovedModels(t *testing.T) {
+	t.Parallel()
+
+	dbStore := openTestStore(t)
+	ctx := context.Background()
+	site := createTestSite(t, dbStore)
+	now := time.Date(2026, time.August, 16, 0, 0, 0, 0, time.UTC)
+	initial := domain.Collection{
+		SiteID: site.ID, ObservedAt: now, CollectedAt: now, CatalogComplete: true,
+		Models: []domain.ModelObservation{
+			{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceHealthy}}},
+		},
+	}
+	if _, _, err := dbStore.ApplyCollection(ctx, initial, strings.ToLower); err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+	if _, err := dbStore.DB().Exec(`UPDATE raw_models SET removed_at = ? WHERE site_id = ?`, now.Add(time.Hour).UnixMilli(), site.ID); err != nil {
+		t.Fatalf("soft-remove model: %v", err)
+	}
+
+	empty := domain.Collection{
+		SiteID: site.ID, ObservedAt: now.Add(2 * time.Hour), CollectedAt: now.Add(2 * time.Hour),
+		CatalogComplete: true, MissingCatalogState: domain.ServiceFailed,
+	}
+	if _, _, err := dbStore.ApplyCollection(ctx, empty, strings.ToLower); err != nil {
+		t.Fatalf("apply empty catalog: %v", err)
+	}
+
+	var state string
+	var removedAt *int64
+	err := dbStore.DB().QueryRow(`SELECT snapshot.service_state, raw.removed_at
+		FROM raw_models raw JOIN site_groups groups ON groups.raw_model_id = raw.id
+		JOIN current_snapshots snapshot ON snapshot.group_id = groups.id
+		WHERE raw.raw_name = 'gpt-5.6-sol'`).Scan(&state, &removedAt)
+	if err != nil {
+		t.Fatalf("read removed model: %v", err)
+	}
+	if state != string(domain.ServiceFailed) || removedAt != nil {
+		t.Fatalf("previously removed model = state %q removed %v, want failed/NULL in one pass", state, removedAt)
+	}
+}
+
 func TestCleanupRemovesOnlyExpiredHistory(t *testing.T) {
 	t.Parallel()
 

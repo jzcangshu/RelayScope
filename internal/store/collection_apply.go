@@ -231,6 +231,12 @@ func updateAbsenceEvidence(ctx context.Context, tx *sql.Tx, siteID int64, catalo
 }
 
 func applyMissingCatalogState(ctx context.Context, tx *sql.Tx, collection domain.Collection) error {
+	// A missing-catalog pass re-admits every raw model of the site before
+	// selecting groups, so previously removed models are marked in the same
+	// pass instead of resurrecting with their pre-removal snapshot.
+	if _, err := tx.ExecContext(ctx, `UPDATE raw_models SET absent_complete_runs = 0, removed_at = NULL WHERE site_id = ?`, collection.SiteID); err != nil {
+		return fmt.Errorf("reset presence catalog absence evidence: %w", err)
+	}
 	query := `SELECT groups.id FROM site_groups groups
 		JOIN raw_models raw ON raw.id = groups.raw_model_id
 		WHERE raw.site_id = ? AND raw.removed_at IS NULL`
@@ -298,9 +304,6 @@ func applyMissingCatalogState(ctx context.Context, tx *sql.Tx, collection domain
 				return err
 			}
 		}
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE raw_models SET absent_complete_runs = 0, removed_at = NULL WHERE site_id = ?`, collection.SiteID); err != nil {
-		return fmt.Errorf("reset presence catalog absence evidence: %w", err)
 	}
 	return nil
 }

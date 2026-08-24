@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unavailable instead of the collection failing with `adapter_collect_failed`.
   The collector accepts an empty catalog when the adapter explicitly declares
   how absent models should be marked; silent emptiness still fails the run.
+- A missing-catalog pass re-admits soft-removed models before selecting
+  groups, so the first empty catalog marks the full model list unavailable
+  instead of resurrecting removed models with their pre-removal snapshots.
 
 ### Changed
 - The administrator session-import prompt and the operations docs describe the
