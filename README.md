@@ -2,17 +2,6 @@
 
 RelayPulse collects availability, model-catalog, and pricing data that each relay site already publishes (status pages, model markets, pricing endpoints). It does **not** call paid models to probe them. It keeps a short rolling history, preserves every site's original model and group names, and presents a unified cross-site view.
 
-## Recommended server
-
-| Deployment | CPU | RAM | Disk | Swap |
-| --- | ---: | ---: | ---: | ---: |
-| RelayPulse only | 1-2 vCPU | 1 GB | 10 GB free | 1-2 GB |
-| With FlareSolverr | 2-4 vCPU | 4 GB | 20 GB free | 4 GB |
-
-The 768 MB profile is suitable for RelayPulse alone at the default site count,
-not for Chromium/FlareSolverr. See the [measured sizing guide](docs/deployment-sizing.md)
-for capacity assumptions and expansion signals.
-
 [![CI](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -89,6 +78,17 @@ RelayPulse starts with an empty database. Add sites through the admin console (`
 3. The scheduler begins collecting on the configured interval.
 
 A `sites.example.json` is provided as a reference for the configuration format.
+
+## Recommended server
+
+| Deployment | CPU | RAM | Disk | Swap |
+| --- | ---: | ---: | ---: | ---: |
+| RelayPulse only | 1-2 vCPU | 1 GB | 10 GB free | 1-2 GB |
+| With FlareSolverr | 2-4 vCPU | 4 GB | 20 GB free | 4 GB |
+
+The 768 MB profile is suitable for RelayPulse alone at the default site count,
+not for Chromium/FlareSolverr. See the [measured sizing guide](docs/deployment-sizing.md)
+for capacity assumptions and expansion signals.
 
 ## Project status
 
