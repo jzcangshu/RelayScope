@@ -459,6 +459,13 @@ func TestExtensionSessionSyncPairingPendingAndBatchImport(t *testing.T) {
 	if pendingResponse.Code != http.StatusOK || !strings.Contains(pendingResponse.Body.String(), `"origin":"https://example.test"`) {
 		t.Fatalf("pending status = %d %s", pendingResponse.Code, pendingResponse.Body.String())
 	}
+	getPendingWithoutOrigin := httptest.NewRequest(http.MethodGet, "/api/v1/session-sync/pending", nil)
+	getPendingWithoutOrigin.Header.Set("Authorization", "Bearer "+exchanged.Token)
+	getPendingWithoutOriginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(getPendingWithoutOriginResponse, getPendingWithoutOrigin)
+	if getPendingWithoutOriginResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("pending without origin status = %d %s", getPendingWithoutOriginResponse.Code, getPendingWithoutOriginResponse.Body.String())
+	}
 	directPending := httptest.NewRequest(http.MethodGet, "/api/v1/session-sync/pending", nil)
 	directPending.Header.Set("Origin", origin)
 	directPendingResponse := httptest.NewRecorder()
@@ -466,12 +473,13 @@ func TestExtensionSessionSyncPairingPendingAndBatchImport(t *testing.T) {
 	if directPendingResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("direct pending status = %d %s", directPendingResponse.Code, directPendingResponse.Body.String())
 	}
-	bodyPending := httptest.NewRequest(http.MethodPost, "/api/v1/session-sync/pending", strings.NewReader(`{"password":"this-is-a-long-test-password"}`))
-	bodyPending.Header.Set("Origin", origin)
-	bodyPendingResponse := httptest.NewRecorder()
-	handler.ServeHTTP(bodyPendingResponse, bodyPending)
-	if bodyPendingResponse.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("body pending status = %d %s", bodyPendingResponse.Code, bodyPendingResponse.Body.String())
+	postPending := httptest.NewRequest(http.MethodPost, "/api/v1/session-sync/pending", nil)
+	postPending.Header.Set("Origin", origin)
+	postPending.Header.Set("Authorization", "Bearer "+exchanged.Token)
+	postPendingResponse := httptest.NewRecorder()
+	handler.ServeHTTP(postPendingResponse, postPending)
+	if postPendingResponse.Code != http.StatusOK || !strings.Contains(postPendingResponse.Body.String(), `"origin":"https://example.test"`) {
+		t.Fatalf("post pending status = %d %s", postPendingResponse.Code, postPendingResponse.Body.String())
 	}
 	bodyBatch := `{"password":"this-is-a-long-test-password","bundles":[{"siteId":` + strconv.FormatInt(site.ID, 10) + `,"origin":"https://example.test","userAgent":"direct-agent","cookies":[{"name":"sid","value":"direct-secret"}]}]}`
 	directBatch := httptest.NewRequest(http.MethodPost, "/api/v1/session-sync/batch", strings.NewReader(bodyBatch))

@@ -196,7 +196,10 @@ func NewHandler(options Options) (http.Handler, error) {
 			}
 			writeJSON(writer, map[string]any{"token": token, "expiresAt": expiresAt})
 		})
-		mux.HandleFunc("GET /api/v1/session-sync/pending", func(writer http.ResponseWriter, request *http.Request) {
+		// Chromium omits the Origin header on cross-origin GET fetches made by
+		// extensions, so the authenticated pending read must also accept POST,
+		// which browsers always send with Origin.
+		pendingHandler := func(writer http.ResponseWriter, request *http.Request) {
 			origin, _, ok := authorizeSessionSync(request, options.SessionSync)
 			if session.ValidExtensionOrigin(origin) {
 				setExtensionCORS(writer, origin)
@@ -211,7 +214,9 @@ func NewHandler(options Options) (http.Handler, error) {
 				return
 			}
 			writeJSON(writer, map[string]any{"sites": items})
-		})
+		}
+		mux.HandleFunc("GET /api/v1/session-sync/pending", pendingHandler)
+		mux.HandleFunc("POST /api/v1/session-sync/pending", pendingHandler)
 		mux.HandleFunc("POST /api/v1/session-sync/batch", func(writer http.ResponseWriter, request *http.Request) {
 			origin := request.Header.Get("Origin")
 			if session.ValidExtensionOrigin(origin) {

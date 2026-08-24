@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Browser session sync no longer fails with 401 right after pairing: Chromium
+  omits the `Origin` header on cross-origin GET fetches made by extensions, so
+  the extension now reads pending sites via POST (which always carries Origin)
+  and the server accepts both GET and POST on `/api/v1/session-sync/pending`.
+- Extension error messages now surface the server's `error` field instead of a
+  generic status code.
+
 ## [v0.1.1] - 2026-08-24
 
 ### Added

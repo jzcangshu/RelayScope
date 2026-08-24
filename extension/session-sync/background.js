@@ -11,7 +11,7 @@ async function api(path, options = {}) {
   const response = await fetch(`${DEFAULT_SERVER}${path}`, { ...options, headers, cache: 'no-store' });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.message || `服务器返回 ${response.status}`);
+    const error = new Error(body.error || `服务器返回 ${response.status}`);
     error.status = response.status;
     throw error;
   }
@@ -21,7 +21,8 @@ async function api(path, options = {}) {
 async function pending() {
   const token = await getToken();
   if (!token) throw new Error('请先输入后台生成的配对码。');
-  return api('/api/v1/session-sync/pending', { headers: { Authorization: `Bearer ${token}` } });
+  const origin = `chrome-extension://${chrome.runtime.id}`;
+  return api('/api/v1/session-sync/pending', { method: 'POST', headers: { Origin: origin, Authorization: `Bearer ${token}` } });
 }
 
 async function getToken() {
