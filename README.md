@@ -8,7 +8,7 @@ RelayPulse 是一个面向 AI API 中转站的，轻量化模型健康度聚合�
 
 支持采集：状态页、模型市场、各分组可用性、模型目录与价格信息。它**不会**发起付费的模型调用来做探测；只保留短期滚动历史，完整保留每个站点的原始模型名与分组名，并呈现统一的跨站点视图。
 
-[![CI](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml)
+[![CI](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## 为什么选择 RelayPulse

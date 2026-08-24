@@ -4,11 +4,11 @@
 
 ![RelayPulse](docs/assets/relaypulse-hero-rounded.png)
 
-RelayPulse collects availability, model-catalog, and pricing data that each relay site already publishes (status pages, model markets, pricing endpoints). It does **not** call paid models to probe them. It keeps a short rolling history, preserves every site's original model and group names, and presents a unified cross-site view.
+RelayPulse is a lightweight, aggregated model-health monitoring system for AI API relay sites.
 
-![Dashboard screenshot](docs/assets/dashboard-light.png)
+It collects: status pages, model markets, per-group availability, model catalogs, and pricing data. It does **not** call paid models to probe them; it keeps a short rolling history, preserves every site's original model and group names, and presents a unified cross-site view.
 
-[![CI](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/relaypulse-oss/actions/workflows/ci.yml)
+[![CI](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Why RelayPulse
@@ -22,6 +22,8 @@ Existing uptime tools (Uptime Kuma, Gatus) monitor HTTP endpoints but don't unde
 | "At what cost?" | Pricing captured alongside health, without making any paid API call |
 
 It distinguishes **service health** (healthy / degraded / failed / no_samples) from **acquisition health** (fresh / stale / collecting / login_expired / challenge_pending), so a collection failure never masquerades as a service outage.
+
+![Dashboard screenshot](docs/assets/dashboard-light.png)
 
 ## Features
 
