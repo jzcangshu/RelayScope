@@ -26,7 +26,7 @@ It distinguishes **service health** (healthy / degraded / failed / no_samples) f
 - **Adapter system** — NewAPI, Sub2API, Uptime Kuma, model-market, and custom probe protocols. Adding a probe variant is one constructor call.
 - **Encrypted credential vault** — authenticated sites' tokens and cookies stored with authenticated encryption; a Chrome extension imports sessions from a logged-in browser.
 - **Cloudflare challenge recovery** — optional FlareSolverr integration for sites behind managed challenges.
-- **Extreme lightweight** — one Go binary, one SQLite file (pure-Go driver, CGO-free), runs on a 1-core / 768 MB VPS.
+- **Extreme lightweight** — one Go binary, one SQLite file (pure-Go driver, CGO-free). A 1-core / 768 MB VPS is suitable for RelayPulse alone at the default site count; see the [deployment sizing guide](docs/deployment-sizing.md) before enabling FlareSolverr or scaling site count.
 - **Honest data** — an empty sample window is `no_samples`, never healthy or failed. No synthetic slots, no composite scores.
 
 ## Quick start

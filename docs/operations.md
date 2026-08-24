@@ -9,6 +9,9 @@
   directory; do not put it in a shell history or repository.
 - Configure the reverse proxy to reach `127.0.0.1:8080` and terminate HTTPS.
 - Configure `RELAYPULSE_PUBLIC_URL=https://relaypulse.example.com` after the domain resolves to the server and the reverse proxy certificate is active.
+- Size the host using [deployment sizing](deployment-sizing.md). The 768 MB
+  profile is for RelayPulse without FlareSolverr; browser challenge recovery
+  needs a larger host and swap.
 
 ## Release files
 
