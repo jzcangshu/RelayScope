@@ -68,6 +68,69 @@ func (store *Store) migrate(ctx context.Context) error {
 		}
 		current = version
 	}
+	if err := store.ensureSiteSchema(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureSiteSchema reconciles the columns used by the current query layer
+// with databases created by the predecessor project. That project used a
+// separate migration sequence and can report a higher schema_version while
+// still lacking columns introduced here.
+func (store *Store) ensureSiteSchema(ctx context.Context) error {
+	rows, err := store.db.QueryContext(ctx, `PRAGMA table_info(sites)`)
+	if err != nil {
+		return fmt.Errorf("inspect sites schema: %w", err)
+	}
+	columns := make(map[string]struct{})
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return fmt.Errorf("read sites schema: %w", err)
+		}
+		columns[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate sites schema: %w", err)
+	}
+	rows.Close()
+	if len(columns) == 0 {
+		return fmt.Errorf("inspect sites schema: sites table is missing")
+	}
+
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin sites schema reconciliation: %w", err)
+	}
+	defer tx.Rollback()
+	if _, ok := columns["next_run_at"]; !ok {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE sites ADD COLUMN next_run_at INTEGER`); err != nil {
+			return fmt.Errorf("add sites.next_run_at: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE sites SET next_run_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000 + ((id * 137) % 900000) WHERE enabled = 1 AND next_run_at IS NULL`); err != nil {
+			return fmt.Errorf("seed sites.next_run_at: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS sites_schedule_idx ON sites(enabled, next_run_at)`); err != nil {
+		return fmt.Errorf("create sites schedule index: %w", err)
+	}
+	if _, ok := columns["deleted_at"]; !ok {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE sites ADD COLUMN deleted_at INTEGER`); err != nil {
+			return fmt.Errorf("add sites.deleted_at: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS sites_active_idx ON sites(enabled, deleted_at, id)`); err != nil {
+		return fmt.Errorf("create sites active index: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit sites schema reconciliation: %w", err)
+	}
 	return nil
 }
 

@@ -176,6 +176,43 @@ func TestMigrationVersionIsRecordedAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestMigrationReconcilesPredecessorSchemaWithHigherVersion(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`
+		CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+		INSERT INTO app_meta(key, value) VALUES ('schema_version', '12'), ('data_revision', '0');
+		CREATE TABLE sites (id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1);
+	`); err != nil {
+		t.Fatal(err)
+	}
+	store := &Store{db: db}
+	if err := store.migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	columns, err := db.Query(`PRAGMA table_info(sites)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer columns.Close()
+	found := map[string]bool{}
+	for columns.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := columns.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			t.Fatal(err)
+		}
+		found[name] = true
+	}
+	if !found["next_run_at"] || !found["deleted_at"] {
+		t.Fatalf("reconciled columns = %+v", found)
+	}
+}
+
 func TestSiteSessionRequirementRoundTrips(t *testing.T) {
 	t.Parallel()
 
