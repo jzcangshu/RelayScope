@@ -44,7 +44,7 @@ make build
 # → listening on http://127.0.0.1:8080
 
 # Or with Docker
-docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relaypulse-oss:latest
+docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relaypulse:latest
 ```
 
 On first run, RelayPulse generates a strong admin password and writes it to `<data-dir>/admin-password.txt` (mode 0600). The public dashboard is open; the admin console is at `/admin/`.
@@ -80,8 +80,6 @@ See `docs/development.md` for the complete list and `deploy/relaypulse.env.examp
 | [Operations](docs/operations.md) | [运维清单](docs/operations.zh-CN.md) |
 | [Development](docs/development.md) | [本地开发](docs/development.zh-CN.md) |
 | [Deployment Sizing](docs/deployment-sizing.md) | [部署容量指南](docs/deployment-sizing.zh-CN.md) |
-
-See also the [development plan](docs/development-plan.md) (Chinese, a record of the open-source restructuring).
 
 ## Adding monitoring sites
 

@@ -44,7 +44,7 @@ make build
 # → 监听 http://127.0.0.1:8080
 
 # 或者使用 Docker
-docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relaypulse-oss:latest
+docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relaypulse:latest
 ```
 
 首次运行时，RelayPulse 会生成一个强管理员密码并写入 `<data-dir>/admin-password.txt`（权限 0600）。公开面板无需登录；管理后台位于 `/admin/`。
@@ -80,8 +80,6 @@ docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relayp
 | [运维清单](docs/operations.zh-CN.md) | [Operations](docs/operations.md) |
 | [本地开发](docs/development.zh-CN.md) | [Development](docs/development.md) |
 | [部署容量指南](docs/deployment-sizing.zh-CN.md) | [Deployment Sizing](docs/deployment-sizing.md) |
-
-另有[开发落地计划](docs/development-plan.md)（中文，开源化改造的过程记录）。
 
 ## 添加监控站点
 
