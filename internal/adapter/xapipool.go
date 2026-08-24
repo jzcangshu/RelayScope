@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 // XAPIPoolAdapter reads X-API's public text-pool request history. The source

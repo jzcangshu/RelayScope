@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/collector"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/store"
+	"relayscope/internal/collector"
+	"relayscope/internal/domain"
+	"relayscope/internal/store"
 )
 
 // scheduledCollectionTimeout must accommodate challenge-protected

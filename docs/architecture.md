@@ -1,10 +1,10 @@
-# RelayPulse Architecture
+# RelayScope Architecture
 
 **English** | [中文](architecture.zh-CN.md)
 
 ## System shape
 
-RelayPulse is a modular monolith. Its normal production runtime is one Go binary serving the public application, administrator console, JSON API, scheduler, collectors, and maintenance jobs. SQLite is the only database.
+RelayScope is a modular monolith. Its normal production runtime is one Go binary serving the public application, administrator console, JSON API, scheduler, collectors, and maintenance jobs. SQLite is the only database.
 
 No Redis, message queue, separate time-series database, or frontend application server is permitted without a measured requirement and an architecture decision record.
 

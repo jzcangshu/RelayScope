@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/admin"
-	"relaypulse/internal/collector"
-	"relaypulse/internal/linuxdo"
-	"relaypulse/internal/session"
-	"relaypulse/internal/store"
+	"relayscope/internal/admin"
+	"relayscope/internal/collector"
+	"relayscope/internal/linuxdo"
+	"relayscope/internal/session"
+	"relayscope/internal/store"
 )
 
 type Options struct {

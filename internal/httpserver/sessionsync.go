@@ -3,10 +3,10 @@ package httpserver
 import (
 	"context"
 	"net/http"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/linuxdo"
-	"relaypulse/internal/session"
-	"relaypulse/internal/store"
+	"relayscope/internal/domain"
+	"relayscope/internal/linuxdo"
+	"relayscope/internal/session"
+	"relayscope/internal/store"
 	"strings"
 	"time"
 )
@@ -15,7 +15,7 @@ func linuxDOUser(service *linuxdo.Service, request *http.Request) (store.User, b
 	if service == nil {
 		return store.User{}, false
 	}
-	cookie, err := request.Cookie("relaypulse_user")
+	cookie, err := request.Cookie("relayscope_user")
 	if err != nil || strings.TrimSpace(cookie.Value) == "" {
 		return store.User{}, false
 	}

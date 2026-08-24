@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/matcher"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/domain"
+	"relayscope/internal/matcher"
+	"relayscope/internal/store"
 )
 
 func TestPersistenceContextSurvivesCancellation(t *testing.T) {
@@ -365,7 +365,7 @@ func (fetcher fakeJSONFetcher) GetBytes(_ context.Context, _ string) ([]byte, ht
 
 func openCollectorStore(t *testing.T) *store.Store {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "relaypulse.db")
+	path := filepath.Join(t.TempDir(), "relayscope.db")
 	opened, err := store.Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open store: %v", err)

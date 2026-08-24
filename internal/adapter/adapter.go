@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 // FetchError keeps transport state available to the collector without making

@@ -84,7 +84,7 @@ Every public snapshot includes:
 
 A source-provided group summary is a window aggregate, not a current observation. Its success ratio, request count, and latency remain available as the 24-hour metrics, while the group's current service state comes from the newest real series bucket.
 
-The newest real bucket timestamp is stored independently from the collection time. A source sample older than two hours is exposed as `no_samples` even when RelayPulse has just fetched an otherwise valid response. This keeps source-data freshness separate from collector health.
+The newest real bucket timestamp is stored independently from the collection time. A source sample older than two hours is exposed as `no_samples` even when RelayScope has just fetched an otherwise valid response. This keeps source-data freshness separate from collector health.
 
 Public timelines contain only persisted source buckets. A collection timestamp or aggregate state must never be inserted into an empty timeline slot. When a source omits bucket end times, inferred intervals are capped at one hour so sparse points cannot claim unobserved multi-hour coverage.
 

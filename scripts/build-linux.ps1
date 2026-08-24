@@ -15,6 +15,6 @@ $env:GOOS = 'linux'
 $env:GOARCH = 'amd64'
 $env:GOCACHE = Join-Path $projectRoot '.cache\go-build-linux-amd64'
 $env:GOMODCACHE = Join-Path $projectRoot '.cache\go-mod'
-& $go build -trimpath -ldflags '-s -w' -o (Join-Path $outputDir 'relaypulse-linux-amd64') ./cmd/relaypulse
+& $go build -trimpath -ldflags '-s -w' -o (Join-Path $outputDir 'relayscope-linux-amd64') ./cmd/relayscope
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Get-FileHash -Algorithm SHA256 (Join-Path $outputDir 'relaypulse-linux-amd64')
+Get-FileHash -Algorithm SHA256 (Join-Path $outputDir 'relayscope-linux-amd64')

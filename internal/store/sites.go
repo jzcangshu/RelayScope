@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 func (store *Store) UpdateSite(ctx context.Context, siteID int64, name, adapterKey, adapterConfig string, enabled bool, sessionRequired *bool, interval, jitter time.Duration) error {

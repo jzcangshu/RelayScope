@@ -41,7 +41,7 @@ test('public theme initialization is CSP-compatible', () => {
   const theme = readFileSync(join(__dirname, 'theme.js'), 'utf8');
   assert.match(page, /<script src="\/assets\/theme\.js"><\/script>/);
   assert.doesNotMatch(page, /<script>\s*try\s*\{/);
-  assert.match(theme, /localStorage\.getItem\('relaypulse-theme'\)/);
+  assert.match(theme, /localStorage\.getItem\('relayscope-theme'\)/);
 });
 
 test('dashboard script renders and polls failure announcements', () => {

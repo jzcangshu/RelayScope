@@ -1,6 +1,6 @@
 importScripts('config.js', 'capture.js');
 
-const DEFAULT_SERVER = self.RELAYPULSE_SERVER || 'http://127.0.0.1:8080';
+const DEFAULT_SERVER = self.RELAYSCOPE_SERVER || 'http://127.0.0.1:8080';
 
 const normalizeServer = (value) => String(value || '').trim().replace(/\/$/, '');
 
@@ -26,14 +26,14 @@ async function pending() {
 }
 
 async function getToken() {
-  const stored = await chrome.storage.local.get(['relaypulseSyncToken', 'relaypulseSyncServer']);
-  return stored.relaypulseSyncServer === DEFAULT_SERVER ? String(stored.relaypulseSyncToken || '') : '';
+  const stored = await chrome.storage.local.get(['relayscopeSyncToken', 'relayscopeSyncServer']);
+  return stored.relayscopeSyncServer === DEFAULT_SERVER ? String(stored.relayscopeSyncToken || '') : '';
 }
 
 async function pair(code) {
   const origin = `chrome-extension://${chrome.runtime.id}`;
   const result = await api('/api/v1/session-sync/exchange', { method: 'POST', body: JSON.stringify({ code }), headers: { Origin: origin } });
-  await chrome.storage.local.set({ relaypulseSyncToken: result.token, relaypulseSyncServer: DEFAULT_SERVER });
+  await chrome.storage.local.set({ relayscopeSyncToken: result.token, relayscopeSyncServer: DEFAULT_SERVER });
   return result;
 }
 
@@ -76,7 +76,7 @@ async function readSub2APITokens(site) {
 }
 
 async function capture(sites, accountCredentials) {
-  const { bundles, skipped } = await self.RelayPulseCapture.prepareBundles(
+  const { bundles, skipped } = await self.RelayScopeCapture.prepareBundles(
     sites,
     accountCredentials,
     readSub2APITokens,
@@ -87,7 +87,7 @@ async function capture(sites, accountCredentials) {
   const token = await getToken();
   if (!token) throw new Error('请先输入后台生成的配对码。');
   const result = await api('/api/v1/session-sync/batch', { method: 'POST', body: JSON.stringify({ bundles }), headers: { Authorization: `Bearer ${token}` } });
-  await chrome.storage.local.remove('relaypulseSyncToken');
+  await chrome.storage.local.remove('relayscopeSyncToken');
   return { ...result, skipped };
 }
 

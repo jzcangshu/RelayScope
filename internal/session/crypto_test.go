@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/store"
+	"relayscope/internal/store"
 )
 
 func TestVaultRoundTripAndTamperRejection(t *testing.T) {

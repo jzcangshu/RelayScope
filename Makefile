@@ -3,17 +3,17 @@ COMMIT  ?= none
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 GOFLAGS := -trimpath -ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(DATE)"
-BIN     := relaypulse
+BIN     := relayscope
 
 .PHONY: build run test vet lint fmt tidy clean check
 
 ## build: compile the server binary into ./bin/
 build:
-	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/$(BIN) ./cmd/relaypulse
+	CGO_ENABLED=0 go build $(GOFLAGS) -o bin/$(BIN) ./cmd/relayscope
 
 ## run: run locally (defaults from internal/config)
 run:
-	go run ./cmd/relaypulse
+	go run ./cmd/relayscope
 
 ## test: run Go tests and the embedded frontend tests
 test:

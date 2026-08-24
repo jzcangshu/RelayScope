@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/admin"
-	"relaypulse/internal/collector"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/linuxdo"
-	"relaypulse/internal/session"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/admin"
+	"relayscope/internal/collector"
+	"relayscope/internal/domain"
+	"relayscope/internal/linuxdo"
+	"relayscope/internal/session"
+	"relayscope/internal/store"
 )
 
 func TestAdapterRegistrationValidationUsesCollectorRegistry(t *testing.T) {
@@ -74,7 +74,7 @@ func TestFeedbackRequiresLinuxDOLoginAndPersistsSubmission(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/feedback", strings.NewReader(`{"content":"状态不正确"}`))
 	request.Header.Set("Content-Type", "application/json")
-	request.AddCookie(&http.Cookie{Name: "relaypulse_user", Value: token})
+	request.AddCookie(&http.Cookie{Name: "relayscope_user", Value: token})
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -110,7 +110,7 @@ func TestHealthAndMetaEndpoints(t *testing.T) {
 		{path: "/health/ready", contains: []string{`"status":"ready"`}},
 		{path: "/api/v1/meta", contains: []string{`"publicUrl":"https://status.example.com"`}},
 		{path: "/", contains: []string{
-			"RelayPulse - 中转站健康监测",
+			"RelayScope - 中转站健康监测",
 			`href="/assets/favicon.svg"`,
 		}, absent: []string{"expiry-countdown"}},
 		{path: "/admin/", contains: []string{"管理员控制台"}},
@@ -263,9 +263,9 @@ func TestAdminSessionImportRequiresAuthAndCSRF(t *testing.T) {
 	var adminCookie, csrfCookie *http.Cookie
 	for _, cookie := range loginResponse.Result().Cookies() {
 		switch cookie.Name {
-		case "relaypulse_admin":
+		case "relayscope_admin":
 			adminCookie = cookie
-		case "relaypulse_csrf":
+		case "relayscope_csrf":
 			csrfCookie = cookie
 		}
 	}
@@ -275,7 +275,7 @@ func TestAdminSessionImportRequiresAuthAndCSRF(t *testing.T) {
 
 	forged := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), strings.NewReader(`{"name":"forged-site","adapterKey":"test-adapter","adapterConfig":"{}","enabled":true,"intervalSeconds":1200,"jitterSeconds":0}`))
 	forged.AddCookie(adminCookie)
-	forgedCSRF := &http.Cookie{Name: "relaypulse_csrf", Value: "unissued-csrf-token"}
+	forgedCSRF := &http.Cookie{Name: "relayscope_csrf", Value: "unissued-csrf-token"}
 	forged.AddCookie(forgedCSRF)
 	forged.Header.Set("X-CSRF-Token", forgedCSRF.Value)
 	forgedResponse := httptest.NewRecorder()
@@ -347,9 +347,9 @@ func TestAdminCanRenameAndDisableSite(t *testing.T) {
 	var adminCookie, csrfCookie *http.Cookie
 	for _, cookie := range loginResponse.Result().Cookies() {
 		switch cookie.Name {
-		case "relaypulse_admin":
+		case "relayscope_admin":
 			adminCookie = cookie
-		case "relaypulse_csrf":
+		case "relayscope_csrf":
 			csrfCookie = cookie
 		}
 	}
@@ -417,10 +417,10 @@ func TestExtensionSessionSyncPairingPendingAndBatchImport(t *testing.T) {
 	handler.ServeHTTP(loginResponse, login)
 	var adminCookie, csrfCookie *http.Cookie
 	for _, cookie := range loginResponse.Result().Cookies() {
-		if cookie.Name == "relaypulse_admin" {
+		if cookie.Name == "relayscope_admin" {
 			adminCookie = cookie
 		}
-		if cookie.Name == "relaypulse_csrf" {
+		if cookie.Name == "relayscope_csrf" {
 			csrfCookie = cookie
 		}
 	}
@@ -670,10 +670,10 @@ func TestAdminSiteLifecycleFiltersAndRedactedSessionMetadata(t *testing.T) {
 	handler.ServeHTTP(loginResponse, login)
 	var adminCookie, csrfCookie *http.Cookie
 	for _, cookie := range loginResponse.Result().Cookies() {
-		if cookie.Name == "relaypulse_admin" {
+		if cookie.Name == "relayscope_admin" {
 			adminCookie = cookie
 		}
-		if cookie.Name == "relaypulse_csrf" {
+		if cookie.Name == "relayscope_csrf" {
 			csrfCookie = cookie
 		}
 	}

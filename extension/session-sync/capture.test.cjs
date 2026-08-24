@@ -51,7 +51,7 @@ test('extension uses pairing tokens instead of embedding the administrator passw
   const config = fs.readFileSync(path.join(__dirname, 'config.example.js'), 'utf8');
   const popup = fs.readFileSync(path.join(__dirname, 'popup.js'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
-  assert.doesNotMatch(background, /RELAYPULSE_ADMIN_PASSWORD|VerifyPassword|password:\s*BUILTIN/);
+  assert.doesNotMatch(background, /RELAYSCOPE_ADMIN_PASSWORD|VerifyPassword|password:\s*BUILTIN/);
   assert.doesNotMatch(config, /ADMIN_PASSWORD|admin credential/i);
   assert.match(popup, /requestOrigins\(\[state\.server\]\)/);
   assert.ok(manifest.optional_host_permissions);

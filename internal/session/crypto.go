@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/store"
+	"relayscope/internal/store"
 )
 
 const SessionPurpose = "site-http"

@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/store"
 )
 
 type Provider struct {

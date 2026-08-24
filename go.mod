@@ -1,4 +1,4 @@
-module relaypulse
+module relayscope
 
 go 1.26.0
 

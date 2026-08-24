@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const csrf = () => document.cookie.split('; ').find((item) => item.startsWith('relaypulse_csrf='))?.split('=')[1] || '';
+const csrf = () => document.cookie.split('; ').find((item) => item.startsWith('relayscope_csrf='))?.split('=')[1] || '';
 const jsonHeaders = () => ({ 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() });
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const words = (value) => String(value || '').split(/[,，\n]+/).map((item) => item.trim()).filter(Boolean);

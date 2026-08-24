@@ -45,55 +45,55 @@ func Load() (Config, error) {
 
 func load(lookup func(string) (string, bool)) (Config, error) {
 	cfg := Config{
-		ListenAddr:           valueOrDefault(lookup, "RELAYPULSE_LISTEN_ADDR", defaultListenAddr),
-		DataDir:              valueOrDefault(lookup, "RELAYPULSE_DATA_DIR", defaultDataDir),
+		ListenAddr:           valueOrDefault(lookup, "RELAYSCOPE_LISTEN_ADDR", defaultListenAddr),
+		DataDir:              valueOrDefault(lookup, "RELAYSCOPE_DATA_DIR", defaultDataDir),
 		ShutdownTimeout:      defaultShutdownPeriod,
 		HTTPConcurrency:      defaultHTTPConcurrency,
 		CollectionTimeout:    defaultCollectionTimeout,
 		HTTPTimeout:          defaultHTTPTimeout,
 		MaintenanceInterval:  defaultMaintenanceInterval,
-		FlareSolverrEndpoint: strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_FLARESOLVERR_ENDPOINT", "")),
-		SessionEncryptionKey: strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_SESSION_ENCRYPTION_KEY", "")),
-		PublicURL:            strings.TrimRight(strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_PUBLIC_URL", "")), "/"),
-		OAuthClientID:        strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_OAUTH_CLIENT_ID", "")),
-		OAuthClientSecret:    strings.TrimSpace(valueOrDefault(lookup, "RELAYPULSE_OAUTH_CLIENT_SECRET", "")),
+		FlareSolverrEndpoint: strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_FLARESOLVERR_ENDPOINT", "")),
+		SessionEncryptionKey: strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_SESSION_ENCRYPTION_KEY", "")),
+		PublicURL:            strings.TrimRight(strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_PUBLIC_URL", "")), "/"),
+		OAuthClientID:        strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_OAUTH_CLIENT_ID", "")),
+		OAuthClientSecret:    strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_OAUTH_CLIENT_SECRET", "")),
 	}
 
 	if err := validateListenAddr(cfg.ListenAddr); err != nil {
-		return Config{}, fmt.Errorf("RELAYPULSE_LISTEN_ADDR: %w", err)
+		return Config{}, fmt.Errorf("RELAYSCOPE_LISTEN_ADDR: %w", err)
 	}
 	if err := validatePublicURL(cfg.PublicURL); err != nil {
-		return Config{}, fmt.Errorf("RELAYPULSE_PUBLIC_URL: %w", err)
+		return Config{}, fmt.Errorf("RELAYSCOPE_PUBLIC_URL: %w", err)
 	}
 	if (cfg.OAuthClientID == "") != (cfg.OAuthClientSecret == "") {
-		return Config{}, errors.New("RELAYPULSE_OAUTH_CLIENT_ID and RELAYPULSE_OAUTH_CLIENT_SECRET must be configured together")
+		return Config{}, errors.New("RELAYSCOPE_OAUTH_CLIENT_ID and RELAYSCOPE_OAUTH_CLIENT_SECRET must be configured together")
 	}
 	if (cfg.OAuthClientID != "" || cfg.OAuthClientSecret != "") && cfg.PublicURL == "" {
-		return Config{}, errors.New("RELAYPULSE_PUBLIC_URL is required when OAuth is configured")
+		return Config{}, errors.New("RELAYSCOPE_PUBLIC_URL is required when OAuth is configured")
 	}
 
 	cleanDataDir := filepath.Clean(strings.TrimSpace(cfg.DataDir))
 	if cleanDataDir == "." || cleanDataDir == "" {
-		return Config{}, errors.New("RELAYPULSE_DATA_DIR must name a dedicated directory")
+		return Config{}, errors.New("RELAYSCOPE_DATA_DIR must name a dedicated directory")
 	}
 	cfg.DataDir = cleanDataDir
 
-	levelText := valueOrDefault(lookup, "RELAYPULSE_LOG_LEVEL", "info")
+	levelText := valueOrDefault(lookup, "RELAYSCOPE_LOG_LEVEL", "info")
 	if err := cfg.LogLevel.UnmarshalText([]byte(strings.ToLower(levelText))); err != nil {
-		return Config{}, fmt.Errorf("RELAYPULSE_LOG_LEVEL: %w", err)
+		return Config{}, fmt.Errorf("RELAYSCOPE_LOG_LEVEL: %w", err)
 	}
 
-	if raw, ok := lookup("RELAYPULSE_SHUTDOWN_TIMEOUT"); ok && strings.TrimSpace(raw) != "" {
+	if raw, ok := lookup("RELAYSCOPE_SHUTDOWN_TIMEOUT"); ok && strings.TrimSpace(raw) != "" {
 		duration, err := time.ParseDuration(raw)
 		if err != nil || duration <= 0 {
-			return Config{}, errors.New("RELAYPULSE_SHUTDOWN_TIMEOUT must be a positive duration")
+			return Config{}, errors.New("RELAYSCOPE_SHUTDOWN_TIMEOUT must be a positive duration")
 		}
 		cfg.ShutdownTimeout = duration
 	}
-	if raw, ok := lookup("RELAYPULSE_HTTP_CONCURRENCY"); ok && strings.TrimSpace(raw) != "" {
+	if raw, ok := lookup("RELAYSCOPE_HTTP_CONCURRENCY"); ok && strings.TrimSpace(raw) != "" {
 		value, err := strconv.Atoi(strings.TrimSpace(raw))
 		if err != nil || value < 1 || value > 32 {
-			return Config{}, errors.New("RELAYPULSE_HTTP_CONCURRENCY must be between 1 and 32")
+			return Config{}, errors.New("RELAYSCOPE_HTTP_CONCURRENCY must be between 1 and 32")
 		}
 		cfg.HTTPConcurrency = value
 	}
@@ -101,9 +101,9 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		target  *time.Duration
 		minimum time.Duration
 	}{
-		"RELAYPULSE_COLLECTION_TIMEOUT":   {&cfg.CollectionTimeout, time.Second},
-		"RELAYPULSE_HTTP_TIMEOUT":         {&cfg.HTTPTimeout, time.Second},
-		"RELAYPULSE_MAINTENANCE_INTERVAL": {&cfg.MaintenanceInterval, time.Minute},
+		"RELAYSCOPE_COLLECTION_TIMEOUT":   {&cfg.CollectionTimeout, time.Second},
+		"RELAYSCOPE_HTTP_TIMEOUT":         {&cfg.HTTPTimeout, time.Second},
+		"RELAYSCOPE_MAINTENANCE_INTERVAL": {&cfg.MaintenanceInterval, time.Minute},
 	} {
 		if raw, ok := lookup(key); ok && strings.TrimSpace(raw) != "" {
 			duration, err := time.ParseDuration(strings.TrimSpace(raw))

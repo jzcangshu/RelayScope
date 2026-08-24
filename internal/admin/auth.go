@@ -135,7 +135,7 @@ func (auth *Auth) Logout(token string) {
 
 func (auth *Auth) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		cookie, err := request.Cookie("relaypulse_admin")
+		cookie, err := request.Cookie("relayscope_admin")
 		if err != nil || !auth.Valid(cookie.Value) {
 			writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 			writer.Header().Set("Cache-Control", "no-store")

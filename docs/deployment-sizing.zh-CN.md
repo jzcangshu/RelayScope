@@ -17,9 +17,9 @@
 | 最近 24 小时写入的指标时间桶 | 79,392 |
 | SQLite 文件 | 90.5 MB |
 | 原始模型 / 站点分组 | 2,122 / 1,698 |
-| 采样期间 RelayPulse RSS | 42-53 MB |
-| RelayPulse 观测到的 cgroup 峰值 | 58.6 MB |
-| 60 秒空闲/正常采样期间 RelayPulse CPU | 单核的 1.7-1.9% |
+| 采样期间 RelayScope RSS | 42-53 MB |
+| RelayScope 观测到的 cgroup 峰值 | 58.6 MB |
+| 60 秒空闲/正常采样期间 RelayScope CPU | 单核的 1.7-1.9% |
 | 公开健康端点延迟 | 本地 0.3-0.7 ms |
 | 采样期间 FlareSolverr RSS | 106 MB |
 | FlareSolverr 观测到的 cgroup 峰值 | 1.07 GB |
@@ -28,7 +28,7 @@
 
 ## 推荐档位
 
-### 仅 RelayPulse
+### 仅 RelayScope
 
 适用于不带 FlareSolverr 或 Chromium 的公开采集：
 
@@ -38,7 +38,7 @@
 
 512 MB 的最低档假设约 40 个站点、默认并发、常规 JSON 载荷，且主机上没有其他吃内存的服务。它是运维下限，不是留有余量的目标值。
 
-### RelayPulse + FlareSolverr
+### RelayScope + FlareSolverr
 
 把 FlareSolverr 及其浏览器进程视为独立负载：
 

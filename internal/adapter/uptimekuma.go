@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/domain"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 )
 
 const (

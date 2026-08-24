@@ -13,10 +13,10 @@ A clear description of what happened and what you expected.
 3.
 
 **Environment**
-- RelayPulse version:
+- RelayScope version:
 - Go version (if built from source):
 - OS / deployment (binary, Docker, systemd):
 - Number of monitored sites:
 
 **Logs**
-Paste relevant (redacted) log output. RelayPulse redacts credentials automatically, but double-check before sharing.
+Paste relevant (redacted) log output. RelayScope redacts credentials automatically, but double-check before sharing.

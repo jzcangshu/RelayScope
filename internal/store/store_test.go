@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/domain"
-	"relaypulse/internal/matcher"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/domain"
+	"relayscope/internal/matcher"
+	"relayscope/internal/pricing"
 )
 
 func TestRefreshMatchesSupportsConcurrentCollectors(t *testing.T) {
@@ -1218,7 +1218,7 @@ func TestPublicDetailGroupsExposeCurrentPricingWithoutHistory(t *testing.T) {
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "relaypulse.db")
+	path := filepath.Join(t.TempDir(), "relayscope.db")
 	store, err := Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open store: %v", err)

@@ -4,7 +4,7 @@
 package adapterutil
 
 import (
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 // Health thresholds for converting a success ratio into a ServiceState.

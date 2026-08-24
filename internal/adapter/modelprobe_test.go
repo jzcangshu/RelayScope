@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 func TestModelProbeCollectsHourlyHistoryAndPricing(t *testing.T) {

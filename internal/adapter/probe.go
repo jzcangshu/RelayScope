@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/adapter/adapterutil"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/adapter/adapterutil"
+	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 )
 
 // ProbeAdapter handles public probe pages whose health and optional pricing

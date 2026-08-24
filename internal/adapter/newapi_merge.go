@@ -3,8 +3,8 @@ package adapter
 import (
 	"fmt"
 	"net/url"
-	"relaypulse/internal/adapter/adapterutil"
-	"relaypulse/internal/domain"
+	"relayscope/internal/adapter/adapterutil"
+	"relayscope/internal/domain"
 	"sort"
 	"strconv"
 	"strings"

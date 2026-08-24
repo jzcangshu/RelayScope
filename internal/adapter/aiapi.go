@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/adapter/adapterutil"
-	"relaypulse/internal/domain"
+	"relayscope/internal/adapter/adapterutil"
+	"relayscope/internal/domain"
 )
 
 // AIAPIAdapter reads the public AIAPI availability matrix and keeps the

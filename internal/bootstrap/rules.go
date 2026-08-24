@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"context"
 
-	"relaypulse/internal/matcher"
-	"relaypulse/internal/store"
+	"relayscope/internal/matcher"
+	"relayscope/internal/store"
 )
 
 func EnsureInitialRules(ctx context.Context, dbStore *store.Store) error {

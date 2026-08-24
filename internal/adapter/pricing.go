@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"relaypulse/internal/domain"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 )
 
 type pricingSource struct {

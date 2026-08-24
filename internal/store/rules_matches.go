@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/matcher"
+	"relayscope/internal/matcher"
 )
 
 func (store *Store) ListUnmatchedModels(ctx context.Context, limit int) ([]UnmatchedModel, error) {

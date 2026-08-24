@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/collector"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/collector"
+	"relayscope/internal/domain"
+	"relayscope/internal/store"
 )
 
 func TestSchedulerStartStop(t *testing.T) {

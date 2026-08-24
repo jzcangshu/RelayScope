@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/matcher"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/domain"
+	"relayscope/internal/matcher"
+	"relayscope/internal/store"
 )
 
 type Collector struct {

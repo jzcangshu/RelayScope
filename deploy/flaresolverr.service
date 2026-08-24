@@ -1,5 +1,5 @@
 [Unit]
-Description=RelayPulse Cloudflare challenge helper
+Description=RelayScope Cloudflare challenge helper
 After=network-online.target
 Wants=network-online.target
 

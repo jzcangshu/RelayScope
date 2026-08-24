@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/store"
+	"relayscope/internal/store"
 )
 
 const (

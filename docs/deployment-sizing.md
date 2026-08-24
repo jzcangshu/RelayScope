@@ -20,9 +20,9 @@ running on Debian 13:
 | Metric buckets written in the last 24 hours | 79,392 |
 | SQLite file | 90.5 MB |
 | Raw models / site groups | 2,122 / 1,698 |
-| RelayPulse RSS during sampling | 42-53 MB |
-| RelayPulse observed cgroup peak | 58.6 MB |
-| RelayPulse CPU during a 60-second idle/normal sample | 1.7-1.9% of one host CPU |
+| RelayScope RSS during sampling | 42-53 MB |
+| RelayScope observed cgroup peak | 58.6 MB |
+| RelayScope CPU during a 60-second idle/normal sample | 1.7-1.9% of one host CPU |
 | Public health endpoint latency | 0.3-0.7 ms locally |
 | FlareSolverr RSS during sampling | 106 MB |
 | FlareSolverr observed cgroup peak | 1.07 GB |
@@ -34,7 +34,7 @@ capacity during the measurement.
 
 ## Recommended sizes
 
-### RelayPulse only
+### RelayScope only
 
 For public collection without FlareSolverr or Chromium:
 
@@ -47,7 +47,7 @@ The 512 MB minimum assumes roughly 40 sites, default concurrency, normal
 JSON payloads, and no other memory-heavy service on the host. It is an
 operational floor, not a target for headroom.
 
-### RelayPulse with FlareSolverr
+### RelayScope with FlareSolverr
 
 Treat FlareSolverr and its browser processes as a separate workload:
 

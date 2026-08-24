@@ -1,15 +1,15 @@
 [Unit]
-Description=RelayPulse model uptime monitor
+Description=RelayScope model uptime monitor
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=relaypulse
-Group=relaypulse
-WorkingDirectory=/opt/relaypulse
-ExecStart=/opt/relaypulse/relaypulse
-EnvironmentFile=-/etc/relaypulse/relaypulse.env
+User=relayscope
+Group=relayscope
+WorkingDirectory=/opt/relayscope
+ExecStart=/opt/relayscope/relayscope
+EnvironmentFile=-/etc/relayscope/relayscope.env
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=20
@@ -17,7 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/relaypulse
+ReadWritePaths=/var/lib/relayscope
 
 [Install]
 WantedBy=multi-user.target

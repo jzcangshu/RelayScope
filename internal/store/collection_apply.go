@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 func (store *Store) ApplyCollection(ctx context.Context, collection domain.Collection, normalize func(string) string) (int64, []int64, error) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 func TestXAPIPoolSharesPublicRequestRhythmAcrossTextModels(t *testing.T) {

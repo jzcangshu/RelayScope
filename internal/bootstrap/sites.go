@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"relaypulse/internal/store"
+	"relayscope/internal/store"
 )
 
 type SiteSeed struct {
@@ -16,7 +16,7 @@ type SiteSeed struct {
 	SessionRequired bool
 }
 
-// InitialSites is intentionally empty. RelayPulse starts with a clean database;
+// InitialSites is intentionally empty. RelayScope starts with a clean database;
 // sites are added through the admin console. See sites.example.json for the
 // configuration format.
 var InitialSites = []SiteSeed{}

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"relaypulse/internal/adapter/adapterutil"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/adapter/adapterutil"
+	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 	"strings"
 	"time"
 )

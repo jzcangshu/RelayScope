@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/adapter/adapterutil"
-	"relaypulse/internal/domain"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/adapter/adapterutil"
+	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 )
 
 // ModelProbeAdapter reads the authenticated model-probe report exposed by

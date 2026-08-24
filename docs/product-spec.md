@@ -1,10 +1,10 @@
-# RelayPulse Product Specification
+# RelayScope Product Specification
 
 **English** | [中文](product-spec.zh-CN.md)
 
 ## Purpose
 
-RelayPulse answers two practical questions for users of AI API relay sites:
+RelayScope answers two practical questions for users of AI API relay sites:
 
 1. If I want to use a model now, which site and group currently look usable?
 2. If I want to use a site now, which monitored models and groups currently look usable?
@@ -45,11 +45,11 @@ Cross-site statistical scoring, long-term analytics, and low-usage model coverag
 
 ## Adding sites
 
-RelayPulse starts with an empty database. Sites are added through the admin console. Display names may fall back to the site's own title or hostname and can be edited after creation. See `sites.example.json` in the repository root for the configuration format.
+RelayScope starts with an empty database. Sites are added through the admin console. Display names may fall back to the site's own title or hostname and can be edited after creation. See `sites.example.json` in the repository root for the configuration format.
 
 ## Model matching rules
 
-RelayPulse ships with a small set of example matching rules that demonstrate each matching capability (required terms, excluded terms, regex patterns, aliases, priority-based specificity). Administrators add their own rules through the console to match the model families they care about.
+RelayScope ships with a small set of example matching rules that demonstrate each matching capability (required terms, excluded terms, regex patterns, aliases, priority-based specificity). Administrators add their own rules through the console to match the model families they care about.
 
 Matching is intentionally recall-oriented. Prefix and suffix variants coexist as distinct raw models. Rules are deterministic and editable. Exactly one matching rule assigns the public canonical model; multiple matching candidates are retained as an administrator-visible conflict with no public canonical assignment until the rule set is corrected. Exact raw names are never rewritten.
 
@@ -92,7 +92,7 @@ A failed collection retains the last successful service snapshot. A raw model be
 ## Authentication and challenge boundaries
 
 - Authenticated sites are approved for session import through their configured OAuth provider.
-- RelayPulse does not automate the OAuth login challenge; the administrator completes authorization locally and imports the minimal session bundle.
+- RelayScope does not automate the OAuth login challenge; the administrator completes authorization locally and imports the minimal session bundle.
 - OAuth session import and Cloudflare recovery are separate workflows sharing only the encrypted credential store.
 - Occasional checkbox-style Cloudflare challenges must be attempted unattended.
 - FlareSolverr may be pinned, wrapped, or patched as a replaceable challenge provider.

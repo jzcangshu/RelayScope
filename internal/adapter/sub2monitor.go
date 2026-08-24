@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 // Sub2MonitorAdapter reads the authenticated, user-facing channel monitor

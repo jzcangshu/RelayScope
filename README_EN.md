@@ -1,21 +1,21 @@
-# RelayPulse
+# RelayScope
 
 **English** | [中文](README.md)
 
-![RelayPulse](docs/assets/relaypulse-hero-rounded.png)
+![RelayScope](docs/assets/relayscope-hero-rounded.png)
 
-RelayPulse is a lightweight, aggregated model-health monitoring system for AI API relay sites.
+RelayScope is a lightweight, aggregated model-health monitoring system for AI API relay sites.
 
 It collects: status pages, model markets, per-group availability, model catalogs, and pricing data. It does **not** call paid models to probe them; it keeps a short rolling history, preserves every site's original model and group names, and presents a unified cross-site view.
 
-[![CI](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml)
+[![CI](https://github.com/jzcangshu/RelayScope/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/RelayScope/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Why RelayPulse
+## Why RelayScope
 
-Existing uptime tools (Uptime Kuma, Gatus) monitor HTTP endpoints but don't understand **models**. LLM gateways (LiteLLM, Helicone) observe your own traffic but can't compare sites you haven't routed through them. RelayPulse fills the gap between:
+Existing uptime tools (Uptime Kuma, Gatus) monitor HTTP endpoints but don't understand **models**. LLM gateways (LiteLLM, Helicone) observe your own traffic but can't compare sites you haven't routed through them. RelayScope fills the gap between:
 
-| Question | RelayPulse answers it by |
+| Question | RelayScope answers it by |
 |---|---|
 | "Which site currently serves model X?" | Reading each site's own status/market data, per model and per group |
 | "Is site Y usable right now?" | Cross-model view with service state vs. collection state kept independent |
@@ -32,7 +32,7 @@ It distinguishes **service health** (healthy / degraded / failed / no_samples) f
 - **Adapter system** — NewAPI, Sub2API, Uptime Kuma, model-market, and custom probe protocols. Adding a probe variant is one constructor call.
 - **Encrypted credential vault** — authenticated sites' tokens and cookies stored with authenticated encryption; a Chrome extension imports sessions from a logged-in browser.
 - **Cloudflare challenge recovery** — optional FlareSolverr integration for sites behind managed challenges.
-- **Extreme lightweight** — one Go binary, one SQLite file (pure-Go driver, CGO-free). A 1-core / 768 MB VPS is suitable for RelayPulse alone at the default site count; see the [deployment sizing guide](docs/deployment-sizing.md) before enabling FlareSolverr or scaling site count.
+- **Extreme lightweight** — one Go binary, one SQLite file (pure-Go driver, CGO-free). A 1-core / 768 MB VPS is suitable for RelayScope alone at the default site count; see the [deployment sizing guide](docs/deployment-sizing.md) before enabling FlareSolverr or scaling site count.
 - **Honest data** — an empty sample window is `no_samples`, never healthy or failed. No synthetic slots, no composite scores.
 
 ## Quick start
@@ -40,14 +40,14 @@ It distinguishes **service health** (healthy / degraded / failed / no_samples) f
 ```bash
 # From source (Go 1.26+)
 make build
-./bin/relaypulse
+./bin/relayscope
 # → listening on http://127.0.0.1:8080
 
 # Or with Docker
-docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relaypulse:latest
+docker run -d -p 8080:8080 -v relayscope-data:/app/data ghcr.io/jzcangshu/relayscope:latest
 ```
 
-On first run, RelayPulse generates a strong admin password and writes it to `<data-dir>/admin-password.txt` (mode 0600). The public dashboard is open; the admin console is at `/admin/`.
+On first run, RelayScope generates a strong admin password and writes it to `<data-dir>/admin-password.txt` (mode 0600). The public dashboard is open; the admin console is at `/admin/`.
 
 ## Configuration
 
@@ -55,19 +55,19 @@ All configuration is via environment variables. Key ones:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `RELAYPULSE_LISTEN_ADDR` | `127.0.0.1:8080` | Listen address |
-| `RELAYPULSE_DATA_DIR` | `data` | SQLite database + admin password location |
-| `RELAYPULSE_LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
-| `RELAYPULSE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown deadline |
-| `RELAYPULSE_PUBLIC_URL` | _empty_ | Canonical public URL (OAuth callbacks) |
-| `RELAYPULSE_SESSION_ENCRYPTION_KEY` | _empty_ | Key for encrypting imported site sessions |
-| `RELAYPULSE_FLARESOLVERR_ENDPOINT` | _empty_ | Optional FlareSolverr endpoint (loopback) |
-| `RELAYPULSE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations |
-| `RELAYPULSE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
-| `RELAYPULSE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
-| `RELAYPULSE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval |
+| `RELAYSCOPE_LISTEN_ADDR` | `127.0.0.1:8080` | Listen address |
+| `RELAYSCOPE_DATA_DIR` | `data` | SQLite database + admin password location |
+| `RELAYSCOPE_LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
+| `RELAYSCOPE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown deadline |
+| `RELAYSCOPE_PUBLIC_URL` | _empty_ | Canonical public URL (OAuth callbacks) |
+| `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | _empty_ | Key for encrypting imported site sessions |
+| `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | _empty_ | Optional FlareSolverr endpoint (loopback) |
+| `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
+| `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
+| `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval |
 
-See `docs/development.md` for the complete list and `deploy/relaypulse.env.example` for a template.
+See `docs/development.md` for the complete list and `deploy/relayscope.env.example` for a template.
 
 ## Documentation
 
@@ -83,7 +83,7 @@ See `docs/development.md` for the complete list and `deploy/relaypulse.env.examp
 
 ## Adding monitoring sites
 
-RelayPulse starts with an empty database. Add sites through the admin console (`/admin/`):
+RelayScope starts with an empty database. Add sites through the admin console (`/admin/`):
 
 1. Choose an adapter and provide its configuration (the console renders a form from the adapter's JSON Schema).
 2. Optionally import a login session for authenticated sites.
@@ -95,22 +95,22 @@ A `sites.example.json` is provided as a reference for the configuration format.
 
 | Deployment | CPU | RAM | Disk | Swap |
 | --- | ---: | ---: | ---: | ---: |
-| RelayPulse only | 1-2 vCPU | 1 GB | 10 GB free | 1-2 GB |
+| RelayScope only | 1-2 vCPU | 1 GB | 10 GB free | 1-2 GB |
 | With FlareSolverr | 2-4 vCPU | 4 GB | 20 GB free | 4 GB |
 
-The 768 MB profile is suitable for RelayPulse alone at the default site count,
+The 768 MB profile is suitable for RelayScope alone at the default site count,
 not for Chromium/FlareSolverr. See the [measured sizing guide](docs/deployment-sizing.md)
 for capacity assumptions and expansion signals.
 
 ## Project status
 
-RelayPulse is prepared for its first public release. Version tags publish the
+RelayScope is prepared for its first public release. Version tags publish the
 CGO-free container image; review the operations checklist before deployment.
 See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## License
 
-[MIT](LICENSE) — RelayPulse contributors.
+[MIT](LICENSE) — RelayScope contributors.
 
 ## LinuxDo 社区
 

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"relaypulse/internal/store"
+	"relayscope/internal/store"
 )
 
 func TestInitialSitesIsEmptyForCleanStart(t *testing.T) {
@@ -15,7 +15,7 @@ func TestInitialSitesIsEmptyForCleanStart(t *testing.T) {
 }
 
 func TestEnsureInitialSitesIsNoOpOnEmptyDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "relaypulse.db")
+	path := filepath.Join(t.TempDir(), "relayscope.db")
 	dbStore, err := store.Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open store: %v", err)

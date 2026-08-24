@@ -392,9 +392,9 @@ async function loadAnnouncements() {
     renderAnnouncements();
     if (changed && announcements.length) {
       let seen = '';
-      try { seen = localStorage.getItem('relaypulse-announcements-seen') || ''; } catch (_) {}
+      try { seen = localStorage.getItem('relayscope-announcements-seen') || ''; } catch (_) {}
       if (seen !== nextSignature) {
-        try { localStorage.setItem('relaypulse-announcements-seen', nextSignature); } catch (_) {}
+        try { localStorage.setItem('relayscope-announcements-seen', nextSignature); } catch (_) {}
         announcementDialog.showModal();
       }
     }
@@ -463,7 +463,7 @@ function applyTheme(preference) {
 function initializeTheme() {
   let preference = 'auto';
   try {
-    preference = localStorage.getItem('relaypulse-theme') || 'auto';
+    preference = localStorage.getItem('relayscope-theme') || 'auto';
   } catch (_) {}
   applyTheme(preference);
 }
@@ -493,7 +493,7 @@ siteViewButton.addEventListener('click', () => {
 themeToggle.addEventListener('click', () => {
   const modes = ['auto', 'light', 'dark'];
   const preference = modes[(modes.indexOf(themeToggle.dataset.mode) + 1) % modes.length];
-  try { localStorage.setItem('relaypulse-theme', preference); } catch (_) {}
+  try { localStorage.setItem('relayscope-theme', preference); } catch (_) {}
   applyTheme(preference);
 });
 systemTheme.addEventListener('change', () => {

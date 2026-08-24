@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 func TestAIAPIProbePreservesChannelGroupsAnd24HourTimeline(t *testing.T) {

@@ -2,7 +2,7 @@
 
 **English** | [中文](adapter-authoring.zh-CN.md)
 
-An adapter is a compiled module registered in `cmd/relaypulse/main.go`. It
+An adapter is a compiled module registered in `cmd/relayscope/main.go`. It
 must implement the small `internal/adapter.Adapter` contract and return a
 validated `domain.Collection`; it never writes SQLite directly.
 

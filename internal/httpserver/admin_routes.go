@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/matcher"
-	"relaypulse/internal/session"
-	"relaypulse/internal/store"
+	"relayscope/internal/matcher"
+	"relayscope/internal/session"
+	"relayscope/internal/store"
 )
 
 // manualCollectionTimeout mirrors scheduler.scheduledCollectionTimeout so
@@ -45,16 +45,16 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusInternalServerError, "create CSRF token")
 				return
 			}
-			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_admin", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil, MaxAge: 12 * 60 * 60})
-			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_csrf", Value: csrfToken, Path: "/", HttpOnly: false, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil, MaxAge: 12 * 60 * 60})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_admin", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil, MaxAge: 12 * 60 * 60})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_csrf", Value: csrfToken, Path: "/", HttpOnly: false, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil, MaxAge: 12 * 60 * 60})
 			writeJSON(writer, map[string]string{"status": "ok"})
 		})
 		mux.Handle("POST /api/v1/admin/logout", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if cookie, err := request.Cookie("relaypulse_admin"); err == nil {
+			if cookie, err := request.Cookie("relayscope_admin"); err == nil {
 				options.Auth.Logout(cookie.Value)
 			}
-			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_admin", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
-			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_csrf", Value: "", Path: "/", MaxAge: -1, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_admin", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_csrf", Value: "", Path: "/", MaxAge: -1, SameSite: http.SameSiteStrictMode, Secure: request.TLS != nil})
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
 		adminHandler := options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

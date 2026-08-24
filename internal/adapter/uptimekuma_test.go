@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/domain"
-	"relaypulse/internal/pricing"
+	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 )
 
 type uptimeKumaTestFetcher map[string][]byte

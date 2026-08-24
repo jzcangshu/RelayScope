@@ -3,7 +3,7 @@ package adapter
 import (
 	"encoding/json"
 
-	"relaypulse/internal/pricing"
+	"relayscope/internal/pricing"
 )
 
 type NewAPIConfig struct {

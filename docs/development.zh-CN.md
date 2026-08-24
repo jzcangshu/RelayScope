@@ -21,25 +21,25 @@
 ./scripts/dev.ps1
 ```
 
-开发服务器默认监听 `http://127.0.0.1:8080`。运行时状态默认存于 `data/relaypulse.db`，已被 Git 排除。
+开发服务器默认监听 `http://127.0.0.1:8080`。运行时状态默认存于 `data/relayscope.db`，已被 Git 排除。
 
 目前支持的环境变量：
 
 | 变量 | 默认值 | 含义 |
 | --- | --- | --- |
-| `RELAYPULSE_LISTEN_ADDR` | `127.0.0.1:8080` | HTTP 监听地址 |
-| `RELAYPULSE_DATA_DIR` | `data` | 运行时数据目录 |
-| `RELAYPULSE_LOG_LEVEL` | `info` | `debug`、`info`、`warn` 或 `error` |
-| `RELAYPULSE_SHUTDOWN_TIMEOUT` | `10s` | 优雅停机超时 |
-| `RELAYPULSE_FLARESOLVERR_ENDPOINT` | 空 | 可选的环回 FlareSolverr 端点，例如 `http://127.0.0.1:8191`；只有在收到非 2xx 响应且响应体明显像 Cloudflare 验证页时才会联系它 |
-| `RELAYPULSE_SESSION_ENCRYPTION_KEY` | 空 | 可选的 base64url 密钥（编码前至少 32 字节），用于加密站点会话包 |
-| `RELAYPULSE_PUBLIC_URL` | 空 | 可选的公网 HTTP/HTTPS 源（origin），在生产域名就绪后配置 |
-| `RELAYPULSE_OAUTH_CLIENT_ID` | 空 | OAuth 提供方客户端 ID；与客户端密钥一起配置后启用公开登录（当前为 LinuxDo） |
-| `RELAYPULSE_OAUTH_CLIENT_SECRET` | 空 | OAuth 提供方客户端密钥；只保存在受保护的部署配置中 |
-| `RELAYPULSE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作的最大并发数（1-32） |
-| `RELAYPULSE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集的超时时间 |
-| `RELAYPULSE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |
-| `RELAYPULSE_MAINTENANCE_INTERVAL` | `30m` | 历史清理间隔（最小 1m） |
+| `RELAYSCOPE_LISTEN_ADDR` | `127.0.0.1:8080` | HTTP 监听地址 |
+| `RELAYSCOPE_DATA_DIR` | `data` | 运行时数据目录 |
+| `RELAYSCOPE_LOG_LEVEL` | `info` | `debug`、`info`、`warn` 或 `error` |
+| `RELAYSCOPE_SHUTDOWN_TIMEOUT` | `10s` | 优雅停机超时 |
+| `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | 空 | 可选的环回 FlareSolverr 端点，例如 `http://127.0.0.1:8191`；只有在收到非 2xx 响应且响应体明显像 Cloudflare 验证页时才会联系它 |
+| `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | 空 | 可选的 base64url 密钥（编码前至少 32 字节），用于加密站点会话包 |
+| `RELAYSCOPE_PUBLIC_URL` | 空 | 可选的公网 HTTP/HTTPS 源（origin），在生产域名就绪后配置 |
+| `RELAYSCOPE_OAUTH_CLIENT_ID` | 空 | OAuth 提供方客户端 ID；与客户端密钥一起配置后启用公开登录（当前为 LinuxDo） |
+| `RELAYSCOPE_OAUTH_CLIENT_SECRET` | 空 | OAuth 提供方客户端密钥；只保存在受保护的部署配置中 |
+| `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作的最大并发数（1-32） |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集的超时时间 |
+| `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |
+| `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | 历史清理间隔（最小 1m） |
 
 ## 会话导入
 
@@ -81,25 +81,25 @@ $env:GOMODCACHE = Join-Path $PWD '.cache\go-mod'
 
 ```ini
 [Unit]
-Description=RelayPulse uptime monitor
+Description=RelayScope uptime monitor
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=relaypulse
-Group=relaypulse
-WorkingDirectory=/opt/relaypulse
-ExecStart=/opt/relaypulse/relaypulse
-Environment=RELAYPULSE_LISTEN_ADDR=127.0.0.1:8080
-Environment=RELAYPULSE_DATA_DIR=/var/lib/relaypulse
-EnvironmentFile=-/etc/relaypulse/relaypulse.env
+User=relayscope
+Group=relayscope
+WorkingDirectory=/opt/relayscope
+ExecStart=/opt/relayscope/relayscope
+Environment=RELAYSCOPE_LISTEN_ADDR=127.0.0.1:8080
+Environment=RELAYSCOPE_DATA_DIR=/var/lib/relayscope
+EnvironmentFile=-/etc/relayscope/relayscope.env
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/relaypulse
+ReadWritePaths=/var/lib/relayscope
 
 [Install]
 WantedBy=multi-user.target
@@ -107,10 +107,10 @@ WantedBy=multi-user.target
 
 FlareSolverr 是可选组件，必须单独管理，只绑定 `127.0.0.1`。保持单并发、短超时与失败冷却；它并不保证每个 Cloudflare 验证都能通过。不要在没有 swap 和内存监控的小内存主机上同时运行 Chromium 与 FlareSolverr。
 
-OAuth 登录的人机验证不由 RelayPulse 自动处理。管理员在本地 Chrome 完成授权后，将最小化的 User-Agent（浏览器标识）与 Cookie（会话 Cookie）包导入后台；主服务不会读取 Chrome 配置目录，也不会把浏览器凭据写入 Git，导入内容通过上述密钥加密后保存。
+OAuth 登录的人机验证不由 RelayScope 自动处理。管理员在本地 Chrome 完成授权后，将最小化的 User-Agent（浏览器标识）与 Cookie（会话 Cookie）包导入后台；主服务不会读取 Chrome 配置目录，也不会把浏览器凭据写入 Git，导入内容通过上述密钥加密后保存。
 
 ## Chrome 会话同步
 
-将 `extension/session-sync` 作为未打包的 Manifest V3 扩展加载。在管理后台选择 **浏览器同步**，复制十分钟有效的配对码，然后在扩展中连同 RelayPulse 源（origin）一并输入。它永远不会拿到管理员密码或管理员 Cookie。
+将 `extension/session-sync` 作为未打包的 Manifest V3 扩展加载。在管理后台选择 **浏览器同步**，复制十分钟有效的配对码，然后在扩展中连同 RelayScope 源（origin）一并输入。它永远不会拿到管理员密码或管理员 Cookie。
 
 同步令牌绑定到扩展源，三十分钟后过期，并在一次成功批量导入后作废。当操作者打开待接入站点的页面时，扩展只为列出的待接入站点源申请宿主权限。服务器通过现有的加密会话保险库保存导入的包。

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/adapter"
+	"relayscope/internal/adapter"
 )
 
 const (

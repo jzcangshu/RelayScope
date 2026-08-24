@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"relaypulse/internal/domain"
-	"relaypulse/internal/session"
-	"relaypulse/internal/store"
-	webassets "relaypulse/web"
+	"relayscope/internal/domain"
+	"relayscope/internal/session"
+	"relayscope/internal/store"
+	webassets "relayscope/web"
 )
 
 func NewHandler(options Options) (http.Handler, error) {
@@ -91,7 +91,7 @@ func NewHandler(options Options) (http.Handler, error) {
 				writeError(writer, http.StatusInternalServerError, "创建登录会话失败")
 				return
 			}
-			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_user", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: request.TLS != nil, Expires: expires})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_user", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: request.TLS != nil, Expires: expires})
 			http.Redirect(writer, request, "/", http.StatusFound)
 		})
 		mux.HandleFunc("GET /api/v1/auth/me", func(writer http.ResponseWriter, request *http.Request) {
@@ -102,10 +102,10 @@ func NewHandler(options Options) (http.Handler, error) {
 			writeJSON(writer, map[string]any{"authenticated": false})
 		})
 		mux.HandleFunc("POST /api/v1/auth/logout", func(writer http.ResponseWriter, request *http.Request) {
-			if cookie, err := request.Cookie("relaypulse_user"); err == nil {
+			if cookie, err := request.Cookie("relayscope_user"); err == nil {
 				options.LinuxDO.Logout(cookie.Value)
 			}
-			http.SetCookie(writer, &http.Cookie{Name: "relaypulse_user", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: request.TLS != nil})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_user", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: request.TLS != nil})
 			writeJSON(writer, map[string]string{"status": "ok"})
 		})
 		mux.HandleFunc("POST /api/v1/feedback", func(writer http.ResponseWriter, request *http.Request) {

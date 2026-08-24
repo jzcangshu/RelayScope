@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/store"
 )
 
 func TestProviderInjectsEncryptedSiteSession(t *testing.T) {

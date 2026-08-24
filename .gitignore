@@ -14,8 +14,8 @@
 /data-goal/
 /data-ui-test/
 /.secrets/
-/relaypulse.exe
-/relaypulse-check.exe
+/relayscope.exe
+/relayscope-check.exe
 /var/
 .env
 .env.*
@@ -34,7 +34,7 @@ Thumbs.db
 
 # Local agent/tool residue
 .codex-read-write-test.txt
-relaypulse.exe~
+relayscope.exe~
 
 # Vendored frontend libraries (committed intentionally; see web/admin/vendor/)
 !web/admin/vendor/

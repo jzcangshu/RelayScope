@@ -20,6 +20,6 @@
     return { bundles, skipped };
   }
 
-  scope.RelayPulseCapture = { prepareBundles };
-  if (typeof module !== 'undefined') module.exports = scope.RelayPulseCapture;
+  scope.RelayScopeCapture = { prepareBundles };
+  if (typeof module !== 'undefined') module.exports = scope.RelayScopeCapture;
 })(typeof self !== 'undefined' ? self : globalThis);

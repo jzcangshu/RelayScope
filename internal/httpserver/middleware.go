@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"relaypulse/internal/admin"
+	"relayscope/internal/admin"
 )
 
 func noStore(next http.Handler) http.Handler {
@@ -40,12 +40,12 @@ func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 func csrfMiddleware(auth *admin.Auth, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		csrfToken := request.Header.Get("X-CSRF-Token")
-		adminCookie, adminErr := request.Cookie("relaypulse_admin")
+		adminCookie, adminErr := request.Cookie("relayscope_admin")
 		if auth == nil || adminErr != nil || csrfToken == "" {
 			writeError(writer, http.StatusForbidden, "CSRF token required")
 			return
 		}
-		cookie, err := request.Cookie("relaypulse_csrf")
+		cookie, err := request.Cookie("relayscope_csrf")
 		issuedToken, issued := auth.CSRFToken(adminCookie.Value)
 		if err != nil || cookie.Value == "" || cookie.Value != csrfToken || !issued || issuedToken != csrfToken {
 			writeError(writer, http.StatusForbidden, "invalid CSRF token")

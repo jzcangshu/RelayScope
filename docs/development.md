@@ -21,25 +21,25 @@ Expected SHA-256:
 ./scripts/dev.ps1
 ```
 
-The development server defaults to `http://127.0.0.1:8080`. Runtime state defaults to `data/relaypulse.db` and is excluded from Git.
+The development server defaults to `http://127.0.0.1:8080`. Runtime state defaults to `data/relayscope.db` and is excluded from Git.
 
 Supported environment variables currently are:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `RELAYPULSE_LISTEN_ADDR` | `127.0.0.1:8080` | HTTP listen address |
-| `RELAYPULSE_DATA_DIR` | `data` | Runtime data directory |
-| `RELAYPULSE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-| `RELAYPULSE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout |
-| `RELAYPULSE_FLARESOLVERR_ENDPOINT` | empty | Optional loopback FlareSolverr endpoint, for example `http://127.0.0.1:8191`; only contacted after a non-2xx response whose body explicitly looks like a Cloudflare challenge |
-| `RELAYPULSE_SESSION_ENCRYPTION_KEY` | empty | Optional base64url key (at least 32 bytes before encoding) used to encrypt site session bundles |
-| `RELAYPULSE_PUBLIC_URL` | empty | Optional public HTTP/HTTPS origin, configured after the production domain is ready |
-| `RELAYPULSE_OAUTH_CLIENT_ID` | empty | OAuth provider client ID; together with the secret enables public login (currently LinuxDo) |
-| `RELAYPULSE_OAUTH_CLIENT_SECRET` | empty | OAuth provider client secret; keep only in protected deployment configuration |
-| `RELAYPULSE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations (1-32) |
-| `RELAYPULSE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
-| `RELAYPULSE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
-| `RELAYPULSE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval (minimum 1m) |
+| `RELAYSCOPE_LISTEN_ADDR` | `127.0.0.1:8080` | HTTP listen address |
+| `RELAYSCOPE_DATA_DIR` | `data` | Runtime data directory |
+| `RELAYSCOPE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
+| `RELAYSCOPE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout |
+| `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | empty | Optional loopback FlareSolverr endpoint, for example `http://127.0.0.1:8191`; only contacted after a non-2xx response whose body explicitly looks like a Cloudflare challenge |
+| `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | empty | Optional base64url key (at least 32 bytes before encoding) used to encrypt site session bundles |
+| `RELAYSCOPE_PUBLIC_URL` | empty | Optional public HTTP/HTTPS origin, configured after the production domain is ready |
+| `RELAYSCOPE_OAUTH_CLIENT_ID` | empty | OAuth provider client ID; together with the secret enables public login (currently LinuxDo) |
+| `RELAYSCOPE_OAUTH_CLIENT_SECRET` | empty | OAuth provider client secret; keep only in protected deployment configuration |
+| `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations (1-32) |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
+| `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
+| `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval (minimum 1m) |
 
 ## Session import
 
@@ -111,25 +111,25 @@ outside the release directory. A minimal systemd unit is:
 
 ```ini
 [Unit]
-Description=RelayPulse uptime monitor
+Description=RelayScope uptime monitor
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=relaypulse
-Group=relaypulse
-WorkingDirectory=/opt/relaypulse
-ExecStart=/opt/relaypulse/relaypulse
-Environment=RELAYPULSE_LISTEN_ADDR=127.0.0.1:8080
-Environment=RELAYPULSE_DATA_DIR=/var/lib/relaypulse
-EnvironmentFile=-/etc/relaypulse/relaypulse.env
+User=relayscope
+Group=relayscope
+WorkingDirectory=/opt/relayscope
+ExecStart=/opt/relayscope/relayscope
+Environment=RELAYSCOPE_LISTEN_ADDR=127.0.0.1:8080
+Environment=RELAYSCOPE_DATA_DIR=/var/lib/relayscope
+EnvironmentFile=-/etc/relayscope/relayscope.env
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/relaypulse
+ReadWritePaths=/var/lib/relayscope
 
 [Install]
 WantedBy=multi-user.target
@@ -141,13 +141,13 @@ failure cooldown; it is not a guarantee that every Cloudflare challenge can
 be solved. Do not run Chromium and FlareSolverr on a 768 MB host without swap
 and memory monitoring.
 
-OAuth 登录的人机验证不由 RelayPulse 自动处理。管理员在本地 Chrome 完成授权后，将最小化的 User-Agent（浏览器标识）与 Cookie（会话 Cookie）包导入后台；主服务不会读取 Chrome 配置目录，也不会把浏览器凭据写入 Git，导入内容通过上述密钥加密后保存。
+OAuth 登录的人机验证不由 RelayScope 自动处理。管理员在本地 Chrome 完成授权后，将最小化的 User-Agent（浏览器标识）与 Cookie（会话 Cookie）包导入后台；主服务不会读取 Chrome 配置目录，也不会把浏览器凭据写入 Git，导入内容通过上述密钥加密后保存。
 
 ## Chrome session sync
 
 Load `extension/session-sync` as an unpacked Manifest V3 extension. In the
 administrator console choose **浏览器同步**, copy the ten-minute pairing code,
-and enter it with the RelayPulse origin in the extension. It never receives
+and enter it with the RelayScope origin in the extension. It never receives
 the administrator password or administrator cookie.
 
 The sync token is bound to the extension origin, expires after thirty minutes,

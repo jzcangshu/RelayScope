@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 func (store *Store) ListCollectionRuns(ctx context.Context, limit int) ([]CollectionRun, error) {

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to RelayPulse are documented here.
+All notable changes to RelayScope are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README restructured: hero image, revised introduction, and the recommended
   server section placed before project status.
 - CI badge links and the quick-start image path updated for the repository
-  rename to `RelayPulse` (image now published as `ghcr.io/jzcangshu/relaypulse`).
+  rename to `RelayScope` (image now published as `ghcr.io/jzcangshu/relayscope`).
 
 ### Removed
 - Internal restructuring records (`docs/development-plan.md`, `docs/plans/`)
@@ -63,5 +63,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Hardcoded community site seeds and per-site operational migrations.
 
-[v0.1.1]: https://github.com/jzcangshu/RelayPulse/compare/v0.1.0...v0.1.1
-[v0.1.0]: https://github.com/jzcangshu/RelayPulse/releases/tag/v0.1.0
+[v0.1.1]: https://github.com/jzcangshu/RelayScope/compare/v0.1.0...v0.1.1
+[v0.1.0]: https://github.com/jzcangshu/RelayScope/releases/tag/v0.1.0

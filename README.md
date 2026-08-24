@@ -1,21 +1,21 @@
-# RelayPulse
+# RelayScope
 
 **[English](README_EN.md)** | 中文
 
-![RelayPulse](docs/assets/relaypulse-hero-rounded.jpg)
+![RelayScope](docs/assets/relayscope-hero-rounded.jpg)
 
-RelayPulse 是一个面向 AI API 中转站的，轻量化模型健康度聚合监测系统。
+RelayScope 是一个面向 AI API 中转站的，轻量化模型健康度聚合监测系统。
 
 支持采集：状态页、模型市场、各分组可用性、模型目录与价格信息。它**不会**发起付费的模型调用来做探测；只保留短期滚动历史，完整保留每个站点的原始模型名与分组名，并呈现统一的跨站点视图。
 
-[![CI](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/RelayPulse/actions/workflows/ci.yml)
+[![CI](https://github.com/jzcangshu/RelayScope/actions/workflows/ci.yml/badge.svg)](https://github.com/jzcangshu/RelayScope/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## 为什么选择 RelayPulse
+## 为什么选择 RelayScope
 
-现有的拨测工具（Uptime Kuma、Gatus）只能监控 HTTP 端点，不理解**模型**；LLM 网关（LiteLLM、Helicone）只能观察经过自己转发的流量，无法比较你没有接入的站点。RelayPulse 填补了两者之间的空白：
+现有的拨测工具（Uptime Kuma、Gatus）只能监控 HTTP 端点，不理解**模型**；LLM 网关（LiteLLM、Helicone）只能观察经过自己转发的流量，无法比较你没有接入的站点。RelayScope 填补了两者之间的空白：
 
-| 问题 | RelayPulse 的回答方式 |
+| 问题 | RelayScope 的回答方式 |
 |---|---|
 | 「哪个站点现在能用 X 模型？」 | 读取各站点自己的状态/市场数据，按模型、按分组呈现 |
 | 「站点 Y 现在能用吗？」 | 跨模型视图，服务状态与采集状态相互独立 |
@@ -40,14 +40,14 @@ RelayPulse 是一个面向 AI API 中转站的，轻量化模型健康度聚合�
 ```bash
 # 从源码构建（Go 1.26+）
 make build
-./bin/relaypulse
+./bin/relayscope
 # → 监听 http://127.0.0.1:8080
 
 # 或者使用 Docker
-docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relaypulse:latest
+docker run -d -p 8080:8080 -v relayscope-data:/app/data ghcr.io/jzcangshu/relayscope:latest
 ```
 
-首次运行时，RelayPulse 会生成一个强管理员密码并写入 `<data-dir>/admin-password.txt`（权限 0600）。公开面板无需登录；管理后台位于 `/admin/`。
+首次运行时，RelayScope 会生成一个强管理员密码并写入 `<data-dir>/admin-password.txt`（权限 0600）。公开面板无需登录；管理后台位于 `/admin/`。
 
 ## 配置
 
@@ -55,19 +55,19 @@ docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relayp
 
 | 变量 | 默认值 | 用途 |
 |---|---|---|
-| `RELAYPULSE_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址 |
-| `RELAYPULSE_DATA_DIR` | `data` | SQLite 数据库与管理员密码所在目录 |
-| `RELAYPULSE_LOG_LEVEL` | `info` | 日志级别（debug/info/warn/error） |
-| `RELAYPULSE_SHUTDOWN_TIMEOUT` | `10s` | 优雅停机时限 |
-| `RELAYPULSE_PUBLIC_URL` | _空_ | 规范公网地址（OAuth 回调用） |
-| `RELAYPULSE_SESSION_ENCRYPTION_KEY` | _空_ | 加密导入站点会话的密钥 |
-| `RELAYPULSE_FLARESOLVERR_ENDPOINT` | _空_ | 可选的 FlareSolverr 端点（限环回） |
-| `RELAYPULSE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作最大并发数 |
-| `RELAYPULSE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集超时 |
-| `RELAYPULSE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |
-| `RELAYPULSE_MAINTENANCE_INTERVAL` | `30m` | 历史清理间隔 |
+| `RELAYSCOPE_LISTEN_ADDR` | `127.0.0.1:8080` | 监听地址 |
+| `RELAYSCOPE_DATA_DIR` | `data` | SQLite 数据库与管理员密码所在目录 |
+| `RELAYSCOPE_LOG_LEVEL` | `info` | 日志级别（debug/info/warn/error） |
+| `RELAYSCOPE_SHUTDOWN_TIMEOUT` | `10s` | 优雅停机时限 |
+| `RELAYSCOPE_PUBLIC_URL` | _空_ | 规范公网地址（OAuth 回调用） |
+| `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | _空_ | 加密导入站点会话的密钥 |
+| `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | _空_ | 可选的 FlareSolverr 端点（限环回） |
+| `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作最大并发数 |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集超时 |
+| `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |
+| `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | 历史清理间隔 |
 
-完整列表见 `docs/development.md`（[中文版](docs/development.zh-CN.md)），模板见 `deploy/relaypulse.env.example`。
+完整列表见 `docs/development.md`（[中文版](docs/development.zh-CN.md)），模板见 `deploy/relayscope.env.example`。
 
 ## 文档
 
@@ -83,7 +83,7 @@ docker run -d -p 8080:8080 -v relaypulse-data:/app/data ghcr.io/jzcangshu/relayp
 
 ## 添加监控站点
 
-RelayPulse 以空数据库启动。通过管理后台（`/admin/`）添加站点：
+RelayScope 以空数据库启动。通过管理后台（`/admin/`）添加站点：
 
 1. 选择适配器并填写其配置（后台会根据适配器的 JSON Schema 渲染表单）。
 2. 如站点需要登录，可选导入登录会话。
@@ -95,18 +95,18 @@ RelayPulse 以空数据库启动。通过管理后台（`/admin/`）添加站点
 
 | 部署形态 | CPU | 内存 | 磁盘 | Swap |
 | --- | ---: | ---: | ---: | ---: |
-| 仅 RelayPulse | 1-2 vCPU | 1 GB | 10 GB 可用 | 1-2 GB |
+| 仅 RelayScope | 1-2 vCPU | 1 GB | 10 GB 可用 | 1-2 GB |
 | 含 FlareSolverr | 2-4 vCPU | 4 GB | 20 GB 可用 | 4 GB |
 
-在默认站点数量下，768 MB 档位适合只跑 RelayPulse 的场景，不适合 Chromium/FlareSolverr。容量假设与扩容信号见[部署容量实测指南](docs/deployment-sizing.zh-CN.md)。
+在默认站点数量下，768 MB 档位适合只跑 RelayScope 的场景，不适合 Chromium/FlareSolverr。容量假设与扩容信号见[部署容量实测指南](docs/deployment-sizing.zh-CN.md)。
 
 ## 项目状态
 
-RelayPulse 已为首个公开发布做好准备。版本 tag 会发布无 CGO 的容器镜像；部署前请先过一遍运维清单。发布历史见 [CHANGELOG.md](CHANGELOG.md)。
+RelayScope 已为首个公开发布做好准备。版本 tag 会发布无 CGO 的容器镜像；部署前请先过一遍运维清单。发布历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 
-[MIT](LICENSE) — RelayPulse contributors。
+[MIT](LICENSE) — RelayScope contributors。
 
 ## LinuxDo 社区
 

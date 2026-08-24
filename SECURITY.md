@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-If you discover a security vulnerability in RelayPulse, **do not open a public GitHub issue**.
+If you discover a security vulnerability in RelayScope, **do not open a public GitHub issue**.
 
 Instead, use GitHub's private vulnerability reporting:
 
@@ -14,7 +14,7 @@ You should receive an initial response within 72 hours.
 
 ## Scope
 
-RelayPulse is a self-hosted monitoring aggregator. Security-relevant areas include:
+RelayScope is a self-hosted monitoring aggregator. Security-relevant areas include:
 
 - Administrator authentication and session management.
 - Encrypted credential storage (site tokens and cookies).

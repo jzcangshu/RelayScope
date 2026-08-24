@@ -1,10 +1,10 @@
-# Contributing to RelayPulse
+# Contributing to RelayScope
 
-Thanks for your interest in RelayPulse. This guide explains how to contribute effectively within the project's constraints.
+Thanks for your interest in RelayScope. This guide explains how to contribute effectively within the project's constraints.
 
 ## Project constraints (read first)
 
-RelayPulse is a **modular monolith**: one Go binary, one SQLite database, one process. The following are hard boundaries — contributions that cross them will be redirected:
+RelayScope is a **modular monolith**: one Go binary, one SQLite database, one process. The following are hard boundaries — contributions that cross them will be redirected:
 
 - **No Redis, message queue, separate time-series database, or frontend application server.** New dependencies require an Architecture Decision Record (ADR).
 - **No CGO.** The single direct runtime dependency is `modernc.org/sqlite` (pure-Go SQLite). Keep it that way.
@@ -29,7 +29,7 @@ On first run the server generates a strong admin password and writes it to `<dat
 Adapters are the primary extension point. See `docs/adapter-authoring.md` for the full guide. Summary:
 
 1. Implement the `adapter.Adapter` interface (4 methods: `Key`, `DisplayName`, `ConfigSchema`, `Collect`).
-2. Register it in `cmd/relaypulse/main.go`.
+2. Register it in `cmd/relayscope/main.go`.
 3. Add tests following the table-driven style in `internal/adapter/adapter_test.go`.
 
 **Do not hardcode site-specific results.** Adapters implement the source's data protocol; they must not encode the current return values of a particular site.

@@ -1,10 +1,10 @@
-# RelayPulse 架构
+# RelayScope 架构
 
 [English](architecture.md) | **中文**
 
 ## 系统形态
 
-RelayPulse 是一个模块化单体。正常生产运行时是一个 Go 二进制，同时服务公开应用、管理后台、JSON API、调度器、采集器和维护任务。SQLite 是唯一的数据库。
+RelayScope 是一个模块化单体。正常生产运行时是一个 Go 二进制，同时服务公开应用、管理后台、JSON API、调度器、采集器和维护任务。SQLite 是唯一的数据库。
 
 未经实测需求和架构决策记录批准，不允许引入 Redis、消息队列、独立时序数据库或独立前端应用服务器。
 

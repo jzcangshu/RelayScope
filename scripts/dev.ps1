@@ -10,5 +10,5 @@ if (-not (Test-Path -LiteralPath $go)) {
 
 $env:GOCACHE = Join-Path $projectRoot '.cache\go-build'
 $env:GOMODCACHE = Join-Path $projectRoot '.cache\go-mod'
-& $go run ./cmd/relaypulse @args
+& $go run ./cmd/relayscope @args
 

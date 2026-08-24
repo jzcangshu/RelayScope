@@ -14,18 +14,18 @@ import (
 	"syscall"
 	"time"
 
-	"relaypulse/internal/adapter"
-	"relaypulse/internal/admin"
-	"relaypulse/internal/bootstrap"
-	"relaypulse/internal/challenge"
-	"relaypulse/internal/collector"
-	"relaypulse/internal/config"
-	"relaypulse/internal/httpserver"
-	"relaypulse/internal/linuxdo"
-	"relaypulse/internal/logging"
-	"relaypulse/internal/scheduler"
-	"relaypulse/internal/session"
-	"relaypulse/internal/store"
+	"relayscope/internal/adapter"
+	"relayscope/internal/admin"
+	"relayscope/internal/bootstrap"
+	"relayscope/internal/challenge"
+	"relayscope/internal/collector"
+	"relayscope/internal/config"
+	"relayscope/internal/httpserver"
+	"relayscope/internal/linuxdo"
+	"relayscope/internal/logging"
+	"relayscope/internal/scheduler"
+	"relayscope/internal/session"
+	"relayscope/internal/store"
 )
 
 var version = "dev"
@@ -49,7 +49,7 @@ func run() error {
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
-	dbStore, err := store.Open(context.Background(), filepath.Join(cfg.DataDir, "relaypulse.db"))
+	dbStore, err := store.Open(context.Background(), filepath.Join(cfg.DataDir, "relayscope.db"))
 	if err != nil {
 		return fmt.Errorf("open data store: %w", err)
 	}
@@ -94,7 +94,7 @@ func run() error {
 		}
 		challengeProvider = provider
 	}
-	baseFetcher := adapter.HTTPFetcher{Client: &http.Client{Timeout: cfg.HTTPTimeout}, UserAgent: "RelayPulse/0.1", MaxBytes: 2 << 20, Challenge: challengeProvider}
+	baseFetcher := adapter.HTTPFetcher{Client: &http.Client{Timeout: cfg.HTTPTimeout}, UserAgent: "RelayScope/0.1", MaxBytes: 2 << 20, Challenge: challengeProvider}
 	var siteFetcher adapter.Fetcher = baseFetcher
 	var sessionVault *session.Vault
 	if cfg.SessionEncryptionKey != "" {

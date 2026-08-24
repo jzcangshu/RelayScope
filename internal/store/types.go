@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"relaypulse/internal/domain"
+	"relayscope/internal/domain"
 )
 
 type Store struct {

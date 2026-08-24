@@ -2,7 +2,7 @@
 
 [English](adapter-authoring.md) | **中文**
 
-适配器是在 `cmd/relaypulse/main.go` 中注册的编译期模块。它必须实现小巧的 `internal/adapter.Adapter` 契约，并返回经过校验的 `domain.Collection`；它从不直接写 SQLite。
+适配器是在 `cmd/relayscope/main.go` 中注册的编译期模块。它必须实现小巧的 `internal/adapter.Adapter` 契约，并返回经过校验的 `domain.Collection`；它从不直接写 SQLite。
 
 接入新的站点家族时遵循以下流程：
 
