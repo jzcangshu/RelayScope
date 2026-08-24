@@ -12,7 +12,11 @@ import (
 	"relaypulse/internal/store"
 )
 
-const scheduledCollectionTimeout = 3 * time.Minute
+// scheduledCollectionTimeout must accommodate challenge-protected
+// newapi-pricing sites, which solve the Cloudflare challenge twice per
+// collection (pricing then status). With per-solve timeouts up to 180s,
+// two sequential solves plus request overhead can approach 7 minutes.
+const scheduledCollectionTimeout = 7 * time.Minute
 const scheduleWriteTimeout = 5 * time.Second
 
 type Scheduler struct {

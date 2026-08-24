@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	flareSolverrChallengeTimeout = 120 * time.Second
+	flareSolverrChallengeTimeout = 180 * time.Second
 	flareSolverrClientTimeout    = flareSolverrChallengeTimeout + 10*time.Second
 )
 

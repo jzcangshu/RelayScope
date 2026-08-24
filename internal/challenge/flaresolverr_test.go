@@ -15,7 +15,7 @@ func TestFlareSolverrLoopbackAndCookieExtraction(t *testing.T) {
 		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil || payload.Cmd != "request.get" {
 			t.Fatalf("bad request: %+v err=%v", payload, err)
 		}
-		if payload.MaxTimeout != 120000 {
+		if payload.MaxTimeout != 180000 {
 			t.Fatalf("unexpected max timeout: %d", payload.MaxTimeout)
 		}
 		_ = json.NewEncoder(writer).Encode(map[string]any{"status": "ok", "solution": map[string]any{"response": "<html>", "userAgent": "ua", "cookies": []map[string]string{{"name": "cf_clearance", "value": "x"}}}})
@@ -28,7 +28,7 @@ func TestFlareSolverrLoopbackAndCookieExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if solver.Client.Timeout != 130*time.Second {
+	if solver.Client.Timeout != 190*time.Second {
 		t.Fatalf("unexpected client timeout: %s", solver.Client.Timeout)
 	}
 	solver.Client = server.Client()

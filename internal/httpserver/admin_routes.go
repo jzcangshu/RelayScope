@@ -15,6 +15,12 @@ import (
 	"relaypulse/internal/store"
 )
 
+// manualCollectionTimeout mirrors scheduler.scheduledCollectionTimeout so
+// on-demand collection honors the same ceiling as scheduled runs. Keep the
+// two in sync; challenge-protected newapi-pricing sites solve the Cloudflare
+// challenge twice per collection and need headroom beyond a single solve.
+const manualCollectionTimeout = 7 * time.Minute
+
 func registerAdminRoutes(mux *http.ServeMux, options Options) {
 	if options.Auth != nil {
 		mux.HandleFunc("POST /api/v1/admin/login", func(writer http.ResponseWriter, request *http.Request) {
@@ -173,7 +179,7 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid site id")
 				return
 			}
-			collectCtx, cancel := context.WithTimeout(request.Context(), 90*time.Second)
+			collectCtx, cancel := context.WithTimeout(request.Context(), manualCollectionTimeout)
 			defer cancel()
 			if err := options.Collector.CollectNow(collectCtx, id); err != nil {
 				writeError(writer, http.StatusBadGateway, "collection failed")
