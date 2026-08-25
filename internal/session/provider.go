@@ -167,7 +167,7 @@ func (provider Provider) refreshSub2API(ctx context.Context, site adapter.Site, 
 		return Data{}, errors.New("read refresh response")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return Data{}, fmt.Errorf("refresh returned HTTP %d", response.StatusCode)
+		return Data{}, refreshFailure(response.StatusCode, "Sub2API refresh returned HTTP %d")
 	}
 	var decoded sub2APIRefreshResponse
 	if err := json.Unmarshal(body, &decoded); err != nil {
@@ -239,7 +239,7 @@ func (provider Provider) refreshNewAPIToken(ctx context.Context, site adapter.Si
 		return Data{}, errors.New("read NewAPI refresh response")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return Data{}, fmt.Errorf("NewAPI refresh returned HTTP %d", response.StatusCode)
+		return Data{}, refreshFailure(response.StatusCode, "NewAPI refresh returned HTTP %d")
 	}
 	var decoded newAPIRefreshResponse
 	if err := json.Unmarshal(body, &decoded); err != nil || !decoded.Success || strings.TrimSpace(decoded.Data.AccessToken) == "" {
@@ -313,6 +313,20 @@ func tokenExpiry(value int64) time.Time {
 		return time.UnixMilli(value).UTC()
 	}
 	return time.Unix(value, 0).UTC()
+}
+
+// refreshFailure classifies a non-2xx refresh response so the collector can
+// distinguish credentials that the site rejected (401/403, a real login
+// expiry) from transient failures (5xx, gateway errors). Only a credential
+// rejection should mark a site login_expired; a transient refresh failure
+// must not permanently lock the site out, since the stored refresh cookie
+// may still be valid on the next attempt.
+func refreshFailure(statusCode int, format string) error {
+	message := fmt.Sprintf(format, statusCode)
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return &adapter.FetchError{StatusCode: statusCode, LoginRequired: true, Err: errors.New(message)}
+	}
+	return errors.New(message)
 }
 
 func accessTokenHeaders(token, userID string) map[string]string {
