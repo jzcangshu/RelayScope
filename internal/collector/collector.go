@@ -88,7 +88,10 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	if siteFetcher, ok := collector.fetcher.(adapter.SiteFetcher); ok {
 		resolved, resolveErr := siteFetcher.FetcherForSite(ctx, siteDefinition)
 		if resolveErr != nil {
-			return collector.finishFailure(ctx, site, runID, "login_expired", resolveErr.Error(), now)
+			// A failed session refresh may be a transient HTTP error rather than a
+			// real credential expiry; classify it the same way as collection-time
+			// fetch errors so only a true 401/403 marks the site login_expired.
+			return collector.finishFailure(ctx, site, runID, classifyFetchError(resolveErr), resolveErr.Error(), now)
 		}
 		fetcher = resolved
 	}

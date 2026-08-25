@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- A transient session-refresh failure no longer permanently locks an
+  authenticated site as `login_expired`. Session refreshes now classify their
+  HTTP status the same way collection-time fetches do: a 401/403 rejection
+  marks the site `login_expired`, while a 5xx or network error reports
+  `adapter_collect_failed` so the next scheduled run can retry with the stored
+  refresh cookie. Previously any refresh error was hardcoded to
+  `login_expired`, which combined with the scheduler's 30-minute backoff could
+  strand a site indefinitely after a single failed refresh.
 - Browser session sync no longer fails with 401 right after pairing: Chromium
   omits the `Origin` header on cross-origin GET fetches made by extensions, so
   the extension now reads pending sites via POST (which always carries Origin)

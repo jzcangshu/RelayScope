@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -296,5 +297,63 @@ func TestProviderIgnoresStoredSessionWhenLoginIsNotRequired(t *testing.T) {
 	body, _, err := fetcher.GetBytes(context.Background(), server.URL)
 	if err != nil || string(body) != `{"ok":true}` {
 		t.Fatalf("public fetch used stored session: body=%s err=%v", body, err)
+	}
+}
+
+// TestProviderRefreshFailureClassifiesCredentialRejection asserts that when a
+// NewAPI refresh endpoint rejects the stored cookie (401/403), the error carries
+// FetchError.LoginRequired so the collector marks the site login_expired — while
+// a transient failure (503) surfaces as a plain error that does not lock the
+// site out.
+func TestProviderRefreshFailureClassifiesCredentialRejection(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		wantLogin  bool
+	}{
+		{name: "unauthorized", statusCode: http.StatusUnauthorized, wantLogin: true},
+		{name: "forbidden", statusCode: http.StatusForbidden, wantLogin: true},
+		{name: "server error", statusCode: http.StatusServiceUnavailable, wantLogin: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/api/user/auth/refresh" {
+					http.NotFound(writer, request)
+					return
+				}
+				writer.Header().Set("Content-Type", "application/json")
+				writer.WriteHeader(test.statusCode)
+				writer.Write([]byte(`{"success":false,"message":"rejected"}`))
+			}))
+			defer server.Close()
+			site, err := db.CreateSite(context.Background(), store.Site{Name: "newapi", BaseURL: server.URL, SourceURL: server.URL + "/pricing", AdapterKey: "newapi-pricing", Enabled: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := make([]byte, 32)
+			rand.Read(key)
+			vault, _ := NewVault(base64.RawURLEncoding.EncodeToString(key))
+			now := time.Date(2026, time.August, 22, 13, 0, 0, 0, time.UTC)
+			// Token expired one minute ago, so FetcherForSite must attempt a refresh.
+			if err := vault.Save(context.Background(), db, site.ID, Data{AuthType: AuthTypeNewAPIToken, AccessToken: "expired-access", UserID: "42", TokenExpiresAt: now.Add(-time.Minute).UnixMilli(), Cookies: []Cookie{{Name: "new_api_refresh", Value: "refresh-cookie"}}}, nil); err != nil {
+				t.Fatal(err)
+			}
+			provider := Provider{Store: db, Vault: vault, Base: adapter.HTTPFetcher{Client: server.Client()}, Now: func() time.Time { return now }}
+			_, err = provider.FetcherForSite(context.Background(), adapter.Site{ID: site.ID, BaseURL: server.URL, SessionRequired: true})
+			if err == nil {
+				t.Fatalf("expected refresh failure, got nil")
+			}
+			var fetchErr *adapter.FetchError
+			loginRequired := errors.As(err, &fetchErr) && fetchErr.LoginRequired
+			if loginRequired != test.wantLogin {
+				t.Fatalf("refresh %d: error=%v, LoginRequired=%v, want %v", test.statusCode, err, loginRequired, test.wantLogin)
+			}
+		})
 	}
 }

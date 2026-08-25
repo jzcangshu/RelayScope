@@ -28,6 +28,42 @@ func TestPersistenceContextSurvivesCancellation(t *testing.T) {
 	}
 }
 
+func TestClassifyFetchErrorDistinguishesLoginExpiryFromTransientFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			name: "unauthorized refresh is login expiry",
+			err:  &adapter.FetchError{StatusCode: http.StatusUnauthorized, LoginRequired: true, Err: errors.New("refresh returned HTTP 401")},
+			want: "login_expired",
+		},
+		{
+			name: "forbidden refresh is login expiry",
+			err:  &adapter.FetchError{StatusCode: http.StatusForbidden, LoginRequired: true, Err: errors.New("refresh returned HTTP 403")},
+			want: "login_expired",
+		},
+		{
+			name: "server error refresh is transient collection failure",
+			err:  errors.New("refresh returned HTTP 503"),
+			want: "adapter_collect_failed",
+		},
+		{
+			name: "network error is transient collection failure",
+			err:  errors.New("refresh request failed: connection reset"),
+			want: "adapter_collect_failed",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := classifyFetchError(test.err); got != test.want {
+				t.Fatalf("classifyFetchError(%v) = %q, want %q", test.err, got, test.want)
+			}
+		})
+	}
+}
+
 func TestCollectSiteWritesObservationAndRevision(t *testing.T) {
 	t.Parallel()
 
