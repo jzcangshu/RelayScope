@@ -100,10 +100,6 @@ RelayScope 以空数据库启动。通过管理后台（`/admin/`）添加站点
 
 在默认站点数量下，768 MB 档位适合只跑 RelayScope 的场景，不适合 Chromium/FlareSolverr。容量假设与扩容信号见[部署容量实测指南](docs/deployment-sizing.zh-CN.md)。
 
-## 项目状态
-
-RelayScope 已为首个公开发布做好准备。版本 tag 会发布无 CGO 的容器镜像；部署前请先过一遍运维清单。发布历史见 [CHANGELOG.md](CHANGELOG.md)。
-
 ## 许可证
 
 [MIT](LICENSE) — RelayScope contributors。
