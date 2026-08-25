@@ -102,12 +102,6 @@ The 768 MB profile is suitable for RelayScope alone at the default site count,
 not for Chromium/FlareSolverr. See the [measured sizing guide](docs/deployment-sizing.md)
 for capacity assumptions and expansion signals.
 
-## Project status
-
-RelayScope is prepared for its first public release. Version tags publish the
-CGO-free container image; review the operations checklist before deployment.
-See [CHANGELOG.md](CHANGELOG.md) for the release history.
-
 ## License
 
 [MIT](LICENSE) — RelayScope contributors.
