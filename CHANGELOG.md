@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.1.2] - 2026-09-05
+
 ### Fixed
 - A transient session-refresh failure no longer permanently locks an
   authenticated site as `login_expired`. Session refreshes now classify their
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refresh cookie. Previously any refresh error was hardcoded to
   `login_expired`, which combined with the scheduler's 30-minute backoff could
   strand a site indefinitely after a single failed refresh.
+- Raised the FlareSolverr challenge timeout to 180s and the scheduled and
+  manual collection ceilings to 7 minutes, because heavier Turnstile
+  challenges and the two-solve-per-collection pattern on NewAPI pricing
+  sites were clipping healthy runs with `challenge_failed` or
+  `context canceled`.
 - Browser session sync no longer fails with 401 right after pairing: Chromium
   omits the `Origin` header on cross-origin GET fetches made by extensions, so
   the extension now reads pending sites via POST (which always carries Origin)
@@ -32,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of resurrecting removed models with their pre-removal snapshots.
 
 ### Changed
+- The project is renamed to `RelayScope` across the module path, docs, build
+  scripts, and container image references.
 - The administrator session-import prompt and the operations docs describe the
   session JSON contract generically (auth types, cookies, refresh rotation)
   instead of calling out one specific site.
@@ -71,5 +80,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Hardcoded community site seeds and per-site operational migrations.
 
+[v0.1.2]: https://github.com/jzcangshu/RelayScope/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/jzcangshu/RelayScope/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/jzcangshu/RelayScope/releases/tag/v0.1.0
