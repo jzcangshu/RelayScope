@@ -60,6 +60,8 @@ docker run -d -p 8080:8080 -v relayscope-data:/app/data ghcr.io/jzcangshu/relays
 | `RELAYSCOPE_LOG_LEVEL` | `info` | 日志级别（debug/info/warn/error） |
 | `RELAYSCOPE_SHUTDOWN_TIMEOUT` | `10s` | 优雅停机时限 |
 | `RELAYSCOPE_PUBLIC_URL` | _空_ | 规范公网地址（OAuth 回调用） |
+| `RELAYSCOPE_OAUTH_CLIENT_ID` | _空_ | OAuth 登录 Client ID（与 SECRET 成对配置） |
+| `RELAYSCOPE_OAUTH_CLIENT_SECRET` | _空_ | OAuth 登录 Client Secret（只保存在服务器上） |
 | `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | _空_ | 加密导入站点会话的密钥 |
 | `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | _空_ | 可选的 FlareSolverr 端点（限环回） |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作最大并发数 |
@@ -89,7 +91,16 @@ RelayScope 以空数据库启动。通过管理后台（`/admin/`）添加站点
 2. 如站点需要登录，可选导入登录会话。
 3. 调度器随即按配置的间隔开始采集。
 
-仓库根目录提供了 `sites.example.json` 作为配置格式参考。
+模型匹配规则同样在管理后台维护（必需词/任选词/排除词/正则，带优先级）；后台提供规则预览和未匹配模型列表，方便逐步收敛。
+
+仓库根目录提供了 `sites.example.json` 作为配置格式参考。需要批量建站或迁移服务器时，可用导入脚本回放站点与规则目录：
+
+```bash
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-sites.sh sites.production.json http://127.0.0.1:8080
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-rules.sh rules.production.json http://127.0.0.1:8080
+```
+
+`sites.production.json` 与 `rules.production.json` 是本仓库实际生产部署的站点与规则目录，作为灾备与迁移的单一事实来源（只含公开 URL、模型名和匹配模式，凭据永不入库）。两个脚本的幂等语义不同：站点脚本不去重，只对全新数据库执行一次；规则脚本按 canonicalName 跳过已存在项，可重复执行。详见[运维清单](docs/operations.zh-CN.md)。
 
 ## 推荐服务器配置
 

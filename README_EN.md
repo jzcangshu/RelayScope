@@ -60,6 +60,8 @@ All configuration is via environment variables. Key ones:
 | `RELAYSCOPE_LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
 | `RELAYSCOPE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown deadline |
 | `RELAYSCOPE_PUBLIC_URL` | _empty_ | Canonical public URL (OAuth callbacks) |
+| `RELAYSCOPE_OAUTH_CLIENT_ID` | _empty_ | OAuth login client ID (set together with the secret) |
+| `RELAYSCOPE_OAUTH_CLIENT_SECRET` | _empty_ | OAuth login client secret (server-side only) |
 | `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | _empty_ | Key for encrypting imported site sessions |
 | `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | _empty_ | Optional FlareSolverr endpoint (loopback) |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations |
@@ -89,7 +91,16 @@ RelayScope starts with an empty database. Add sites through the admin console (`
 2. Optionally import a login session for authenticated sites.
 3. The scheduler begins collecting on the configured interval.
 
-A `sites.example.json` is provided as a reference for the configuration format.
+Model-matching rules are maintained in the same console (required/any/excluded terms and regex patterns with priorities); a rule preview and the unmatched-model list make convergence incremental.
+
+A `sites.example.json` is provided as a reference for the configuration format. For bulk setup or server migration, replay the site and rule catalogs with the import scripts:
+
+```bash
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-sites.sh sites.production.json http://127.0.0.1:8080
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-rules.sh rules.production.json http://127.0.0.1:8080
+```
+
+`sites.production.json` and `rules.production.json` are the live deployment catalogs of this repository, kept as the single source of truth for disaster recovery and migration (public URLs, model names, and matching patterns only — credentials never enter the repository). The two scripts differ in idempotency: the site importer does not de-duplicate and runs once per fresh database, while the rule importer skips existing canonical names and is safe to re-run. See the [operations checklist](docs/operations.md).
 
 ## Recommended server
 

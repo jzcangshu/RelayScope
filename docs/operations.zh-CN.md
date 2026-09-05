@@ -21,6 +21,17 @@
 
 带版本号的发布（`vMAJOR.MINOR.PATCH`）会通过 `.github/workflows/release.yml` 把无 CGO 的镜像发布到 GHCR。部署前核对 tag 与镜像摘要，保留上一个二进制和数据库备份；重启后检查两个健康端点和管理后台的运行视图。
 
+## 迁移与恢复
+
+仓库里的生产目录是站点与规则配置的单一事实来源：`sites.production.json`（36 个站点）与 `rules.production.json`（模型匹配规则）。目录只含公开 URL、模型名和匹配模式——凭据永不入库，因此迁移后需通过管理后台或浏览器同步扩展重新导入会话。在新服务器上重建：
+
+```bash
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-sites.sh sites.production.json http://127.0.0.1:8080
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-rules.sh rules.production.json http://127.0.0.1:8080
+```
+
+两个脚本都依赖 `curl` 和 `jq`，密码只从环境变量读取。幂等语义不同：站点脚本调用的是不去重的创建接口，每个全新数据库只执行一次；规则脚本按 canonicalName 跳过已存在项，可重复执行。规则脚本还会禁用（而非删除）5 条示例种子规则（`deepseek-chat`、`gpt-4o`、`gpt-4o-mini`、`claude-sonnet-4`、`gemini-pro`），因为首次启动的种子逻辑会在每次重启时补回缺失的名字。在管理后台改配置时同步更新对应目录文件，让仓库始终与生产一致。
+
 ## FlareSolverr
 
 - 固定使用独立的 Linux x64 发行包，而不是引入容器运行时。

@@ -92,11 +92,13 @@ probe adapter or dashboard.
 
 ## Local acceptance evidence
 
-The first local run registered all 13 initial sites. Sites that require an
-authenticated session are reported as `login_expired`; a site with a detected
-Cloudflare page is reported as `challenge_pending`; failed requests retain the
-last successful snapshot. A representative run produced 162 public model/group
-rows across 6 sites with usable snapshots.
+A fresh install starts with an empty database; the scheduler only collects
+sites registered through the admin console or replayed from a catalog with
+`scripts/import-sites.sh`. Sites that require an authenticated session
+are reported as `login_expired`; a site with a detected Cloudflare page is
+reported as `challenge_pending`; failed requests retain the last successful
+snapshot. A representative early run produced 162 public model/group rows
+across 6 sites with usable snapshots.
 
 On the development machine, the measured SQLite database was about 1.1 MB
 (about 1.3 MB including WAL), public row queries averaged about 4 ms, and the

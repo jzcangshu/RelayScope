@@ -27,6 +27,30 @@ Tagged releases (`vMAJOR.MINOR.PATCH`) publish a CGO-free image to GHCR via
 deployment, keep the previous binary and a database backup, then check both
 health endpoints and the admin run view after restart.
 
+## Migration and restore
+
+The repository carries the live deployment catalogs as the source of truth
+for site and rule configuration: `sites.production.json` (36 sites) and
+`rules.production.json` (model-matching rules). They hold public URLs, model
+names, and matching patterns only — credentials never enter the repository,
+so sessions must be re-imported through the admin console or the browser
+sync extension after a migration. To repopulate a fresh server:
+
+```bash
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-sites.sh sites.production.json http://127.0.0.1:8080
+RELAYSCOPE_ADMIN_PASSWORD=... scripts/import-rules.sh rules.production.json http://127.0.0.1:8080
+```
+
+Both scripts need `curl` and `jq` and read the password from the environment
+only. Their idempotency differs: the site importer calls the create API,
+which does not de-duplicate, so run it exactly once per fresh database; the
+rule importer skips canonical names that already exist, so it is safe to
+re-run. The rule importer also disables the five example seed rules
+(`deepseek-chat`, `gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4`, `gemini-pro`)
+rather than deleting them, because first-launch seeding re-creates absent
+names on every boot. Update the catalogs in the same change as the console
+edit that motivated it, so the repository keeps matching production.
+
 ## FlareSolverr
 
 - Pin the standalone Linux x64 release instead of adding a container runtime.

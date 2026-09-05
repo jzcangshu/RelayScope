@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Versioned deployment catalogs and admin-API import tooling for server
+  migration: `sites.production.json` (36 monitored sites) and
+  `rules.production.json` (57 model-matching rules, including gpt-oss-120b/20b,
+  gpt-6-astra, claude-fable-5.1/5.2, glm-5.3-flash, and
+  deepseek-v4-pro-0813), replayable with `scripts/import-sites.sh` and
+  `scripts/import-rules.sh`. Catalogs hold public site URLs, model names, and
+  matching patterns only — credentials never enter the repository.
+
 ## [v0.1.2] - 2026-09-05
 
 ### Fixed
