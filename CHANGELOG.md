@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- NewAPI probe detail collection no longer fails with HTTP 404 for
+  slash-containing model names (e.g. `openai/gpt-oss-120b`,
+  `moonshotai/kimi-k3`). The model-status plugin resolves
+  `/api/model-status/embed/status/{model}` behind a router that decodes `%2F`
+  back to `/` before path matching, so a single-escaped segment could never
+  match and poisoned every run as `details_partial`. The primary URL now
+  double-escapes the `{model}` segment, and a 404 on the primary form retries
+  once with the alternate encoding before the model is recorded as a
+  partial-detail issue.
+
 ### Added
 - Versioned deployment catalogs and admin-API import tooling for server
   migration: `sites.production.json` (36 monitored sites) and
