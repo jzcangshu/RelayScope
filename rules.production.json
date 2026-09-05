@@ -1,0 +1,812 @@
+[
+  {
+    "provider": "DeepSeek",
+    "canonicalName": "deepseek-v4-flash",
+    "requiredTerms": [
+      "deepseek",
+      "v4",
+      "flash"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [
+      "0731"
+    ],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "DeepSeek",
+    "canonicalName": "deepseek-v4-pro",
+    "requiredTerms": [
+      "deepseek",
+      "v4",
+      "pro"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [
+      "0731"
+    ],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "DeepSeek",
+    "canonicalName": "deepseek-v4-flash-0731",
+    "requiredTerms": [
+      "deepseek",
+      "v4",
+      "flash",
+      "0731"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "DeepSeek",
+    "canonicalName": "deepseek-v4-pro-0731",
+    "requiredTerms": [
+      "deepseek",
+      "v4",
+      "pro",
+      "0731"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "GLM",
+    "canonicalName": "glm-5",
+    "requiredTerms": [
+      "glm",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^0-9])glm[^0-9]+5([^0-9.]|$)",
+    "priority": 90,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "GLM",
+    "canonicalName": "glm-5.1",
+    "requiredTerms": [
+      "glm",
+      "5",
+      "1"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)glm[^0-9]+5[._-]1([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "GLM",
+    "canonicalName": "glm-5.2",
+    "requiredTerms": [
+      "glm",
+      "5",
+      "2"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)glm[^0-9]+5[._-]2([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "GLM",
+    "canonicalName": "glm-5.3",
+    "requiredTerms": [
+      "glm",
+      "5",
+      "3"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)glm[^0-9]+5[._-]3([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "MiniMax",
+    "canonicalName": "minimax-m2.5",
+    "requiredTerms": [
+      "minimax",
+      "m2",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "MiniMax",
+    "canonicalName": "minimax-m2.7",
+    "requiredTerms": [
+      "minimax",
+      "m2",
+      "7"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "MiniMax",
+    "canonicalName": "minimax-m3",
+    "requiredTerms": [
+      "minimax",
+      "m3"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Kimi",
+    "canonicalName": "kimi-k2.5",
+    "requiredTerms": [
+      "kimi",
+      "k2",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Kimi",
+    "canonicalName": "kimi-k2.6",
+    "requiredTerms": [
+      "kimi",
+      "k2",
+      "6"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Kimi",
+    "canonicalName": "kimi-k2.7",
+    "requiredTerms": [
+      "kimi",
+      "k2",
+      "7"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Kimi",
+    "canonicalName": "kimi-k3",
+    "requiredTerms": [
+      "kimi",
+      "k3"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "MiMo",
+    "canonicalName": "mimo-v2.5",
+    "requiredTerms": [
+      "mimo",
+      "v2",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [
+      "pro"
+    ],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "MiMo",
+    "canonicalName": "mimo-v2.5-pro",
+    "requiredTerms": [
+      "mimo",
+      "v2",
+      "5",
+      "pro"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-5.4",
+    "requiredTerms": [
+      "gpt",
+      "5",
+      "4"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)gpt[ _./-]*5[._-]*4([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-5.5",
+    "requiredTerms": [
+      "gpt",
+      "5",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)gpt[ _./-]*5[._-]*5([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-5-nano",
+    "requiredTerms": [
+      "gpt",
+      "5",
+      "nano"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gpt[ _./-]*5[ _.-]*nano([^a-z0-9]|$)",
+    "priority": 120,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-5.6-luna",
+    "requiredTerms": [
+      "gpt",
+      "5",
+      "6",
+      "luna"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-5.6-terra",
+    "requiredTerms": [
+      "gpt",
+      "5",
+      "6",
+      "terra"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-5.6-sol",
+    "requiredTerms": [
+      "gpt",
+      "5",
+      "6",
+      "sol"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.7-flash",
+    "requiredTerms": [
+      "gemini",
+      "3.7",
+      "flash"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*7[ _./-]*flash([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.6-flash",
+    "requiredTerms": [
+      "gemini",
+      "3.6",
+      "flash"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*6[ _./-]*flash([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.5-flash",
+    "requiredTerms": [
+      "gemini",
+      "3.5",
+      "flash"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [
+      "lite"
+    ],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*5[ _./-]*flash([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.5-flash-lite",
+    "requiredTerms": [
+      "gemini",
+      "3.5",
+      "flash",
+      "lite"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*5[ _./-]*flash[ _./-]*lite([^a-z0-9]|$)",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.1-flash-lite",
+    "requiredTerms": [
+      "gemini",
+      "3.1",
+      "flash",
+      "lite"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*1[ _./-]*flash[ _./-]*lite([^a-z0-9]|$)",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.1-pro-preview",
+    "requiredTerms": [
+      "gemini",
+      "3.1",
+      "pro",
+      "preview"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [
+      "customtools"
+    ],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*1[ _./-]*pro[ _./-]*preview([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3.1-pro-preview-customtools",
+    "requiredTerms": [
+      "gemini",
+      "3.1",
+      "pro",
+      "preview",
+      "customtools"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[._-]*1[ _./-]*pro[ _./-]*preview[ _./-]*customtools([^a-z0-9]|$)",
+    "priority": 120,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-3-flash-preview",
+    "requiredTerms": [
+      "gemini",
+      "3",
+      "flash",
+      "preview"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*3[ _./-]*flash[ _./-]*preview([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-2.5-pro",
+    "requiredTerms": [
+      "gemini",
+      "2.5",
+      "pro"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*2[._-]*5[ _./-]*pro([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-2.5-flash",
+    "requiredTerms": [
+      "gemini",
+      "2.5",
+      "flash"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [
+      "lite"
+    ],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*2[._-]*5[ _./-]*flash([^a-z0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Google",
+    "canonicalName": "gemini-2.5-flash-lite",
+    "requiredTerms": [
+      "gemini",
+      "2.5",
+      "flash",
+      "lite"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(^|[^a-z0-9])gemini[ _./-]*2[._-]*5[ _./-]*flash[ _./-]*lite([^a-z0-9]|$)",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-4.3",
+    "requiredTerms": [
+      "grok",
+      "4",
+      "3"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-4.5",
+    "requiredTerms": [
+      "grok",
+      "4",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-4.6",
+    "requiredTerms": [
+      "grok",
+      "4",
+      "6"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-fable-5",
+    "requiredTerms": [
+      "claude",
+      "fable",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 120,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-opus-4-6",
+    "requiredTerms": [
+      "opus",
+      "4-6"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?opus[^0-9]+4[._-]6([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-opus-4-7",
+    "requiredTerms": [
+      "opus",
+      "4-7"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?opus[^0-9]+4[._-]7([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-opus-4-8",
+    "requiredTerms": [
+      "opus",
+      "4-8"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?opus[^0-9]+4[._-]8([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-opus-5",
+    "requiredTerms": [
+      "opus",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?opus[^0-9]+5([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-sonnet-4-6",
+    "requiredTerms": [
+      "sonnet",
+      "4-6"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?sonnet[^0-9]+4[._-]6([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-sonnet-4-7",
+    "requiredTerms": [
+      "sonnet",
+      "4-7"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?sonnet[^0-9]+4[._-]7([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-sonnet-4-8",
+    "requiredTerms": [
+      "sonnet",
+      "4-8"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?sonnet[^0-9]+4[._-]8([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-sonnet-5",
+    "requiredTerms": [
+      "sonnet",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?sonnet[^0-9]+5([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-haiku-4-6",
+    "requiredTerms": [
+      "haiku",
+      "4-6"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?haiku[^0-9]+4[._-]6([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-haiku-4-7",
+    "requiredTerms": [
+      "haiku",
+      "4-7"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?haiku[^0-9]+4[._-]7([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-haiku-4-8",
+    "requiredTerms": [
+      "haiku",
+      "4-8"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?haiku[^0-9]+4[._-]8([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-haiku-5",
+    "requiredTerms": [
+      "haiku",
+      "5"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?haiku[^0-9]+5([^0-9]|$)",
+    "priority": 100,
+    "enabled": true,
+    "generated": true
+  }
+]
