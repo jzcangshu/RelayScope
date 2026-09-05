@@ -341,5 +341,29 @@
       "pricingStatusPath": "/api/status"
     },
     "session_required": true
+  },
+  {
+    "name": "hkai25",
+    "base_url": "https://share.hkai25.top",
+    "source_url": "https://share.hkai25.top/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
+  },
+  {
+    "name": "66hours",
+    "base_url": "https://newapi.66hours.com",
+    "source_url": "https://newapi.66hours.com/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
+  },
+  {
+    "name": "iceberg",
+    "base_url": "https://iceberg.tiktok.vip",
+    "source_url": "https://iceberg.tiktok.vip/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
   }
 ]
