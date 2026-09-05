@@ -350,6 +350,76 @@ func TestNewAPIAdapterFailsWhenAllDetailsFail(t *testing.T) {
 	}
 }
 
+func TestProbeAdapterResolvesSlashModelsInDetailURL(t *testing.T) {
+	now := time.Date(2026, time.September, 5, 6, 0, 0, 0, time.UTC)
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "openai/gpt-oss-120b", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+	}}
+	fetcher := fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/model-status/embed/status/openai%252Fgpt-oss-120b?window=24h": []byte(`{"data":[{"bucket_start":"2026-09-05T05:00:00Z","bucket_end":"2026-09-05T06:00:00Z","request_count":2,"success_count":2,"failure_count":0,"success_rate":100}]}`),
+	}}
+
+	if err := (NewAPIProbeAdapter()).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"openai/gpt-oss-120b"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(collection.Issues) != 0 {
+		t.Fatalf("slash model detail should not fail: %+v", collection.Issues)
+	}
+	if len(collection.Models[0].Groups[0].Buckets) != 1 || collection.Models[0].Groups[0].ServiceState != domain.ServiceHealthy {
+		t.Fatalf("slash model detail discarded: %+v", collection.Models[0])
+	}
+}
+
+func TestProbeAdapterDetail404FallsBackToAlternateEncoding(t *testing.T) {
+	now := time.Date(2026, time.September, 5, 6, 0, 0, 0, time.UTC)
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "moonshotai/kimi-k3", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+	}}
+	detailBody := []byte(`{"data":[{"bucket_start":"2026-09-05T05:00:00Z","bucket_end":"2026-09-05T06:00:00Z","request_count":3,"success_count":2,"failure_count":1,"success_rate":66.7}]}`)
+	fetcher := statusErrorFetcher{
+		fetchErrors: map[string]error{
+			"https://example.test/api/model-status/embed/status/moonshotai%252Fkimi-k3?window=24h": &FetchError{URL: "https://example.test", StatusCode: http.StatusNotFound, Err: errors.New("fetch returned HTTP 404")},
+		},
+		responses: map[string][]byte{
+			"https://example.test/api/model-status/embed/status/moonshotai%2Fkimi-k3?window=24h": detailBody,
+		},
+	}
+
+	if err := (NewAPIProbeAdapter()).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"moonshotai/kimi-k3"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(collection.Issues) != 0 {
+		t.Fatalf("fallback encoding should cover the model: %+v", collection.Issues)
+	}
+	if len(collection.Models[0].Groups[0].Buckets) != 1 {
+		t.Fatalf("fallback detail buckets missing: %+v", collection.Models[0])
+	}
+}
+
+type statusErrorFetcher struct {
+	fetchErrors map[string]error
+	responses   map[string][]byte
+}
+
+func (fetcher statusErrorFetcher) GetBytes(_ context.Context, rawURL string) ([]byte, http.Header, error) {
+	if fetchErr, exists := fetcher.fetchErrors[rawURL]; exists {
+		return nil, nil, fetchErr
+	}
+	body, exists := fetcher.responses[rawURL]
+	if !exists {
+		return nil, nil, &missingResponseError{rawURL: rawURL}
+	}
+	return body, http.Header{}, nil
+}
+
+func (fetcher statusErrorFetcher) GetJSON(ctx context.Context, rawURL string, target any) error {
+	body, _, err := fetcher.GetBytes(ctx, rawURL)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, target)
+}
+
 func TestDetailIssueDoesNotPersistRequestURL(t *testing.T) {
 	collection := domain.Collection{}
 	appendDetailIssue(&collection, "detail_fetch_failed", "gpt-5.6-sol", &FetchError{

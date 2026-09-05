@@ -417,16 +417,35 @@ func (adapter ProbeAdapter) CollectDetails(ctx context.Context, site Site, fetch
 			return err
 		}
 	}
-	return collectModelDetails(ctx, fetcher, collection, modelNames, now, 24*time.Hour, func(modelName string) (string, error) {
+	endpointFor := func(modelName string) (string, error) {
 		if template != "" {
-			templatedPath := strings.ReplaceAll(template, "{model}", url.PathEscape(modelName))
-			return resolveSiteURL(statusBaseURL, templatedPath)
+			return probeDetailURL(statusBaseURL, template, modelName, true)
 		}
 		query := url.Values{}
 		query.Set("model", modelName)
 		query.Set("hours", "24")
 		return endpoint + "?" + query.Encode(), nil
-	})
+	}
+	var fallbackEndpointFor func(string) (string, error)
+	if template != "" {
+		fallbackEndpointFor = func(modelName string) (string, error) {
+			return probeDetailURL(statusBaseURL, template, modelName, false)
+		}
+	}
+	return collectModelDetails(ctx, fetcher, collection, modelNames, now, 24*time.Hour, endpointFor, fallbackEndpointFor)
+}
+
+// probeDetailURL renders the per-model detail URL. The model-status plugin
+// keys slash-containing models (e.g. "openai/gpt-oss-120b") behind a router
+// that decodes %2F back to "/" before path matching, so a single-escaped
+// segment is a guaranteed 404; the double-escaped form is what the plugin
+// resolves. The single-escaped variant is kept as the fallback encoding.
+func probeDetailURL(statusBaseURL, template, modelName string, doubleEscaped bool) (string, error) {
+	escaped := url.PathEscape(modelName)
+	if doubleEscaped {
+		escaped = url.PathEscape(escaped)
+	}
+	return resolveSiteURL(statusBaseURL, strings.ReplaceAll(template, "{model}", escaped))
 }
 
 func NewAPIProbeAdapter() ProbeAdapter {

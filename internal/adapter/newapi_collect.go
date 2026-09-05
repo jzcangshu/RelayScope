@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"relayscope/internal/adapter/adapterutil"
 	"relayscope/internal/domain"
 	"relayscope/internal/pricing"
@@ -132,7 +133,7 @@ func (adapter NewAPIAdapter) CollectDetails(ctx context.Context, site Site, fetc
 	}
 	return collectModelDetails(ctx, fetcher, collection, modelNames, now, time.Duration(config.WindowHours)*time.Hour, func(modelName string) (string, error) {
 		return detailQuery(endpoint, modelName, config.WindowHours), nil
-	})
+	}, nil)
 }
 
 func collectModelDetails(
@@ -143,6 +144,7 @@ func collectModelDetails(
 	now time.Time,
 	historyWindow time.Duration,
 	endpointFor func(string) (string, error),
+	fallbackEndpointFor func(string) (string, error),
 ) error {
 	byModel := make(map[string]*domain.ModelObservation, len(collection.Models))
 	for index := range collection.Models {
@@ -163,6 +165,19 @@ func collectModelDetails(
 			continue
 		}
 		body, _, err := fetcher.GetBytes(ctx, endpoint)
+		if err != nil && fallbackEndpointFor != nil {
+			var fetchErr *FetchError
+			if errors.As(err, &fetchErr) && fetchErr.StatusCode == http.StatusNotFound {
+				// One URL encoding may 404 where the other resolves, so a
+				// not-found on the primary form is retried once against the
+				// alternate before being recorded as a partial-detail issue.
+				if alternate, buildErr := fallbackEndpointFor(modelName); buildErr == nil && alternate != endpoint {
+					if altBody, _, altErr := fetcher.GetBytes(ctx, alternate); altErr == nil {
+						body, err = altBody, nil
+					}
+				}
+			}
+		}
 		if err != nil {
 			appendDetailIssue(collection, "detail_fetch_failed", modelName, err)
 			continue

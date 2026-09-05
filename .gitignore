@@ -38,3 +38,6 @@ relayscope.exe~
 
 # Vendored frontend libraries (committed intentionally; see web/admin/vendor/)
 !web/admin/vendor/
+
+# Production deployment record with credentials (never commit)
+/DEPLOYMENT.md
