@@ -27,7 +27,8 @@
     ],
     "anyTerms": [],
     "excludedTerms": [
-      "0731"
+      "0731",
+      "0813"
     ],
     "aliases": [],
     "pattern": "",
@@ -808,5 +809,119 @@
     "priority": 100,
     "enabled": true,
     "generated": true
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-oss-120b",
+    "requiredTerms": [
+      "gpt",
+      "oss",
+      "120b"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-oss-20b",
+    "requiredTerms": [
+      "gpt",
+      "oss",
+      "20b"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "OpenAI",
+    "canonicalName": "gpt-6-astra",
+    "requiredTerms": [
+      "gpt",
+      "6",
+      "astra"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-fable-5.1",
+    "requiredTerms": [
+      "fable",
+      "5",
+      "1"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?fable[^0-9]+5[._-]1([^0-9]|$)",
+    "priority": 130,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "Anthropic",
+    "canonicalName": "claude-fable-5.2",
+    "requiredTerms": [
+      "fable",
+      "5",
+      "2"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)(?:^|[^a-z0-9])(?:claude[^a-z0-9]+)?fable[^0-9]+5[._-]2([^0-9]|$)",
+    "priority": 130,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "GLM",
+    "canonicalName": "glm-5.3-flash",
+    "requiredTerms": [
+      "glm",
+      "5",
+      "3",
+      "flash"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "DeepSeek",
+    "canonicalName": "deepseek-v4-pro-0813",
+    "requiredTerms": [
+      "deepseek",
+      "v4",
+      "pro",
+      "0813"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "",
+    "priority": 110,
+    "enabled": true,
+    "generated": false
   }
 ]
