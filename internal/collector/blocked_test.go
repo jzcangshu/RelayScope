@@ -59,7 +59,7 @@ func TestCollectSiteRemovesBlockedModelsImmediately(t *testing.T) {
 	t.Parallel()
 
 	dbStore := openCollectorStore(t)
-	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "pm-api", BaseURL: "https://example.test", SourceURL: "https://example.test/pricing", AdapterKey: "newapi-pricing", AdapterConfig: `{"blockedKeywords":["只会喵喵叫"]}`, Enabled: true, Interval: 20 * time.Minute})
+	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "pm-api", BaseURL: "https://example.test", SourceURL: "https://example.test/pricing", AdapterKey: "newapi-pricing", Enabled: true, Interval: 20 * time.Minute})
 	if err != nil {
 		t.Fatalf("create site: %v", err)
 	}
@@ -67,17 +67,21 @@ func TestCollectSiteRemovesBlockedModelsImmediately(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
-	// The public dashboard only shows rule-matched models, so seed a rule for
-	// the healthy control model before collecting.
+	// The public dashboard only shows rule-matched models, so seed rules for
+	// BOTH models: the blocked one must be publicly visible before blocking
+	// for this test to prove its removal (the production shape).
 	if err := dbStore.CreateRule(context.Background(), matcher.Rule{Provider: "OpenAI", CanonicalName: "gpt-5.6-sol", RequiredTerms: []string{"gpt", "sol"}, Priority: 100, Enabled: true}); err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
-	// "只会喵喵叫-hidden" is observed in a first unblocked run, then blocked in
-	// the config, so the test proves the removal applies to existing models
-	// instead of only hiding new ones.
+	if err := dbStore.CreateRule(context.Background(), matcher.Rule{Provider: "Test", CanonicalName: "hidden-opus", RequiredTerms: []string{"hidden"}, Priority: 100, Enabled: true}); err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	// "只会喵喵叫/hidden-opus" is observed in a first unblocked run, then
+	// blocked in the config, so the test proves the removal applies to
+	// existing models instead of only hiding new ones.
 	body := []byte(`{"data":[` +
 		`{"model":"gpt-5.6-sol","group":"free","success_rate":0.99},` +
-		`{"model":"只会喵喵叫-hidden","group":"free","success_rate":1.0}]}`)
+		`{"model":"只会喵喵叫/hidden-opus","group":"free","success_rate":1.0}]}`)
 	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fakeJSONFetcher{body: body}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
 		t.Fatalf("collector: %v", err)
@@ -89,6 +93,19 @@ func TestCollectSiteRemovesBlockedModelsImmediately(t *testing.T) {
 	if err := dbStore.UpdateSite(context.Background(), site.ID, site.Name, site.AdapterKey, site.AdapterConfig, true, nil, site.Interval, site.Jitter); err != nil {
 		t.Fatalf("enable blocking: %v", err)
 	}
+	rowsBefore, err := dbStore.QueryPublicRows(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("query public rows before blocking: %v", err)
+	}
+	blockedVisibleBefore := false
+	for _, row := range rowsBefore {
+		if row.RawModelName == "只会喵喵叫/hidden-opus" {
+			blockedVisibleBefore = true
+		}
+	}
+	if !blockedVisibleBefore {
+		t.Fatal("precondition failed: blocked model was not publicly visible before blocking")
+	}
 	if err := collector.CollectSite(context.Background(), site, time.Now().UTC()); err != nil {
 		t.Fatalf("collect site after blocking: %v", err)
 	}
@@ -98,7 +115,7 @@ func TestCollectSiteRemovesBlockedModelsImmediately(t *testing.T) {
 		t.Fatalf("query public rows: %v", err)
 	}
 	for _, row := range rows {
-		if row.RawModelName == "只会喵喵叫-hidden" {
+		if row.RawModelName == "只会喵喵叫/hidden-opus" {
 			t.Fatalf("blocked model still visible in public rows: %+v", row)
 		}
 	}
@@ -117,7 +134,7 @@ func TestCollectSiteRemovesBlockedModelsImmediately(t *testing.T) {
 		t.Fatalf("list unmatched: %v", err)
 	}
 	for _, item := range unmatched {
-		if item.RawModelName == "只会喵喵叫-hidden" {
+		if item.RawModelName == "只会喵喵叫/hidden-opus" {
 			t.Fatalf("blocked model still listed as unmatched: %+v", item)
 		}
 	}

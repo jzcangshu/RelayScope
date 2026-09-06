@@ -256,9 +256,12 @@ func (store *Store) RemoveRawModels(ctx context.Context, siteID int64, rawNames 
 		WHERE site_id = ? AND raw_name IN (`+strings.Join(placeholders, ",")+")", args...); err != nil {
 		return fmt.Errorf("mark blocked models removed: %w", err)
 	}
+	deleteArgs := make([]any, 0, len(args))
+	deleteArgs = append(deleteArgs, siteID)
+	deleteArgs = append(deleteArgs, args[2:]...)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM model_matches
 		WHERE raw_model_id IN (SELECT id FROM raw_models WHERE site_id = ? AND raw_name IN (`+strings.Join(placeholders, ",")+`))`,
-		append([]any{siteID}, args[2:])...); err != nil {
+		deleteArgs...); err != nil {
 		return fmt.Errorf("clear matches for blocked models: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
