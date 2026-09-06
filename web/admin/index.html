@@ -3,91 +3,263 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RelayScope 管理</title>
-  <link rel="stylesheet" href="/assets/styles.css">
+  <meta name="color-scheme" content="light dark">
+  <title>RelayScope 管理控制台</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <script>try{const t=localStorage.getItem('relayscope-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(_){}</script>
+  <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
-  <header class="topbar"><strong class="brand">RelayScope 管理</strong><div class="header-actions"><a href="/">公开页面</a><button id="logout" type="button">退出登录</button></div></header>
-  <main>
-    <section class="empty" id="login-panel">
-      <h1>管理员登录</h1>
-      <form id="login-form" class="inline-form"><input id="password" type="password" minlength="16" placeholder="管理员密码" autocomplete="current-password"><button type="submit">登录</button></form>
-      <p id="login-message">管理员密码保存在本机运行目录中。</p>
-    </section>
-    <section id="dashboard" hidden>
-      <div class="admin-heading"><div><h1>管理员控制台</h1><p id="dashboard-message" class="muted">正在读取运行状态。</p></div><button id="refresh" type="button">刷新</button></div>
-      <nav class="admin-tabs" aria-label="管理视图">
-		<button type="button" data-tab="overview" aria-pressed="true">概览</button>
-        <button type="button" data-tab="sites" aria-pressed="false">站点</button>
-        <button type="button" data-tab="rules" aria-pressed="false">模型规则</button>
-        <button type="button" data-tab="runs" aria-pressed="false">采集记录</button>
-		<button type="button" data-tab="unmatched" aria-pressed="false">未匹配</button>
-		<button type="button" data-tab="system" aria-pressed="false">系统</button>
-		<button type="button" data-tab="feedback" aria-pressed="false">用户反馈</button>
+  <svg hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 14 15.5 8.5"/><path d="M3.3 17a9 9 0 1 1 17.4 0"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14.5 14.5 0 0 1 0 18a14.5 14.5 0 0 1 0-18"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.2 8.4-7 10-3.8-1.6-7-5-7-10V6z"/></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.9 2.9 0 0 1 5.6 1c0 1.8-2.8 2.2-2.8 4"/><path d="M12 17.5h.01"/></symbol>
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.14-1.4l2-1.55-2-3.46-2.36.95a7 7 0 0 0-2.42-1.4L13.7 2.6h-3.4l-.38 2.54a7 7 0 0 0-2.42 1.4l-2.36-.95-2 3.46 2 1.55A7 7 0 0 0 5 12c0 .48.05.94.14 1.4l-2 1.55 2 3.46 2.36-.95a7 7 0 0 0 2.42 1.4l.38 2.54h3.4l.38-2.54a7 7 0 0 0 2.42-1.4l2.36.95 2-3.46-2-1.55c.09-.46.14-.92.14-1.4z"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6m4-6v6"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4.5v15l13-7.5z"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m11 12 10-10m-4 4 3 3m-6 0 2 2"/></symbol>
+      <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-pair" viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10h4a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-4"/><path d="M7 12h.01"/></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.4 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.8 1.1z"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-mark" aria-hidden="true"><i></i></span>
+        <span><strong>RelayScope</strong><span class="brand-sub">管理控制台</span></span>
+      </div>
+      <nav class="sidebar-nav" aria-label="管理导航">
+        <a class="nav-item" href="#overview" data-tab="overview" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg><span>概览</span></a>
+        <a class="nav-item" href="#sites" data-tab="sites"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span>站点</span></a>
+        <a class="nav-item" href="#rules" data-tab="rules"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>模型规则</span><span class="badge-count" id="nav-rules-count" hidden></span></a>
+        <a class="nav-item" href="#runs" data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span>采集记录</span></a>
+        <a class="nav-item" href="#unmatched" data-tab="unmatched"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span>未匹配</span><span class="nav-count" id="nav-unmatched-count"></span></a>
+        <a class="nav-item" href="#feedback" data-tab="feedback"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg><span>用户反馈</span></a>
+        <a class="nav-item" href="#system" data-tab="system"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>系统</span></a>
       </nav>
-	  <section id="overview-panel" class="admin-panel">
-		<div class="section-head"><h2>运行概览</h2><span id="overview-summary" class="muted"></span></div>
-		<div id="overview-content" class="summary-grid"></div>
-	  </section>
-      <section id="sites-panel" class="admin-panel">
-        <div class="section-head"><h2>站点与适配器</h2><div class="actions"><button id="session-sync" type="button">浏览器同步</button><button id="add-site" type="button">新增站点</button></div></div>
-        <div id="site-list" class="rows"></div>
+      <div class="sidebar-foot">
+        <a class="nav-item" href="/" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg><span>公开看板</span></a>
+        <button class="nav-item" id="theme-toggle" type="button" aria-label="主题：跟随系统" title="主题：跟随系统"><svg class="icon" aria-hidden="true"><use href="#i-monitor" id="theme-icon-use"/></svg><span id="theme-label">主题：跟随系统</span></button>
+        <button class="nav-item" id="logout" type="button"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg><span>退出登录</span></button>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <section id="login-panel" class="login-screen">
+        <div class="login-card">
+          <h1>管理员登录</h1>
+          <p class="login-hint">管理员密码保存在服务器运行目录中。</p>
+          <form id="login-form">
+            <input id="password" type="password" minlength="16" placeholder="管理员密码" autocomplete="current-password" aria-label="管理员密码">
+            <button class="btn btn-primary" type="submit">登录</button>
+          </form>
+          <p id="login-message" class="login-message" role="alert"></p>
+        </div>
       </section>
-      <section id="rules-panel" class="admin-panel" hidden>
-        <div class="section-head"><h2>热门模型匹配规则</h2><button id="add-rule" type="button">新增规则</button></div>
-        <div id="rule-list" class="rows"></div>
-        <div class="section-head conflict-head"><h2>匹配冲突</h2></div>
-        <div id="conflict-list" class="rows"></div>
-      </section>
-      <section id="runs-panel" class="admin-panel" hidden>
-        <div class="section-head"><div><h2>站点采集档案</h2><p id="run-summary" class="muted"></p></div></div>
-		<div class="run-filters"><select id="run-status-filter"><option value="">全部状态</option><option value="success">成功</option><option value="partial">部分完成</option><option value="failed">失败</option><option value="running">采集中</option></select><input id="run-site-filter" type="number" min="1" placeholder="站点 ID"><button id="run-filter-apply" type="button">筛选</button></div>
-        <div id="run-list" class="run-archive"></div>
-      </section>
-	  <section id="unmatched-panel" class="admin-panel" hidden><div class="section-head"><h2>未匹配模型</h2><button id="unmatched-refresh" type="button">刷新</button></div><div id="unmatched-list" class="rows"></div></section>
-	  <section id="system-panel" class="admin-panel" hidden><div class="section-head"><h2>系统状态</h2></div><div id="system-content" class="summary-grid"></div></section>
-	  <section id="feedback-panel" class="admin-panel" hidden><div class="section-head"><h2>用户反馈</h2></div><div id="feedback-list" class="rows"></div></section>
-    </section>
-  </main>
+
+      <div id="dashboard" hidden>
+        <header class="page-head">
+          <div><h1 id="page-title">概览</h1><p id="dashboard-message" class="page-sub" aria-live="polite">正在读取运行状态。</p></div>
+          <div class="page-actions"><span id="last-refresh" class="last-refresh"></span><button id="refresh" class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>刷新</button></div>
+        </header>
+
+        <main class="panels">
+          <section id="overview-panel" class="panel">
+            <div class="stat-grid" id="overview-content"></div>
+            <div class="card" id="attention-card" hidden>
+              <div class="card-head"><h2>需要关注</h2><span class="card-hint">点击条目直达对应站点</span></div>
+              <div class="card-body flush attention-list" id="attention-list"></div>
+            </div>
+          </section>
+
+          <section id="sites-panel" class="panel" hidden>
+            <div class="toolbar">
+              <div class="search-box"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="site-search" type="search" placeholder="搜索站点名称或地址" aria-label="搜索站点"></div>
+              <select id="site-state-filter" aria-label="按状态筛选站点">
+                <option value="">全部状态</option>
+                <option value="healthy">正常</option>
+                <option value="attention">异常 / 待处理</option>
+                <option value="disabled">已停用</option>
+              </select>
+              <span class="spacer"></span>
+              <button id="session-sync" class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pair"/></svg>浏览器同步</button>
+              <button id="add-site" class="btn btn-accent" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新增站点</button>
+            </div>
+            <div id="site-list" class="site-list"></div>
+          </section>
+
+          <section id="rules-panel" class="panel" hidden>
+            <div class="toolbar">
+              <div class="search-box"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="rule-search" type="search" placeholder="搜索规则名称或供应商" aria-label="搜索规则"></div>
+              <span class="spacer"></span>
+              <button id="add-rule" class="btn btn-accent" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新增规则</button>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>热门模型匹配规则</h2><span class="card-hint" id="rule-summary"></span></div>
+              <div class="card-body flush" id="rule-list"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>匹配冲突</h2><span class="card-hint">同一模型命中多条规则时显示</span></div>
+              <div class="card-body flush" id="conflict-list"></div>
+            </div>
+          </section>
+
+          <section id="runs-panel" class="panel" hidden>
+            <div class="toolbar">
+              <select id="run-site-filter" aria-label="按站点筛选"><option value="">全部站点</option></select>
+              <select id="run-status-filter" aria-label="按状态筛选采集记录">
+                <option value="">全部状态</option>
+                <option value="success">成功</option>
+                <option value="partial">部分完成</option>
+                <option value="failed">失败</option>
+                <option value="running">采集中</option>
+              </select>
+              <button id="run-filter-apply" class="btn" type="button">筛选</button>
+              <span class="spacer"></span>
+              <span id="run-summary" class="muted"></span>
+            </div>
+            <div class="card"><div class="card-body flush" id="run-list"></div></div>
+          </section>
+
+          <section id="unmatched-panel" class="panel" hidden>
+            <div class="card">
+              <div class="card-head"><h2>未匹配模型</h2><span class="card-hint">尚未命中任何规则的上游模型名</span></div>
+              <div class="card-body flush" id="unmatched-list"></div>
+            </div>
+          </section>
+
+          <section id="feedback-panel" class="panel" hidden>
+            <div class="card">
+              <div class="card-head"><h2>用户反馈</h2></div>
+              <div class="card-body flush" id="feedback-list"></div>
+            </div>
+          </section>
+
+          <section id="system-panel" class="panel" hidden>
+            <div class="card">
+              <div class="card-head"><h2>系统状态</h2></div>
+              <div class="card-body"><div class="stat-grid" id="system-content"></div></div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </div>
 
   <dialog id="site-dialog" class="admin-dialog">
     <form id="site-form" method="dialog">
-      <h2 id="site-form-title">编辑站点</h2>
-      <input id="site-id" type="hidden">
-      <label>名称<input id="site-name" required></label>
-      <label>基础地址<input id="site-base-url" type="url" required></label>
-      <label>监测页面<input id="site-source-url" type="url" required></label>
-      <label>适配器<select id="site-adapter"></select></label>
-      <label>采集间隔（分钟）<input id="site-interval" type="number" min="5" max="1440" value="15" required></label>
-      <label>抖动（秒）<input id="site-jitter" type="number" min="0" max="3600" value="120" required></label>
-      <label>适配器配置 JSON<textarea id="site-config" rows="6">{}</textarea></label>
-	  <div id="site-config-fields" class="schema-fields"></div>
-      <label>公告自定义原因（留空则显示后台报错）<textarea id="site-failure-reason" rows="3" maxlength="500" placeholder="例如：源站暂时限制国内 IP，正在处理中"></textarea></label>
-      <label class="check"><input id="site-enabled" type="checkbox" checked> 启用采集</label>
-      <label class="check"><input id="site-session-required" type="checkbox"> 需要登录态</label>
-      <div class="dialog-actions"><button type="button" data-close="site-dialog">取消</button><button type="submit">保存</button></div>
+      <div class="dialog-head"><h2 id="site-form-title">编辑站点</h2><button class="btn btn-ghost btn-icon" type="button" data-close="site-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <div class="dialog-body">
+        <input id="site-id" type="hidden">
+        <fieldset class="form-section">
+          <legend>基础信息</legend>
+          <div class="form-grid">
+            <label class="field"><span>名称</span><input id="site-name" required></label>
+            <label class="field"><span>适配器</span><select id="site-adapter"></select></label>
+            <label class="field span-2"><span>基础地址</span><input id="site-base-url" type="url" required class="mono"></label>
+            <label class="field span-2"><span>监测页面</span><input id="site-source-url" type="url" required class="mono"></label>
+          </div>
+        </fieldset>
+        <fieldset class="form-section">
+          <legend>采集计划</legend>
+          <div class="form-grid">
+            <label class="field"><span>采集间隔（分钟）</span><input id="site-interval" type="number" min="5" max="1440" value="15" required></label>
+            <label class="field"><span>随机抖动（秒）</span><input id="site-jitter" type="number" min="0" max="3600" value="120" required></label>
+            <div class="field field-inline span-2"><label class="check"><input id="site-enabled" type="checkbox" checked> 启用采集</label></div>
+            <div class="field field-inline span-2"><label class="check"><input id="site-session-required" type="checkbox"> 需要登录态</label></div>
+          </div>
+        </fieldset>
+        <fieldset class="form-section">
+          <legend>模型屏蔽</legend>
+          <div class="form-grid">
+            <label class="field span-2"><span>屏蔽关键词（逗号分隔，可留空）</span>
+              <input id="site-blocked" type="text" placeholder="例如：只会喵喵叫">
+              <span class="field-hint">模型名包含任一关键词（不区分大小写）即被隐藏，无论其实际可用性；保存后下一次采集生效，并立即从看板移除已收录的同名模型。</span>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset class="form-section">
+          <legend>适配器配置</legend>
+          <div id="site-config-fields" class="schema-fields"></div>
+          <details><summary class="muted">高级：编辑原始配置 JSON</summary>
+            <label class="field" style="margin-top:8px"><textarea id="site-config" rows="6" class="mono" spellcheck="false">{}</textarea></label>
+          </details>
+        </fieldset>
+        <fieldset class="form-section">
+          <legend>公告</legend>
+          <div class="form-grid">
+            <label class="field span-2"><span>自定义原因（留空则显示后台报错）</span><textarea id="site-failure-reason" rows="2" maxlength="500" placeholder="例如：源站暂时限制国内 IP，正在处理中"></textarea></label>
+          </div>
+        </fieldset>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-close="site-dialog">取消</button>
+        <button class="btn btn-primary" type="submit">保存</button>
+      </div>
     </form>
   </dialog>
-
 
   <dialog id="rule-dialog" class="admin-dialog">
     <form id="rule-form" method="dialog">
-      <h2>编辑匹配规则</h2>
-      <input id="rule-id" type="hidden">
-      <label>供应商<input id="rule-provider" required></label>
-      <label>标准模型名<input id="rule-name" required></label>
-      <label>必选关键词（逗号分隔）<input id="rule-required"></label>
-      <label>任选关键词（逗号分隔）<input id="rule-any"></label>
-      <label>排除关键词（逗号分隔）<input id="rule-excluded"></label>
-      <label>别名（逗号分隔）<input id="rule-aliases"></label>
-      <label>正则表达式<input id="rule-pattern"></label>
-      <label>优先级<input id="rule-priority" type="number" value="100"></label>
-      <label class="check"><input id="rule-enabled" type="checkbox" checked> 启用</label>
-      <button id="preview-rule" type="button">预览命中</button>
-      <div id="rule-preview" class="preview-list muted"></div>
-      <div class="dialog-actions"><button type="button" data-close="rule-dialog">取消</button><button type="submit">保存</button></div>
+      <div class="dialog-head"><h2>编辑匹配规则</h2><button class="btn btn-ghost btn-icon" type="button" data-close="rule-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <div class="dialog-body">
+        <input id="rule-id" type="hidden">
+        <div class="form-grid">
+          <label class="field"><span>供应商</span><input id="rule-provider" required></label>
+          <label class="field"><span>标准模型名</span><input id="rule-name" required></label>
+          <label class="field"><span>必选关键词（逗号分隔）</span><input id="rule-required"></label>
+          <label class="field"><span>任选关键词（逗号分隔）</span><input id="rule-any"></label>
+          <label class="field"><span>排除关键词（逗号分隔）</span><input id="rule-excluded"></label>
+          <label class="field"><span>别名（逗号分隔）</span><input id="rule-aliases"></label>
+          <label class="field span-2"><span>正则表达式</span><input id="rule-pattern" class="mono"></label>
+          <label class="field"><span>优先级</span><input id="rule-priority" type="number" value="100"></label>
+          <div class="field field-inline"><label class="check"><input id="rule-enabled" type="checkbox" checked> 启用</label></div>
+        </div>
+        <div class="form-section">
+          <button id="preview-rule" class="btn" type="button">预览命中</button>
+          <div id="rule-preview" class="muted" style="margin-top:8px; font-size:13px"></div>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-close="rule-dialog">取消</button>
+        <button class="btn btn-primary" type="submit">保存</button>
+      </div>
     </form>
   </dialog>
+
+  <dialog id="session-dialog" class="admin-dialog">
+    <form id="session-form" method="dialog">
+      <div class="dialog-head"><h2 id="session-form-title">导入登录态</h2><button class="btn btn-ghost btn-icon" type="button" data-close="session-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <div class="dialog-body">
+        <label class="field"><span>会话 JSON</span>
+          <textarea id="session-payload" rows="8" class="mono" spellcheck="false" placeholder='{"userAgent":"…","cookies":[…]}'></textarea>
+          <span class="field-hint">含 userAgent 和 cookies；newapi_token 类型另需 authType、accessToken、userId，并包含 new_api_refresh Cookie 以便自动续期。留空提交不会修改。</span>
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-close="session-dialog">取消</button>
+        <button class="btn btn-primary" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
   <script src="/admin/admin.js" defer></script>
 </body>
 </html>

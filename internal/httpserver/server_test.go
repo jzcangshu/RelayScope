@@ -113,7 +113,7 @@ func TestHealthAndMetaEndpoints(t *testing.T) {
 			"RelayScope - 中转站健康监测",
 			`href="/assets/favicon.svg"`,
 		}, absent: []string{"expiry-countdown"}},
-		{path: "/admin/", contains: []string{"管理员控制台"}},
+		{path: "/admin/", contains: []string{"RelayScope 管理控制台", "sidebar-nav"}},
 	}
 
 	for _, test := range tests {

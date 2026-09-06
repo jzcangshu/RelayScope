@@ -230,6 +230,43 @@ func updateAbsenceEvidence(ctx context.Context, tx *sql.Tx, siteID int64, catalo
 	return nil
 }
 
+// RemoveRawModels immediately marks the named raw models of a site as
+// removed and clears their matches, bypassing the three-run absence buffer.
+// It implements admin-decided removals such as blocked-keyword filtering;
+// snapshots and buckets are kept so unblocking restores a model with its
+// history intact. Run after ApplyCollection, whose absence bookkeeping and
+// missing-catalog passes would otherwise re-admit these models.
+func (store *Store) RemoveRawModels(ctx context.Context, siteID int64, rawNames []string, removedAt time.Time) error {
+	if siteID <= 0 || len(rawNames) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(rawNames))
+	args := make([]any, 0, len(rawNames)+2)
+	args = append(args, unixMilli(removedAt), siteID)
+	for index, rawName := range rawNames {
+		placeholders[index] = "?"
+		args = append(args, rawName)
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin blocked model removal: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE raw_models SET removed_at = COALESCE(removed_at, ?)
+		WHERE site_id = ? AND raw_name IN (`+strings.Join(placeholders, ",")+")", args...); err != nil {
+		return fmt.Errorf("mark blocked models removed: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM model_matches
+		WHERE raw_model_id IN (SELECT id FROM raw_models WHERE site_id = ? AND raw_name IN (`+strings.Join(placeholders, ",")+`))`,
+		append([]any{siteID}, args[2:])...); err != nil {
+		return fmt.Errorf("clear matches for blocked models: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit blocked model removal: %w", err)
+	}
+	return nil
+}
+
 func applyMissingCatalogState(ctx context.Context, tx *sql.Tx, collection domain.Collection) error {
 	// A missing-catalog pass re-admits every raw model of the site before
 	// selecting groups, so previously removed models are marked in the same

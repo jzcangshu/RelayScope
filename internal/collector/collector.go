@@ -106,6 +106,29 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 		return collector.finishFailure(ctx, site, runID, classifyFetchError(collectErr), collectErr.Error(), now)
 	}
 	collection.RunID = runID
+	blockedKeywords := parseBlockedKeywords(siteDefinition.ConfigJSON)
+	blockedRawNames := make([]string, 0)
+	if len(blockedKeywords) > 0 {
+		keptModels := make([]domain.ModelObservation, 0, len(collection.Models))
+		for _, model := range collection.Models {
+			if containsAnyKeyword(model.RawName, blockedKeywords) {
+				blockedRawNames = append(blockedRawNames, model.RawName)
+				continue
+			}
+			keptModels = append(keptModels, model)
+		}
+		collection.Models = keptModels
+		keptCatalog := make([]string, 0, len(collection.CatalogRawNames))
+		for _, rawName := range collection.CatalogRawNames {
+			if !containsAnyKeyword(rawName, blockedKeywords) {
+				keptCatalog = append(keptCatalog, rawName)
+			}
+		}
+		collection.CatalogRawNames = keptCatalog
+		if len(blockedRawNames) > 0 {
+			collector.logger.Info("dropped blocked models", "site_id", site.ID, "count", len(blockedRawNames))
+		}
+	}
 	catalogProvided := len(collection.CatalogRawNames) > 0
 	if !collection.CatalogComplete || !catalogProvided {
 		collection.CatalogRawNames = make([]string, 0, len(collection.Models))
@@ -160,6 +183,11 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	collector.matcherMu.RUnlock()
 	if matchErr != nil {
 		return collector.finishFailure(ctx, site, runID, "match_refresh_failed", matchErr.Error(), now)
+	}
+	if len(blockedRawNames) > 0 {
+		if err := collector.store.RemoveRawModels(ctx, site.ID, blockedRawNames, now); err != nil {
+			collection.Issues = append(collection.Issues, domain.CollectionIssue{Code: "blocked_removal_failed", Scope: "blocked models", Message: err.Error()})
+		}
 	}
 	modelCount, groupCount := countObservation(collection)
 	status, code, message := "success", "", ""

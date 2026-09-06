@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -12,13 +13,28 @@ import (
 	"relayscope/internal/domain"
 )
 
+// normalizeAdapterConfig defaults an empty adapter config and requires valid
+// JSON otherwise; invalid config would fail every collection run for the site.
+func normalizeAdapterConfig(adapterConfig string) (string, error) {
+	if strings.TrimSpace(adapterConfig) == "" {
+		return "{}", nil
+	}
+	adapterConfig = strings.TrimSpace(adapterConfig)
+	if !json.Valid([]byte(adapterConfig)) {
+		return "", errors.New("adapter config must be valid JSON")
+	}
+	return adapterConfig, nil
+}
+
 func (store *Store) UpdateSite(ctx context.Context, siteID int64, name, adapterKey, adapterConfig string, enabled bool, sessionRequired *bool, interval, jitter time.Duration) error {
 	if siteID <= 0 || strings.TrimSpace(name) == "" || strings.TrimSpace(adapterKey) == "" || interval < 5*time.Minute || jitter < 0 {
 		return errors.New("invalid site update")
 	}
-	if strings.TrimSpace(adapterConfig) == "" {
-		adapterConfig = "{}"
+	normalizedConfig, err := normalizeAdapterConfig(adapterConfig)
+	if err != nil {
+		return err
 	}
+	adapterConfig = normalizedConfig
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin site update: %w", err)
@@ -53,9 +69,11 @@ func (store *Store) UpdateSiteDetails(ctx context.Context, siteID int64, name, b
 	if err := validateSiteURL("source URL", sourceURL); err != nil {
 		return err
 	}
-	if strings.TrimSpace(adapterConfig) == "" {
-		adapterConfig = "{}"
+	normalizedConfig, err := normalizeAdapterConfig(adapterConfig)
+	if err != nil {
+		return err
 	}
+	adapterConfig = normalizedConfig
 	failureReason = strings.TrimSpace(failureReason)
 	if len([]rune(failureReason)) > 500 {
 		return errors.New("custom failure reason is too long")
@@ -171,11 +189,11 @@ func (store *Store) CreateSite(ctx context.Context, site Site) (Site, error) {
 	if site.Interval < 5*time.Minute || site.Jitter < 0 {
 		return Site{}, errors.New("site interval must be at least five minutes and jitter cannot be negative")
 	}
-	if strings.TrimSpace(site.AdapterConfig) == "" {
-		site.AdapterConfig = "{}"
-	} else {
-		site.AdapterConfig = strings.TrimSpace(site.AdapterConfig)
+	normalizedConfig, err := normalizeAdapterConfig(site.AdapterConfig)
+	if err != nil {
+		return Site{}, err
 	}
+	site.AdapterConfig = normalizedConfig
 	site.CustomFailureReason = strings.TrimSpace(site.CustomFailureReason)
 	if len([]rune(site.CustomFailureReason)) > 500 {
 		return Site{}, errors.New("custom failure reason is too long")

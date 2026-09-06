@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Per-site model keyword blocking. A site's adapter config may now carry
+  `"blockedKeywords": ["…"]`; during collection the collector drops models
+  whose raw name contains any keyword (case-insensitive) before observations
+  are built, and the store removes previously collected matches immediately
+  (`RemoveRawModels`) instead of waiting out the three-run absence buffer, so
+  blocked models disappear from every dashboard view at the next collection
+  regardless of availability. Snapshots and buckets are kept, so clearing the
+  keyword restores a model with its history intact. Site write paths now
+  reject adapter configs that are not valid JSON (they would have failed
+  every collection run). The admin UI exposes the keywords as a dedicated
+  field in the site dialog and shows a badge on blocked sites.
+
+### Changed
+- The admin console was redesigned on a dedicated stylesheet (`web/admin/
+  admin.css`): sidebar navigation with hash deep links, action-oriented
+  overview with attention shortcuts, site search and state filters, rule
+  search with count badges, a site dropdown for run filtering (replacing the
+  numeric site ID input), a session-import dialog (replacing `window.prompt`),
+  toast feedback, inline SVG icons, light/dark themes that follow the public
+  dashboard's `relayscope-theme` preference, and a responsive layout for
+  narrow screens. Still dependency-free vanilla JS/CSS with no build step;
+  the public dashboard is untouched.
+
 ### Fixed
 - NewAPI probe sites now report every key group and honest 24h timelines.
   The collector ignored the plugin's `token-groups` endpoint, so groups came
