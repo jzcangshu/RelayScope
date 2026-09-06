@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- NewAPI probe sites now report every key group and honest 24h timelines.
+  The collector ignored the plugin's `token-groups` endpoint, so groups came
+  only from pricing `enable_groups` (3 of 8 groups on one site) and models
+  without pricing landed under a fabricated `default` group; the probe's
+  key-group list is now authoritative and its models extend the catalog.
+  Zero-traffic probe slots were stored as a fabricated 100% success ratio
+  (the plugin stamps them `success_rate=100` while the source UI renders them
+  grey "no request"), and the plugin's fetch-anchored rolling slot windows
+  shifted every collection, so hourly buckets never hit the store's upsert
+  key and accumulated ~200 shifted copies per dashboard slot — the public
+  timeline's best-state-per-slot fold then let adjacent healthy hours
+  outvote real failures and rendered every bar green. Zero-traffic slots now
+  map to no-samples, hourly slots are aligned to clock-hour boundaries so
+  successive runs upsert in place, and the affected drifted buckets are
+  removed by the same predicate (`resolution_seconds=3600 AND
+  bucket_start % 3600000 <> 0`).
 - NewAPI probe detail collection no longer fails with HTTP 404 for
   slash-containing model names (e.g. `openai/gpt-oss-120b`,
   `moonshotai/kimi-k3`). The model-status plugin resolves
@@ -19,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   partial-detail issue.
 
 ### Added
+- Fetchers may implement the optional `JSONPoster` interface. The probe
+  adapter uses it to fetch all model timelines in one `POST
+  /status/batch?window=24h` call per collection (falling back to per-model
+  GETs when the fetcher or plugin does not support it), and reads
+  `token-groups` for key-group membership.
 - Versioned deployment catalogs and admin-API import tooling for server
   migration: `sites.production.json` (40 monitored sites) and
   `rules.production.json` (57 model-matching rules, including gpt-oss-120b/20b,

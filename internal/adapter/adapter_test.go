@@ -420,6 +420,141 @@ func (fetcher statusErrorFetcher) GetJSON(ctx context.Context, rawURL string, ta
 	return json.Unmarshal(body, target)
 }
 
+func TestProbeDecodeAlignsRollingHourSlotsAndDropsZeroTrafficRates(t *testing.T) {
+	body := []byte(`{"data":{"model_name":"grok-4.6","success_rate":100,"total_requests":0,"success_count":0,"slot_data":[
+		{"start_time":1788650369,"end_time":1788653969,"status":"yellow","success_rate":36.16,"total_requests":1369,"success_count":495},
+		{"start_time":1788653969,"end_time":1788657569,"status":"green","success_rate":100,"total_requests":0,"success_count":0}
+	]}}`)
+	buckets, err := decodeDetailBuckets(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buckets) != 3 {
+		t.Fatalf("buckets = %d", len(buckets))
+	}
+	if buckets[0].Aggregate == false || buckets[0].SuccessRate != nil {
+		t.Fatalf("zero-traffic aggregate kept a fabricated rate: %+v", buckets[0])
+	}
+	if buckets[1].Timestamp != 1788649200 || buckets[1].EndTimestamp != 1788652800 {
+		t.Fatalf("rolling slot not aligned to clock hours: %+v", buckets[1])
+	}
+	if buckets[2].SuccessRate != nil || buckets[2].Requests == nil || *buckets[2].Requests != 0 {
+		t.Fatalf("zero-traffic slot kept a fabricated rate: %+v", buckets[2])
+	}
+	nonHourly := []byte(`{"data":{"model_name":"m","slot_data":[{"start_time":1788650300,"end_time":1788650600,"success_rate":50,"total_requests":4}]}}`)
+	shortBuckets, err := decodeDetailBuckets(nonHourly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortBuckets[1].Timestamp != 1788650300 || shortBuckets[1].EndTimestamp != 1788650600 {
+		t.Fatalf("non-hourly slot was realigned: %+v", shortBuckets[1])
+	}
+}
+
+type postingFetcher struct {
+	fakeFetcher
+	postResponses map[string][]byte
+	postRequests  []string
+}
+
+func (fetcher *postingFetcher) PostJSON(_ context.Context, rawURL string, body any) ([]byte, http.Header, error) {
+	fetcher.postRequests = append(fetcher.postRequests, rawURL)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(payload) == 0 || !strings.Contains(string(payload), "grok") {
+		return nil, nil, errors.New("unexpected batch body")
+	}
+	if response, exists := fetcher.postResponses[rawURL]; exists {
+		return response, http.Header{}, nil
+	}
+	return nil, nil, &missingResponseError{rawURL: rawURL}
+}
+
+func TestProbeCollectDetailsPrefersSingleBatchPost(t *testing.T) {
+	now := time.Unix(1788657569, 0).UTC()
+	collection := domain.Collection{Models: []domain.ModelObservation{{RawName: "grok-4.6", Groups: []domain.GroupObservation{
+		{RawName: "level1", ServiceState: domain.ServiceNoSamples},
+		{RawName: "coding-plus", ServiceState: domain.ServiceNoSamples},
+	}}}}
+	fetcher := &postingFetcher{postResponses: map[string][]byte{
+		"https://example.test/api/model-status/embed/status/batch?window=24h": []byte(`{"data":[{"model_name":"grok-4.6","success_rate":36.16,"total_requests":1369,"slot_data":[
+			{"start_time":1788650369,"end_time":1788653969,"success_rate":36.16,"total_requests":1369,"success_count":495,"failure_count":874},
+			{"start_time":1788653969,"end_time":1788657569,"success_rate":100,"total_requests":0,"success_count":0}
+		]}]}`),
+	}}
+
+	if err := (NewAPIProbeAdapter()).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"grok-4.6"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.postRequests) != 1 {
+		t.Fatalf("expected exactly one batch POST, got %v", fetcher.postRequests)
+	}
+	model := collection.Models[0]
+	if len(model.Groups[0].Buckets) != 2 || len(model.Groups[1].Buckets) != 2 {
+		t.Fatalf("batch buckets not projected onto every group: %+v", model.Groups)
+	}
+	zeroTraffic := model.Groups[0].Buckets[1]
+	if zeroTraffic.Metrics.SuccessRatio != nil || zeroTraffic.Metrics.RequestCount == nil || *zeroTraffic.Metrics.RequestCount != 0 {
+		t.Fatalf("zero-traffic bucket kept a fabricated ratio: %+v", zeroTraffic)
+	}
+	if model.HistoryCoverageEnd.IsZero() || !model.HistoryCoverageEnd.Equal(now) {
+		t.Fatalf("batch details did not declare coverage: %+v", model)
+	}
+
+	if err := (NewAPIProbeAdapter()).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"grok-4.6"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.postRequests) != 1 {
+		t.Fatalf("fresh details were refetched: %v", fetcher.postRequests)
+	}
+}
+
+func TestProbeCollectDetailsFallsBackWhenBatchUnavailable(t *testing.T) {
+	now := time.Unix(1788657569, 0).UTC()
+	collection := domain.Collection{Models: []domain.ModelObservation{{RawName: "grok-4.6", Groups: []domain.GroupObservation{{RawName: "level1", ServiceState: domain.ServiceNoSamples}}}}}
+	fetcher := &postingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/model-status/embed/status/grok-4.6?window=24h": []byte(`{"data":{"model_name":"grok-4.6","success_rate":96.63,"total_requests":6209,"success_count":6000,"failure_count":144,"slot_data":[{"start_time":1788650369,"end_time":1788653969,"success_rate":36.16,"total_requests":1369,"success_count":495}]}}`),
+	}}}
+
+	if err := (NewAPIProbeAdapter()).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"grok-4.6"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.postRequests) != 1 {
+		t.Fatalf("batch endpoint should be tried once before falling back: %v", fetcher.postRequests)
+	}
+	if len(collection.Models[0].Groups[0].Buckets) != 1 {
+		t.Fatalf("fallback detail lost: %+v", collection.Models[0])
+	}
+}
+
+func TestProbeCollectAppliesTokenGroupsAndExpandsCatalog(t *testing.T) {
+	now := time.Unix(1788657569, 0).UTC()
+	responses := map[string][]byte{
+		"https://example.test/api/model-status/embed/config/selected": []byte(`{"data":["grok-4.6"]}`),
+		"https://example.test/api/model-status/embed/token-groups":    []byte(`{"data":[{"group_name":"level1","models":["grok-4.6","gpt-5.5"]},{"group_name":"coding","models":["grok-4.6"]}]}`),
+	}
+	collection, err := (NewAPIProbeAdapter()).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: responses}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(collection.Models) != 2 {
+		t.Fatalf("token-group models missing: %+v", collection.Models)
+	}
+	grok := collection.Models[0]
+	if grok.RawName != "grok-4.6" || len(grok.Groups) != 2 || grok.Groups[0].RawName != "level1" || grok.Groups[1].RawName != "coding" {
+		t.Fatalf("key groups not applied: %+v", grok)
+	}
+	gpt := collection.Models[1]
+	if gpt.RawName != "gpt-5.5" || len(gpt.Groups) != 1 || gpt.Groups[0].RawName != "level1" {
+		t.Fatalf("catalog not expanded with group models: %+v", gpt)
+	}
+	if len(collection.CatalogRawNames) != 1 || collection.CatalogRawNames[0] != "grok-4.6" {
+		t.Fatalf("catalog anchors should stay operator-curated: %+v", collection.CatalogRawNames)
+	}
+}
+
 func TestDetailIssueDoesNotPersistRequestURL(t *testing.T) {
 	collection := domain.Collection{}
 	appendDetailIssue(&collection, "detail_fetch_failed", "gpt-5.6-sol", &FetchError{

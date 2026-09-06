@@ -213,7 +213,7 @@ func decodeProbeStatus(value any) []detailBucket {
 	}
 	result := []detailBucket{{
 		Aggregate:   true,
-		SuccessRate: numberPointer(object, "success_rate"),
+		SuccessRate: probeSuccessRate(object, intPointer(object, "total_requests")),
 		Requests:    intPointer(object, "total_requests"),
 		Success:     intPointer(object, "success_count"),
 		Failure:     intPointer(object, "failure_count", "error_count"),
@@ -224,17 +224,53 @@ func decodeProbeStatus(value any) []detailBucket {
 		if !ok {
 			continue
 		}
+		requests := intPointer(slot, "total_requests")
+		start := int64Value(slot, "start_time")
+		end := int64Value(slot, "end_time", "end_timestamp")
 		result = append(result, detailBucket{
-			Timestamp:    int64Value(slot, "start_time"),
-			EndTimestamp: int64Value(slot, "end_time", "end_timestamp"),
-			SuccessRate:  numberPointer(slot, "success_rate"),
-			Requests:     intPointer(slot, "total_requests"),
-			Success:      intPointer(slot, "success_count"),
-			Failure:      intPointer(slot, "failure_count", "error_count"),
-			Empty:        intPointer(slot, "empty_count"),
+			// The plugin reports rolling windows anchored to the fetch time, so
+			// consecutive collections produce shifted boundaries. Hour-aligned
+			// starts keep the store's (group, bucket_start) upsert key stable
+			// across runs instead of accumulating near-duplicate buckets.
+			Timestamp:    normalizeProbeSlotStart(start, end),
+			EndTimestamp: alignedProbeSlotEnd(start, end),
+			// The source UI renders zero-traffic slots as "no request" (grey),
+			// even though the plugin stamps them success_rate=100. A nil rate
+			// keeps them in the no-samples state instead of fabricated healthy.
+			SuccessRate: probeSuccessRate(slot, requests),
+			Requests:    requests,
+			Success:     intPointer(slot, "success_count"),
+			Failure:     intPointer(slot, "failure_count", "error_count"),
+			Empty:       intPointer(slot, "empty_count"),
 		})
 	}
 	return result
+}
+
+// probeSuccessRate drops the success rate of zero-traffic windows so they map
+// to the no-samples state rather than a fabricated 100% healthy.
+func probeSuccessRate(object map[string]any, requests *int64) *float64 {
+	rate := numberPointer(object, "success_rate")
+	if rate == nil || requests == nil || *requests > 0 {
+		return rate
+	}
+	return nil
+}
+
+// normalizeProbeSlotStart snaps an hourly probe slot to its clock-hour start.
+// Non-hourly spans (other plugin variants) are returned unchanged.
+func normalizeProbeSlotStart(start, end int64) int64 {
+	if start <= 0 || end <= start || end-start < 3540 || end-start > 3660 {
+		return start
+	}
+	return start - start%3600
+}
+
+func alignedProbeSlotEnd(start, end int64) int64 {
+	if aligned := normalizeProbeSlotStart(start, end); aligned != start {
+		return aligned + 3600
+	}
+	return end
 }
 
 func findGroups(value any, depth int) []any {

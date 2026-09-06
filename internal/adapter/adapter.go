@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,6 +76,14 @@ type Site struct {
 type Fetcher interface {
 	GetJSON(ctx context.Context, rawURL string, target any) error
 	GetBytes(ctx context.Context, rawURL string) ([]byte, http.Header, error)
+}
+
+// JSONPoster is an optional Fetcher extension for endpoints that only accept
+// POST bodies, such as the model-status batch status API. Adapters must
+// type-assert and fall back to GET endpoints when the active fetcher cannot
+// post.
+type JSONPoster interface {
+	PostJSON(ctx context.Context, rawURL string, body any) ([]byte, http.Header, error)
 }
 
 // SiteFetcher allows the collector to derive a short-lived, site-scoped
@@ -167,6 +176,65 @@ func (fetcher HTTPFetcher) GetJSON(ctx context.Context, rawURL string, target an
 		return fmt.Errorf("decode JSON from %s: %w", safeURL(rawURL), err)
 	}
 	return nil
+}
+
+// PostJSON sends body as an application/json POST and returns the raw
+// response. Errors mirror GetBytes: non-2xx responses become *FetchError.
+func (fetcher HTTPFetcher) PostJSON(ctx context.Context, rawURL string, body any) ([]byte, http.Header, error) {
+	if _, err := url.ParseRequestURI(rawURL); err != nil {
+		return nil, nil, wrapRedacted("invalid fetch URL", err)
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, wrapRedacted("encode request body", err)
+	}
+	client := fetcher.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, nil, wrapRedacted("build fetch request", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if fetcher.UserAgent != "" {
+		request.Header.Set("User-Agent", fetcher.UserAgent)
+	}
+	setRequestHeaders(request, fetcher.Headers)
+	if len(fetcher.Cookies) > 0 {
+		values := make([]string, 0, len(fetcher.Cookies))
+		for _, cookie := range fetcher.Cookies {
+			if cookie.Name != "" {
+				values = append(values, cookie.Name+"="+cookie.Value)
+			}
+		}
+		request.Header.Set("Cookie", strings.Join(values, "; "))
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, nil, wrapRedacted("fetch request failed", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, response.Header, &FetchError{
+			URL:           safeURL(rawURL),
+			StatusCode:    response.StatusCode,
+			LoginRequired: response.StatusCode == http.StatusUnauthorized,
+			Err:           fmt.Errorf("fetch returned HTTP %d", response.StatusCode),
+		}
+	}
+	maxBytes := fetcher.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = 2 << 20
+	}
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxBytes+1))
+	if err != nil {
+		return nil, response.Header, wrapRedacted("read response body", err)
+	}
+	if int64(len(responseBody)) > maxBytes {
+		return nil, response.Header, fmt.Errorf("response exceeds %d bytes", maxBytes)
+	}
+	return responseBody, response.Header, nil
 }
 
 func (fetcher HTTPFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte, http.Header, error) {

@@ -3,8 +3,10 @@ package adapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +25,8 @@ type ProbeAdapter struct {
 	defaultPath       string
 	defaultStatusPath string
 	defaultDetailPath string
+	defaultGroupsPath string
+	defaultBatchPath  string
 	paginate          bool
 	inlineHistory     bool
 	historyWindow     time.Duration
@@ -32,7 +36,7 @@ type ProbeAdapter struct {
 func (adapter ProbeAdapter) Key() string         { return adapter.adapterKey }
 func (adapter ProbeAdapter) DisplayName() string { return adapter.display }
 func (adapter ProbeAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"statusBaseUrl":{"type":"string"},"catalogPath":{"type":"string"},"statusPath":{"type":"string"},"detailPath":{"type":"string"},"detailPathTemplate":{"type":"string"},"pageSize":{"type":"integer","minimum":1,"maximum":200},"pricingAdapter":{"type":"string"},"pricingBaseUrl":{"type":"string"},"pricingPath":{"type":"string"},"pricingStatusPath":{"type":"string"},"pricingOptional":{"type":"boolean"},"pricingRequiresSession":{"type":"boolean"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"statusBaseUrl":{"type":"string"},"catalogPath":{"type":"string"},"statusPath":{"type":"string"},"detailPath":{"type":"string"},"detailPathTemplate":{"type":"string"},"groupsPath":{"type":"string"},"batchPath":{"type":"string"},"pageSize":{"type":"integer","minimum":1,"maximum":200},"pricingAdapter":{"type":"string"},"pricingBaseUrl":{"type":"string"},"pricingPath":{"type":"string"},"pricingStatusPath":{"type":"string"},"pricingOptional":{"type":"boolean"},"pricingRequiresSession":{"type":"boolean"}}}`)
 }
 
 type probeConfig struct {
@@ -41,6 +45,8 @@ type probeConfig struct {
 	StatusPath         string `json:"statusPath"`
 	DetailPath         string `json:"detailPath"`
 	DetailPathTemplate string `json:"detailPathTemplate"`
+	GroupsPath         string `json:"groupsPath"`
+	BatchPath          string `json:"batchPath"`
 	PageSize           int    `json:"pageSize"`
 	PricingAdapter     string `json:"pricingAdapter"`
 	PricingBaseURL     string `json:"pricingBaseUrl"`
@@ -122,10 +128,23 @@ func (adapter ProbeAdapter) Collect(ctx context.Context, site Site, fetcher Fetc
 			return domain.Collection{}, fmt.Errorf("decode %s inline history: %w", adapter.Key(), err)
 		}
 	}
-	collection.CatalogRawNames = make([]string, 0, len(collection.Models))
-	for _, model := range collection.Models {
-		collection.CatalogRawNames = append(collection.CatalogRawNames, model.RawName)
+	groupsPath := config.GroupsPath
+	if groupsPath == "" {
+		groupsPath = adapter.defaultGroupsPath
 	}
+	if groupsPath != "" {
+		// The key-group list is what the source status page switches on; it is
+		// the authoritative model-to-group mapping. Failures here only degrade
+		// to the placeholder groups, so they must not abort the collection.
+		if groupsURL, resolveErr := resolveSiteURL(statusBaseURL, groupsPath); resolveErr == nil {
+			if groups, fetchErr := fetchProbeTokenGroups(ctx, fetcher, groupsURL); fetchErr == nil {
+				applyProbeTokenGroups(&collection, groups)
+			}
+		}
+	}
+	// Catalog raw names stay the operator-curated probe selection; models added
+	// from the key-group list are observations, not absence-detection anchors.
+	collection.CatalogRawNames = catalogModelNames(models)
 	if config.PricingAdapter != "" {
 		if config.PricingPath != "" {
 			if err := attachPricingSource(ctx, site, fetcher, adapter.PricingRegistry, pricingSource{
@@ -140,7 +159,183 @@ func (adapter ProbeAdapter) Collect(ctx context.Context, site Site, fetcher Fetc
 			}
 		}
 	}
+	batchPath := config.BatchPath
+	if batchPath == "" {
+		batchPath = adapter.defaultBatchPath
+	}
+	if batchPath != "" {
+		// One batch POST carries the full 24h series for every model, so
+		// CollectDetails normally has no network work left to do. Best-effort:
+		// CollectDetails retries and then falls back to per-model GETs.
+		if batchURL, resolveErr := resolveSiteURL(statusBaseURL, batchPath); resolveErr == nil {
+			_ = mergeProbeBatchStatus(ctx, fetcher, &collection, modelRawNames(collection.Models), batchURL, now)
+		}
+	}
 	return collection, nil
+}
+
+func modelRawNames(models []domain.ModelObservation) []string {
+	names := make([]string, 0, len(models))
+	for _, model := range models {
+		if strings.TrimSpace(model.RawName) != "" {
+			names = append(names, model.RawName)
+		}
+	}
+	return names
+}
+
+func catalogModelNames(items []pricingModel) []string {
+	seen := make(map[string]struct{}, len(items))
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item.Model)
+		if name == "" {
+			continue
+		}
+		if _, duplicate := seen[name]; duplicate {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
+}
+
+type probeTokenGroup struct {
+	GroupName string   `json:"group_name"`
+	Models    []string `json:"models"`
+}
+
+func fetchProbeTokenGroups(ctx context.Context, fetcher Fetcher, groupsURL string) ([]probeTokenGroup, error) {
+	body, _, err := fetcher.GetBytes(ctx, groupsURL)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Data []probeTokenGroup `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		var groups []probeTokenGroup
+		if arrayErr := json.Unmarshal(body, &groups); arrayErr != nil {
+			return nil, fmt.Errorf("decode token groups: %w", err)
+		}
+		return groups, nil
+	}
+	return payload.Data, nil
+}
+
+// applyProbeTokenGroups replaces the placeholder group with the site's real
+// key groups and adds tracked models the catalog did not list. The probe
+// itself is group-agnostic, so every group of a model shares one series.
+func applyProbeTokenGroups(collection *domain.Collection, groups []probeTokenGroup) {
+	if collection == nil || len(groups) == 0 {
+		return
+	}
+	byModel := make(map[string][]string)
+	for _, group := range groups {
+		name := strings.TrimSpace(group.GroupName)
+		if name == "" {
+			continue
+		}
+		for _, model := range group.Models {
+			modelName := strings.TrimSpace(model)
+			if modelName == "" {
+				continue
+			}
+			list := byModel[modelName]
+			if !slices.Contains(list, name) {
+				byModel[modelName] = append(list, name)
+			}
+		}
+	}
+	indexByName := make(map[string]int, len(collection.Models))
+	for index := range collection.Models {
+		indexByName[collection.Models[index].RawName] = index
+	}
+	for modelName, groupNames := range byModel {
+		index, exists := indexByName[modelName]
+		if !exists {
+			index = len(collection.Models)
+			indexByName[modelName] = index
+			collection.Models = append(collection.Models, domain.ModelObservation{RawName: modelName})
+		}
+		target := &collection.Models[index]
+		placeholder := len(target.Groups) == 1 && target.Groups[0].RawName == "default"
+		existing := make(map[string]domain.GroupObservation, len(target.Groups))
+		if !placeholder {
+			for _, group := range target.Groups {
+				existing[group.RawName] = group
+			}
+		}
+		merged := make([]domain.GroupObservation, 0, len(groupNames)+len(existing))
+		for _, name := range groupNames {
+			if group, ok := existing[name]; ok {
+				merged = append(merged, group)
+				delete(existing, name)
+				continue
+			}
+			merged = append(merged, domain.GroupObservation{RawName: name, ServiceState: domain.ServiceNoSamples})
+		}
+		for _, group := range target.Groups {
+			if _, ok := existing[group.RawName]; ok {
+				merged = append(merged, group)
+			}
+		}
+		target.Groups = merged
+	}
+}
+
+// mergeProbeBatchStatus fetches the 24h series for the given models in a
+// single POST and merges them into the collection. Models without probe
+// traffic keep their no-samples state: the decoder maps zero-traffic slots to
+// no samples rather than the plugin's misleading success_rate=100.
+func mergeProbeBatchStatus(ctx context.Context, fetcher Fetcher, collection *domain.Collection, modelNames []string, batchURL string, now time.Time) error {
+	if collection == nil || len(modelNames) == 0 {
+		return nil
+	}
+	poster, ok := fetcher.(JSONPoster)
+	if !ok {
+		return errors.New("fetcher does not support POST batch status")
+	}
+	body, _, err := poster.PostJSON(ctx, batchURL, modelNames)
+	if err != nil {
+		return err
+	}
+	var payload struct {
+		Data []json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return fmt.Errorf("decode batch status: %w", err)
+	}
+	byModel := make(map[string]*domain.ModelObservation, len(collection.Models))
+	for index := range collection.Models {
+		byModel[collection.Models[index].RawName] = &collection.Models[index]
+	}
+	merged := 0
+	for _, rawItem := range payload.Data {
+		buckets, decodeErr := decodeDetailBuckets(rawItem)
+		if decodeErr != nil || len(buckets) == 0 {
+			continue
+		}
+		var named struct {
+			ModelName string `json:"model_name"`
+		}
+		if json.Unmarshal(rawItem, &named) != nil || named.ModelName == "" {
+			continue
+		}
+		model, exists := byModel[named.ModelName]
+		if !exists {
+			continue
+		}
+		mergeDetailBuckets(model, buckets, now)
+		model.HistoryCoverageStart = now.UTC().Add(-24 * time.Hour)
+		model.HistoryCoverageEnd = now.UTC()
+		merged++
+	}
+	if merged == 0 {
+		return errors.New("batch status returned no usable models")
+	}
+	return nil
 }
 
 func (adapter ProbeAdapter) fetchModels(ctx context.Context, endpoint string, config probeConfig, fetcher Fetcher) ([]pricingModel, [][]byte, error) {
@@ -402,12 +597,32 @@ func (adapter ProbeAdapter) CollectDetails(ctx context.Context, site Site, fetch
 	if template != "" {
 		path = template
 	}
-	if path == "" {
-		return nil
-	}
 	statusBaseURL := strings.TrimSpace(config.StatusBaseURL)
 	if statusBaseURL == "" {
 		statusBaseURL = site.BaseURL
+	}
+	// Collect's batch merge normally covers every model already; only fetch
+	// details for models still missing a fresh 24h series.
+	pending := staleProbeModels(collection, modelNames, now)
+	if len(pending) == 0 {
+		return nil
+	}
+	batchPath := config.BatchPath
+	if batchPath == "" {
+		batchPath = adapter.defaultBatchPath
+	}
+	if batchPath != "" {
+		if batchURL, resolveErr := resolveSiteURL(statusBaseURL, batchPath); resolveErr == nil {
+			if mergeErr := mergeProbeBatchStatus(ctx, fetcher, collection, pending, batchURL, now); mergeErr == nil {
+				pending = staleProbeModels(collection, modelNames, now)
+				if len(pending) == 0 {
+					return nil
+				}
+			}
+		}
+	}
+	if path == "" {
+		return nil
 	}
 	endpoint := ""
 	if template == "" {
@@ -432,7 +647,37 @@ func (adapter ProbeAdapter) CollectDetails(ctx context.Context, site Site, fetch
 			return probeDetailURL(statusBaseURL, template, modelName, false)
 		}
 	}
-	return collectModelDetails(ctx, fetcher, collection, modelNames, now, 24*time.Hour, endpointFor, fallbackEndpointFor)
+	return collectModelDetails(ctx, fetcher, collection, pending, now, 24*time.Hour, endpointFor, fallbackEndpointFor)
+}
+
+// staleProbeModels returns the tracked models whose detail series is missing
+// or older than two hours, so repeated collection runs skip refetching
+// details that Collect just merged.
+func staleProbeModels(collection *domain.Collection, modelNames []string, now time.Time) []string {
+	staleBefore := now.Add(-2 * time.Hour)
+	pending := make([]string, 0, len(modelNames))
+	for _, modelName := range modelNames {
+		model := probeModelByName(collection, modelName)
+		if model == nil {
+			continue
+		}
+		if model.HistoryCoverageEnd.Before(staleBefore) {
+			pending = append(pending, modelName)
+		}
+	}
+	return pending
+}
+
+func probeModelByName(collection *domain.Collection, modelName string) *domain.ModelObservation {
+	if collection == nil {
+		return nil
+	}
+	for index := range collection.Models {
+		if collection.Models[index].RawName == modelName {
+			return &collection.Models[index]
+		}
+	}
+	return nil
 }
 
 // probeDetailURL renders the per-model detail URL. The model-status plugin
@@ -449,7 +694,9 @@ func probeDetailURL(statusBaseURL, template, modelName string, doubleEscaped boo
 }
 
 func NewAPIProbeAdapter() ProbeAdapter {
-	return ProbeAdapter{adapterKey: "newapi-probe", display: "NewAPI 嵌入式探针", defaultPath: "/api/model-status/embed/config/selected", defaultStatusPath: "/api/model-status/embed/status/batch?window=24h", defaultDetailPath: "/api/model-status/embed/status/{model}?window=24h"}
+	// defaultStatusPath stays empty: the plugin's GET /status/batch only
+	// echoes a "batch" placeholder — real series come from the batch POST.
+	return ProbeAdapter{adapterKey: "newapi-probe", display: "NewAPI 嵌入式探针", defaultPath: "/api/model-status/embed/config/selected", defaultDetailPath: "/api/model-status/embed/status/{model}?window=24h", defaultGroupsPath: "/api/model-status/embed/token-groups", defaultBatchPath: "/api/model-status/embed/status/batch?window=24h"}
 }
 
 func CustomProbeAdapter() ProbeAdapter {

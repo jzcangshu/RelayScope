@@ -34,6 +34,9 @@ func (provider Provider) GetJSON(ctx context.Context, rawURL string, target any)
 func (provider Provider) GetBytes(ctx context.Context, rawURL string) ([]byte, http.Header, error) {
 	return provider.Base.GetBytes(ctx, rawURL)
 }
+func (provider Provider) PostJSON(ctx context.Context, rawURL string, body any) ([]byte, http.Header, error) {
+	return provider.Base.PostJSON(ctx, rawURL, body)
+}
 
 func (provider Provider) FetcherForSite(ctx context.Context, site adapter.Site) (adapter.Fetcher, error) {
 	if !site.SessionRequired {
@@ -109,6 +112,14 @@ func (fetcher originScopedFetcher) GetJSON(ctx context.Context, rawURL string, t
 
 func (fetcher originScopedFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte, http.Header, error) {
 	return fetcher.forURL(rawURL).GetBytes(ctx, rawURL)
+}
+
+func (fetcher originScopedFetcher) PostJSON(ctx context.Context, rawURL string, body any) ([]byte, http.Header, error) {
+	delegate, ok := fetcher.forURL(rawURL).(adapter.JSONPoster)
+	if !ok {
+		return nil, nil, &adapter.FetchError{URL: rawURL, Err: errors.New("fetcher does not support POST requests")}
+	}
+	return delegate.PostJSON(ctx, rawURL, body)
 }
 
 func (fetcher originScopedFetcher) forURL(rawURL string) adapter.Fetcher {
