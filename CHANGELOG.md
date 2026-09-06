@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Versioned deployment catalogs and admin-API import tooling for server
-  migration: `sites.production.json` (36 monitored sites) and
+  migration: `sites.production.json` (40 monitored sites) and
   `rules.production.json` (57 model-matching rules, including gpt-oss-120b/20b,
   gpt-6-astra, claude-fable-5.1/5.2, glm-5.3-flash, and
   deepseek-v4-pro-0813), replayable with `scripts/import-sites.sh` and

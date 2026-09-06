@@ -365,5 +365,13 @@
     "adapter": "newapi-pricing",
     "adapter_config": {},
     "session_required": false
+  },
+  {
+    "name": "Ad公益站",
+    "base_url": "https://api.afsmc.cn",
+    "source_url": "https://api.afsmc.cn/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
   }
 ]
