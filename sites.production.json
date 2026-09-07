@@ -373,5 +373,37 @@
     "adapter": "newapi-pricing",
     "adapter_config": {},
     "session_required": false
+  },
+  {
+    "name": "Bubu公益站",
+    "base_url": "https://gyapi.bubuai12.kdns.fr",
+    "source_url": "https://gyapi.bubuai12.kdns.fr/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
+  },
+  {
+    "name": "astrdark",
+    "base_url": "https://api.astrdark.cyou",
+    "source_url": "https://api.astrdark.cyou/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
+  },
+  {
+    "name": "PigeonW",
+    "base_url": "https://new-api.pigeonw.com",
+    "source_url": "https://new-api.pigeonw.com/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
+  },
+  {
+    "name": "UltraRouter",
+    "base_url": "https://ultrarouter.org",
+    "source_url": "https://ultrarouter.org/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
   }
 ]
