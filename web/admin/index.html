@@ -6,10 +6,12 @@
   <meta name="color-scheme" content="light dark">
   <title>RelayScope 管理控制台</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <script>try{const t=localStorage.getItem('relayscope-theme');document.documentElement.dataset.theme=t==='light'||t==='dark'?t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(_){}</script>
+  <script src="/assets/theme.js"></script>
+  <link rel="stylesheet" href="/admin/base.css">
   <link rel="stylesheet" href="/admin/admin.css">
 </head>
 <body>
+  <a class="skip-link" href="#admin-content">跳到管理内容</a>
   <svg hidden aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M12 14 15.5 8.5"/><path d="M3.3 17a9 9 0 1 1 17.4 0"/></symbol>
@@ -35,21 +37,29 @@
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
       <symbol id="i-pair" viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 10h4a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-4"/><path d="M7 12h.01"/></symbol>
       <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.4 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.8 1.1z"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
     </defs>
   </svg>
 
   <div class="admin-shell">
     <aside class="sidebar">
-      <div class="sidebar-brand">
+      <a class="sidebar-brand" href="/" aria-label="返回公开看板">
         <span class="brand-mark" aria-hidden="true"><i></i></span>
         <span><strong>RelayScope</strong><span class="brand-sub">管理控制台</span></span>
-      </div>
-      <nav class="sidebar-nav" aria-label="管理导航">
-        <a class="nav-item" href="#overview" data-tab="overview" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg><span>概览</span></a>
-        <a class="nav-item" href="#sites" data-tab="sites"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span>站点</span></a>
-        <a class="nav-item" href="#rules" data-tab="rules"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>模型规则</span><span class="badge-count" id="nav-rules-count" hidden></span></a>
+      </a>
+      <button id="mobile-nav-toggle" class="btn btn-ghost" type="button" aria-expanded="false" aria-controls="admin-navigation"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>导航</button>
+      <nav id="admin-navigation" class="sidebar-nav" aria-label="管理导航">
+        <span class="nav-section-label">运行管理</span>
+        <a class="nav-item" href="#overview" data-tab="overview" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg><span>运行概览</span></a>
+        <a class="nav-item" href="#sites" data-tab="sites"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg><span>站点管理</span></a>
         <a class="nav-item" href="#runs" data-tab="runs"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span>采集记录</span></a>
-        <a class="nav-item" href="#unmatched" data-tab="unmatched"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span>未匹配</span><span class="nav-count" id="nav-unmatched-count"></span></a>
+        <span class="nav-section-label">模型目录</span>
+        <a class="nav-item" href="#rules" data-tab="rules"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>模型规则</span><span class="badge-count" id="nav-rules-count" hidden></span></a>
+        <a class="nav-item" href="#unmatched" data-tab="unmatched"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span>未匹配模型</span><span class="nav-count" id="nav-unmatched-count"></span></a>
+        <span class="nav-section-label">维护</span>
         <a class="nav-item" href="#feedback" data-tab="feedback"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg><span>用户反馈</span></a>
         <a class="nav-item" href="#system" data-tab="system"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>系统</span></a>
       </nav>
@@ -64,27 +74,35 @@
       <section id="login-panel" class="login-screen">
         <div class="login-card">
           <h1>管理员登录</h1>
-          <p class="login-hint">管理员密码保存在服务器运行目录中。</p>
-          <form id="login-form">
-            <input id="password" type="password" minlength="16" placeholder="管理员密码" autocomplete="current-password" aria-label="管理员密码">
-            <button class="btn btn-primary" type="submit">登录</button>
+          <p class="login-hint">管理监测站点、模型规则与采集状态。</p>
+          <form id="login-form" hidden>
+            <label class="field"><span>管理员密码</span><input id="password" name="password" type="password" minlength="16" required placeholder="输入管理员密码" autocomplete="current-password" aria-describedby="password-help"></label>
+            <button class="btn btn-primary" type="submit">进入管理控制台<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
           </form>
           <p id="login-message" class="login-message" role="alert"></p>
+          <button id="login-retry" class="btn" type="button" hidden>重新连接</button>
+          <p id="password-help" class="login-help">首次运行生成的密码保存在服务器运行目录中。</p>
+          <a class="login-back" href="/">← 返回公开看板</a>
         </div>
       </section>
 
       <div id="dashboard" hidden>
         <header class="page-head">
-          <div><h1 id="page-title">概览</h1><p id="dashboard-message" class="page-sub" aria-live="polite">正在读取运行状态。</p></div>
+          <div><p class="page-eyebrow">管理控制台</p><h1 id="page-title" tabindex="-1">运行概览</h1><p id="page-description" class="page-sub">查看采集概况，优先处理需要关注的站点。</p></div>
           <div class="page-actions"><span id="last-refresh" class="last-refresh"></span><button id="refresh" class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>刷新</button></div>
         </header>
 
-        <main class="panels">
+        <div id="dashboard-message" class="load-notice" role="status" hidden></div>
+        <main id="admin-content" class="panels" tabindex="-1">
           <section id="overview-panel" class="panel">
+            <div id="overview-health" class="overview-health"></div>
             <div class="stat-grid" id="overview-content"></div>
-            <div class="card" id="attention-card" hidden>
-              <div class="card-head"><h2>需要关注</h2><span class="card-hint">点击条目直达对应站点</span></div>
+            <div class="overview-columns">
+            <div class="card" id="attention-card">
+              <div class="card-head"><h2>待处理事项</h2><span class="card-hint" id="attention-summary">点击查看对应站点</span></div>
               <div class="card-body flush attention-list" id="attention-list"></div>
+            </div>
+            <div class="card quick-actions-card"><div class="card-head"><h2>常用操作</h2></div><div class="quick-actions"><button type="button" data-action="add-site"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span><strong>接入监测站点</strong><small>添加来源并开始自动采集</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button><button type="button" data-action="session-sync"><svg class="icon" aria-hidden="true"><use href="#i-pair"/></svg><span><strong>同步浏览器登录态</strong><small>为需要登录的站点恢复采集</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button><a href="#rules"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span><strong>整理模型匹配规则</strong><small>统一目录，检查未匹配与冲突</small></span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></div>
             </div>
           </section>
 
@@ -93,14 +111,18 @@
               <div class="search-box"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="site-search" type="search" placeholder="搜索站点名称或地址" aria-label="搜索站点"></div>
               <select id="site-state-filter" aria-label="按状态筛选站点">
                 <option value="">全部状态</option>
-                <option value="healthy">正常</option>
+                <option value="enabled">已启用</option>
+                <option value="healthy">采集正常</option>
                 <option value="attention">异常 / 待处理</option>
+                <option value="sessions">待同步登录态</option>
+                <option value="stale">待采集 / 数据过期</option>
                 <option value="disabled">已停用</option>
               </select>
               <span class="spacer"></span>
               <button id="session-sync" class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pair"/></svg>浏览器同步</button>
               <button id="add-site" class="btn btn-accent" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新增站点</button>
             </div>
+            <div class="list-caption"><span id="site-summary" aria-live="polite"></span><button id="reset-site-filters" class="text-button" type="button" hidden>清空筛选</button><span class="caption-help">采集状态与模型服务状态分别判断</span></div>
             <div id="site-list" class="site-list"></div>
           </section>
 
@@ -111,13 +133,13 @@
               <button id="add-rule" class="btn btn-accent" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新增规则</button>
             </div>
             <div class="card">
-              <div class="card-head"><h2>热门模型匹配规则</h2><span class="card-hint" id="rule-summary"></span></div>
+              <div class="card-head"><h2>模型匹配规则</h2><span class="card-hint" id="rule-summary"></span></div>
               <div class="card-body flush" id="rule-list"></div>
             </div>
-            <div class="card">
-              <div class="card-head"><h2>匹配冲突</h2><span class="card-hint">同一模型命中多条规则时显示</span></div>
+            <details class="card conflict-card" id="conflict-card">
+              <summary class="card-head"><span class="card-title">匹配冲突</span><span class="card-hint" id="conflict-summary">同一模型命中多条规则时显示</span></summary>
               <div class="card-body flush" id="conflict-list"></div>
-            </div>
+            </details>
           </section>
 
           <section id="runs-panel" class="panel" hidden>
@@ -138,6 +160,7 @@
           </section>
 
           <section id="unmatched-panel" class="panel" hidden>
+            <div class="toolbar"><div class="search-box"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="unmatched-search" type="search" placeholder="搜索原始模型名或站点" aria-label="搜索未匹配模型"></div><span id="unmatched-summary" class="muted"></span></div>
             <div class="card">
               <div class="card-head"><h2>未匹配模型</h2><span class="card-hint">尚未命中任何规则的上游模型名</span></div>
               <div class="card-body flush" id="unmatched-list"></div>
@@ -145,6 +168,7 @@
           </section>
 
           <section id="feedback-panel" class="panel" hidden>
+            <div class="toolbar"><div class="search-box"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input id="feedback-search" type="search" placeholder="搜索反馈内容或用户" aria-label="搜索用户反馈"></div><span id="feedback-summary" class="muted"></span></div>
             <div class="card">
               <div class="card-head"><h2>用户反馈</h2></div>
               <div class="card-body flush" id="feedback-list"></div>
@@ -162,63 +186,72 @@
     </div>
   </div>
 
-  <dialog id="site-dialog" class="admin-dialog">
+  <dialog id="site-dialog" class="admin-dialog" aria-labelledby="site-form-title">
     <form id="site-form" method="dialog">
       <div class="dialog-head"><h2 id="site-form-title">编辑站点</h2><button class="btn btn-ghost btn-icon" type="button" data-close="site-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
       <div class="dialog-body">
+        <p class="form-error" data-form-error role="alert" tabindex="-1" hidden></p>
         <input id="site-id" type="hidden">
         <fieldset class="form-section">
           <legend>基础信息</legend>
           <div class="form-grid">
-            <label class="field"><span>名称</span><input id="site-name" required></label>
-            <label class="field"><span>适配器</span><select id="site-adapter"></select></label>
-            <label class="field span-2"><span>基础地址</span><input id="site-base-url" type="url" required class="mono"></label>
-            <label class="field span-2"><span>监测页面</span><input id="site-source-url" type="url" required class="mono"></label>
+            <label class="field"><span>站点名称 <em>必填</em></span><input id="site-name" required placeholder="便于辨认的站点名称"></label>
+            <label class="field"><span>数据来源类型</span><select id="site-adapter" required></select></label>
+            <label class="field span-2"><span>站点首页 <em>必填</em></span><input id="site-base-url" type="url" required class="mono" placeholder="https://example.com"></label>
+            <label class="field span-2"><span>监测页面地址 <em>必填</em></span><input id="site-source-url" type="url" required class="mono" placeholder="https://example.com/status"><span class="field-hint">填写站点的状态页、模型目录或监测页面地址。</span></label>
           </div>
         </fieldset>
         <fieldset class="form-section">
-          <legend>采集计划</legend>
+          <legend>连接与采集</legend>
+          <label class="check connection-check"><input id="site-enabled" type="checkbox" checked> 启用自动采集</label>
+          <label class="check connection-check"><input id="site-session-required" type="checkbox"> 此站点需要登录后采集</label>
+          <p class="field-hint">需要登录的站点可在保存后，通过浏览器同步或导入登录态完成连接。</p>
+        </fieldset>
+        <details class="advanced-section" id="site-source-settings">
+          <summary>来源专用设置<span>接口路径、价格来源与采集选项</span></summary>
+          <p class="field-hint">按来源需要调整；可选项留空时沿用来源默认设置。</p>
+          <div id="site-config-fields" class="schema-fields"></div>
+        </details>
+        <details class="advanced-section" id="site-schedule-section">
+          <summary>采集计划<span>默认每 15 分钟，可调整</span></summary>
           <div class="form-grid">
             <label class="field"><span>采集间隔（分钟）</span><input id="site-interval" type="number" min="5" max="1440" value="15" required></label>
             <label class="field"><span>随机抖动（秒）</span><input id="site-jitter" type="number" min="0" max="3600" value="120" required></label>
-            <div class="field field-inline span-2"><label class="check"><input id="site-enabled" type="checkbox" checked> 启用采集</label></div>
-            <div class="field field-inline span-2"><label class="check"><input id="site-session-required" type="checkbox"> 需要登录态</label></div>
           </div>
-        </fieldset>
-        <fieldset class="form-section">
-          <legend>模型屏蔽</legend>
+        </details>
+        <details class="advanced-section" id="site-blocked-section">
+          <summary>模型屏蔽<span>按关键词隐藏指定模型</span></summary>
           <div class="form-grid">
             <label class="field span-2"><span>屏蔽关键词（逗号分隔，可留空）</span>
               <input id="site-blocked" type="text" placeholder="例如：只会喵喵叫">
               <span class="field-hint">模型名包含任一关键词（不区分大小写）即被隐藏，无论其实际可用性；保存后下一次采集生效，并立即从看板移除已收录的同名模型。</span>
             </label>
           </div>
-        </fieldset>
-        <fieldset class="form-section">
-          <legend>适配器配置</legend>
-          <div id="site-config-fields" class="schema-fields"></div>
-          <details><summary class="muted">高级：编辑原始配置 JSON</summary>
-            <label class="field" style="margin-top:8px"><textarea id="site-config" rows="6" class="mono" spellcheck="false">{}</textarea></label>
-          </details>
-        </fieldset>
-        <fieldset class="form-section">
-          <legend>公告</legend>
+        </details>
+        <details class="advanced-section" id="site-config-section">
+          <summary>原始配置<span>需要时编辑 JSON（配置数据）</span></summary>
+          <label class="field"><span class="sr-only">原始配置数据</span><textarea id="site-config" rows="6" class="mono" spellcheck="false">{}</textarea><span class="field-hint">可视化字段与原始配置同步，未展示的配置项会保留。</span></label>
+        </details>
+        <details class="advanced-section" id="site-announcement-section">
+          <summary>异常公告<span>向公开看板解释采集问题</span></summary>
           <div class="form-grid">
             <label class="field span-2"><span>自定义原因（留空则显示后台报错）</span><textarea id="site-failure-reason" rows="2" maxlength="500" placeholder="例如：源站暂时限制国内 IP，正在处理中"></textarea></label>
           </div>
-        </fieldset>
+        </details>
       </div>
       <div class="dialog-actions">
         <button class="btn" type="button" data-close="site-dialog">取消</button>
-        <button class="btn btn-primary" type="submit">保存</button>
+        <button class="btn btn-primary" type="submit">保存站点</button>
       </div>
     </form>
   </dialog>
 
-  <dialog id="rule-dialog" class="admin-dialog">
+  <dialog id="rule-dialog" class="admin-dialog" aria-labelledby="rule-form-title">
     <form id="rule-form" method="dialog">
-      <div class="dialog-head"><h2>编辑匹配规则</h2><button class="btn btn-ghost btn-icon" type="button" data-close="rule-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <div class="dialog-head"><h2 id="rule-form-title">编辑匹配规则</h2><button class="btn btn-ghost btn-icon" type="button" data-close="rule-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
       <div class="dialog-body">
+        <p class="form-error" data-form-error role="alert" tabindex="-1" hidden></p>
+        <p class="dialog-intro">将上游不同命名归入同一标准模型。保存前可预览实际命中的模型。</p>
         <input id="rule-id" type="hidden">
         <div class="form-grid">
           <label class="field"><span>供应商</span><input id="rule-provider" required></label>
@@ -233,30 +266,38 @@
         </div>
         <div class="form-section">
           <button id="preview-rule" class="btn" type="button">预览命中</button>
-          <div id="rule-preview" class="muted" style="margin-top:8px; font-size:13px"></div>
+          <div id="rule-preview" class="preview-results" aria-live="polite"></div>
         </div>
       </div>
       <div class="dialog-actions">
         <button class="btn" type="button" data-close="rule-dialog">取消</button>
-        <button class="btn btn-primary" type="submit">保存</button>
+        <button class="btn btn-primary" type="submit">保存规则</button>
       </div>
     </form>
   </dialog>
 
-  <dialog id="session-dialog" class="admin-dialog">
+  <dialog id="session-dialog" class="admin-dialog" aria-labelledby="session-form-title">
     <form id="session-form" method="dialog">
       <div class="dialog-head"><h2 id="session-form-title">导入登录态</h2><button class="btn btn-ghost btn-icon" type="button" data-close="session-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
       <div class="dialog-body">
+        <p class="form-error" data-form-error role="alert" tabindex="-1" hidden></p>
+        <p class="dialog-intro">推荐先使用浏览器同步；已有导出内容时，也可以在此手动导入。</p>
         <label class="field"><span>会话 JSON</span>
           <textarea id="session-payload" rows="8" class="mono" spellcheck="false" placeholder='{"userAgent":"…","cookies":[…]}'></textarea>
-          <span class="field-hint">含 userAgent 和 cookies；newapi_token 类型另需 authType、accessToken、userId，并包含 new_api_refresh Cookie 以便自动续期。留空提交不会修改。</span>
+          <span class="field-hint">请粘贴扩展或站点导出的完整会话内容。需要自动续期的站点应同时包含刷新凭据；不修改时点击取消。</span>
         </label>
       </div>
       <div class="dialog-actions">
         <button class="btn" type="button" data-close="session-dialog">取消</button>
-        <button class="btn btn-primary" type="submit">保存</button>
+        <button class="btn btn-primary" type="submit">保存登录态</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="pair-dialog" class="admin-dialog compact-dialog" aria-labelledby="pair-title">
+    <div class="dialog-head"><h2 id="pair-title">连接浏览器同步扩展</h2><button class="btn btn-ghost btn-icon" type="button" data-close="pair-dialog" aria-label="关闭同步配对"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <div class="dialog-body pairing-body"><ol class="pairing-steps"><li>在浏览器中登录需要同步的站点。</li><li>打开会话同步扩展，填写当前看板地址和下方配对码。</li><li>在扩展中同步登录态，然后返回站点页面查看采集状态。</li></ol><label class="field"><span>配对码</span><input id="pair-code" class="mono" readonly></label><p id="pair-expiry" class="field-hint"></p><p id="pair-message" class="form-message" role="status"></p></div>
+    <div class="dialog-actions"><button type="button" class="btn" data-close="pair-dialog">完成</button><button type="button" class="btn btn-primary" id="copy-pair-code">复制配对码</button></div>
   </dialog>
 
   <div id="toast-region" class="toast-region" aria-live="polite"></div>

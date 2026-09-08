@@ -452,10 +452,10 @@ const systemTheme = matchMedia('(prefers-color-scheme: dark)');
 function applyTheme(preference) {
   const mode = preference === 'light' || preference === 'dark' ? preference : 'auto';
   document.documentElement.dataset.theme = mode === 'auto' ? (systemTheme.matches ? 'dark' : 'light') : mode;
-  const icons = { auto: '◐', light: '☀', dark: '☾' };
+  const icons = { auto: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4"/>', light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/>', dark: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>' };
   const labels = { auto: '主题：跟随系统', light: '主题：浅色模式', dark: '主题：深色模式' };
   themeToggle.dataset.mode = mode;
-  themeToggle.querySelector('span').textContent = icons[mode];
+  themeToggle.querySelector('span').innerHTML = `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24">${icons[mode]}</svg>`;
   themeToggle.setAttribute('aria-label', labels[mode]);
   themeToggle.title = labels[mode];
 }
@@ -501,14 +501,18 @@ systemTheme.addEventListener('change', () => {
 });
 
 async function loadUser() {
-  const response = await fetch('/api/v1/auth/me', { cache: 'no-store' });
-  if (!response.ok) {
-    userAction.hidden = true;
-    return;
-  }
-  const identity = await response.json();
-  currentUser = identity.authenticated ? identity.user : null;
-  userAction.textContent = currentUser ? `反馈 · ${currentUser.username}` : '登录';
+  try {
+    const response = await fetch('/api/v1/auth/me', { cache: 'no-store' });
+    if (!response.ok) {
+      userAction.hidden = true;
+      return;
+    }
+    const identity = await response.json();
+    currentUser = identity.authenticated ? identity.user : null;
+    userAction.innerHTML = currentUser ? `<span>反馈</span><span class="user-identity"> · ${escapeHTML(currentUser.username)}</span>` : '登录';
+    userAction.setAttribute('aria-label', currentUser ? `反馈 · ${currentUser.username}` : '登录');
+    userAction.hidden = false;
+  } catch { userAction.hidden = true; }
 }
 
 userAction.addEventListener('click', () => {
@@ -520,19 +524,39 @@ userAction.addEventListener('click', () => {
   window.location.assign('/api/v1/auth/linuxdo');
 });
 document.querySelector('#feedback-close').addEventListener('click', () => feedbackDialog.close());
+feedbackDialog.addEventListener('click', (event) => {
+  if (event.target !== feedbackDialog) return;
+  const bounds = feedbackDialog.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) feedbackDialog.close();
+});
 document.querySelector('#feedback-form').addEventListener('submit', async (event) => {
   event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled) return;
   const content = document.querySelector('#feedback-content').value.trim();
-  const response = await fetch('/api/v1/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
-  if (response.ok) {
-    document.querySelector('#feedback-content').value = '';
-    feedbackMessage.textContent = '反馈已提交。';
-  } else if (response.status === 401) {
-    feedbackDialog.close();
-    currentUser = null;
-    await loadUser();
-  } else {
-    feedbackMessage.textContent = '提交失败，请稍后再试。';
+  feedbackMessage.dataset.state = 'error';
+  if (!content) { feedbackMessage.textContent = '请填写反馈内容。'; return; }
+  button.disabled = true;
+  button.textContent = '正在提交…';
+  feedbackMessage.textContent = '';
+  try {
+    const response = await fetch('/api/v1/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }), signal: AbortSignal.timeout(20000) });
+    if (response.ok) {
+      document.querySelector('#feedback-content').value = '';
+      feedbackMessage.dataset.state = 'success';
+      feedbackMessage.textContent = '反馈已提交。';
+    } else if (response.status === 401) {
+      feedbackDialog.close();
+      currentUser = null;
+      await loadUser();
+    } else {
+      feedbackMessage.textContent = '提交失败，请稍后再试。';
+    }
+  } catch {
+    feedbackMessage.textContent = '连接失败，内容已保留，请重试。';
+  } finally {
+    button.disabled = false;
+    button.textContent = '提交反馈';
   }
 });
 

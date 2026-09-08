@@ -73,3 +73,83 @@ test('lowestPrice returns no price when every priced group is unusable', () => {
 
   assert.equal(lowestPrice(groups), null);
 });
+
+function feedbackHarness(fetch) {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const start = source.indexOf("document.querySelector('#feedback-form').addEventListener('submit'");
+  const end = source.indexOf('\ninitializeTheme();', start);
+  assert.ok(start >= 0 && end > start, 'feedback submission binding is missing');
+  let handler;
+  const input = { value: '' };
+  const button = { disabled: false, textContent: '提交反馈' };
+  const message = { textContent: '', dataset: {} };
+  const form = { addEventListener: (_, callback) => { handler = callback; }, querySelector: () => button };
+  const document = { querySelector: (selector) => selector === '#feedback-content' ? input : form };
+  const session = { closed: false, reloads: 0 };
+  const dialog = { close: () => { session.closed = true; } };
+  const loadUser = async () => { session.reloads++; };
+  const getUser = Function('document', 'feedbackMessage', 'feedbackDialog', 'loadUser', 'fetch', 'AbortSignal',
+    `let currentUser = { username: 'test-user' }; ${source.slice(start, end)}; return () => currentUser;`)(document, message, dialog, loadUser, fetch, AbortSignal);
+  return { input, button, message, session, getUser, submit: () => handler({ preventDefault() {}, currentTarget: form }) };
+}
+
+test('feedback prevents duplicate requests and preserves content for a failed submission retry', async () => {
+  const requests = [];
+  const pending = [];
+  const feedback = feedbackHarness((url, options) => {
+    requests.push({ url, options });
+    return new Promise((resolve) => pending.push(resolve));
+  });
+  feedback.input.value = '  模型状态需要核对  ';
+  const first = feedback.submit();
+  assert.equal(feedback.button.disabled, true);
+  assert.equal(feedback.button.textContent, '正在提交…');
+  await feedback.submit();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/api/v1/feedback');
+  assert.equal(requests[0].options.method, 'POST');
+  assert.deepEqual(JSON.parse(requests[0].options.body), { content: '模型状态需要核对' });
+  assert.ok(requests[0].options.signal instanceof AbortSignal);
+  pending.shift()({ ok: false, status: 503 });
+  await first;
+  assert.equal(feedback.input.value, '  模型状态需要核对  ');
+  assert.equal(feedback.button.disabled, false);
+  assert.equal(feedback.button.textContent, '提交反馈');
+  assert.match(feedback.message.textContent, /提交失败/);
+
+  const retry = feedback.submit();
+  pending.shift()({ ok: true, status: 200 });
+  await retry;
+  assert.equal(requests.length, 2);
+  assert.equal(feedback.input.value, '');
+  assert.equal(feedback.message.textContent, '反馈已提交。');
+  assert.equal(feedback.message.dataset.state, 'success');
+  assert.equal(feedback.button.disabled, false);
+});
+
+test('feedback rejects blank content and recovers from a connection failure', async () => {
+  let calls = 0;
+  const feedback = feedbackHarness(async () => { calls++; throw new TypeError('Failed to fetch'); });
+  feedback.input.value = '   ';
+  await feedback.submit();
+  assert.equal(calls, 0);
+  assert.match(feedback.message.textContent, /请填写/);
+  feedback.input.value = '请核对模型价格';
+  await feedback.submit();
+  assert.equal(calls, 1);
+  assert.equal(feedback.input.value, '请核对模型价格');
+  assert.equal(feedback.button.disabled, false);
+  assert.equal(feedback.message.dataset.state, 'error');
+  assert.match(feedback.message.textContent, /内容已保留/);
+});
+
+test('feedback refreshes the login state when the session expires', async () => {
+  const feedback = feedbackHarness(async () => ({ ok: false, status: 401 }));
+  feedback.input.value = '待提交的反馈';
+  await feedback.submit();
+  assert.equal(feedback.session.closed, true);
+  assert.equal(feedback.session.reloads, 1);
+  assert.equal(feedback.getUser(), null);
+  assert.equal(feedback.input.value, '待提交的反馈');
+  assert.equal(feedback.button.disabled, false);
+});

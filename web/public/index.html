@@ -8,14 +8,16 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/dashboard.css">
+  <link rel="stylesheet" href="/assets/shell.css">
   <script src="/assets/theme.js"></script>
 </head>
 <body class="public-dashboard">
   <header class="topbar">
-    <div class="brand-lockup">
+    <a class="brand-lockup" href="/" aria-label="RelayScope（中转监测）首页">
       <span class="brand-mark" aria-hidden="true"><i></i></span>
-      <strong class="brand">RelayScope - 中转站健康监测</strong>
-    </div>
+      <span><strong class="brand">RelayScope</strong><span class="brand-caption">中转站健康监测</span></span>
+    </a>
+    <nav class="public-nav" aria-label="主导航"><a href="/" aria-current="page">模型看板</a><a href="/admin/">管理控制台 <span aria-hidden="true">↗</span></a></nav>
     <div class="header-actions">
       <button id="user-action" type="button">登录</button>
       <div class="header-tools" role="group" aria-label="页面工具">
@@ -49,9 +51,9 @@
       <div class="detail-head"><div><h2 id="detail-title">模型详情</h2><p id="detail-subtitle" class="muted"></p></div><button id="detail-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div id="detail-content" class="detail-content"></div>
     </dialog>
-	<dialog id="feedback-dialog" class="detail-dialog">
-	  <div class="detail-head"><div><h2>反馈问题</h2><p class="muted">请描述异常现象或建议。</p></div><button id="feedback-close" class="icon-button" type="button" aria-label="关闭反馈" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
-	  <form id="feedback-form" class="detail-content"><label>反馈内容<textarea id="feedback-content" rows="6" maxlength="2000" required placeholder="例如：某个站点的模型状态与实际不一致"></textarea></label><button type="submit">提交反馈</button><p id="feedback-message" class="muted"></p></form>
+	<dialog id="feedback-dialog" class="detail-dialog" aria-labelledby="feedback-title">
+	  <div class="detail-head"><div><h2 id="feedback-title">反馈问题</h2><p class="muted">请描述异常现象或建议。</p></div><button id="feedback-close" class="icon-button" type="button" aria-label="关闭反馈" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+	  <form id="feedback-form" class="detail-content"><label>反馈内容<textarea id="feedback-content" aria-describedby="feedback-message" rows="6" maxlength="2000" required placeholder="例如：某个站点的模型状态与实际不一致"></textarea></label><button class="primary-button" type="submit">提交反馈</button><p id="feedback-message" class="form-message" role="status"></p></form>
     </dialog>
     <dialog id="announcement-dialog" class="announcement-dialog">
       <div class="detail-head announcement-head"><h2>运行状态通知</h2><button id="announcement-close" class="icon-button" type="button" aria-label="关闭公告" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
