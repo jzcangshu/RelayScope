@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -282,12 +283,14 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		_, _ = writer.Write([]byte("success"))
 	})
 
-	// GET /api/v1/payment/return —— 支付完成回跳，重定向回对应页面
+	// GET /api/v1/payment/return —— 支付完成回跳，重定向回对应页面并携带订单号供前端轮询确认
 	mux.HandleFunc("GET /api/v1/payment/return", func(writer http.ResponseWriter, request *http.Request) {
 		target := "/"
 		if orderNo := request.URL.Query().Get("no"); orderNo != "" {
 			if order, err := options.Store.GetOrderByNo(request.Context(), orderNo); err == nil && order.Kind == store.OrderKindWish {
-				target = "/#wishes"
+				target = "/#wishes?paid=" + url.QueryEscape(orderNo)
+			} else {
+				target = "/?paid=" + url.QueryEscape(orderNo)
 			}
 		}
 		base := strings.TrimSpace(options.PublicURL)

@@ -23,6 +23,41 @@ const announcementDialog = document.querySelector('#announcement-dialog');
 const announcementAction = document.querySelector('#announcement-action');
 const announcementClose = document.querySelector('#announcement-close');
 const announcementContent = document.querySelector('#announcement-content');
+const userAction = document.querySelector('#user-action');
+const userMenu = document.querySelector('#user-menu');
+const userMenuName = document.querySelector('#user-menu-name');
+const userMenuMembership = document.querySelector('#user-menu-membership');
+const userMenuAvatar = document.querySelector('#user-menu-avatar');
+const feedbackDialog = document.querySelector('#feedback-dialog');
+const feedbackClose = document.querySelector('#feedback-close');
+const feedbackMessage = document.querySelector('#feedback-message');
+const redeemDialog = document.querySelector('#redeem-dialog');
+const redeemClose = document.querySelector('#redeem-close');
+const redeemCodeInput = document.querySelector('#redeem-code');
+const redeemMessage = document.querySelector('#redeem-message');
+const rechargeDialog = document.querySelector('#recharge-dialog');
+const rechargeClose = document.querySelector('#recharge-close');
+const rechargeDaysInput = document.querySelector('#recharge-days');
+const rechargePrice = document.querySelector('#recharge-price');
+const rechargeMessage = document.querySelector('#recharge-message');
+const wishPage = document.querySelector('#wish-page');
+const wishList = document.querySelector('#wish-list');
+const wishNewButton = document.querySelector('#wish-new');
+const wishFormDialog = document.querySelector('#wish-form-dialog');
+const wishFormClose = document.querySelector('#wish-form-close');
+const wishNameInput = document.querySelector('#wish-name');
+const wishUrlInput = document.querySelector('#wish-url');
+const wishInviteInput = document.querySelector('#wish-invite');
+const wishFormMessage = document.querySelector('#wish-form-message');
+const pledgeDialog = document.querySelector('#pledge-dialog');
+const pledgeClose = document.querySelector('#pledge-close');
+const pledgeTitle = document.querySelector('#pledge-title');
+const pledgeSubtitle = document.querySelector('#pledge-subtitle');
+const pledgeAmountInput = document.querySelector('#pledge-amount');
+const pledgeMessage = document.querySelector('#pledge-message');
+const customizeSubtitle = document.querySelector('#customize-subtitle');
+const customizeNav = document.querySelector('.customize-nav');
+const toastRegion = document.querySelector('#toast-region');
 
 let rows = [];
 let cards = [];
@@ -99,9 +134,9 @@ function loadPreferences() {
   healthyOnly.checked = defaultHealthy;
 }
 
-const saveHidden = () => storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] }));
-const saveDefaultHealthy = () => storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0');
-const saveTags = () => storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))));
+const saveHidden = () => { storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] })); scheduleCloudSave(); };
+const saveDefaultHealthy = () => { storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0'); scheduleCloudSave(); };
+const saveTags = () => { storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }])))); scheduleCloudSave(); };
 
 function isHiddenCard(card) {
   return hidden.sites.has(card.siteName)
@@ -152,6 +187,43 @@ function tagSetSite(sourceMap, site, name, attach) {
   return true;
 }
 // ---- 标签数据操作结束 ----
+
+// ---- 会员与同步纯函数（供面板与测试共用，此块到 wishPageTemplate 为止） ----
+function membershipState(expiresAtMs, nowMs) {
+  if (!expiresAtMs) return 'none';
+  return expiresAtMs > nowMs ? 'active' : 'expired';
+}
+function membershipBadge(state) {
+  if (state === 'active') return { text: '会员生效中', tone: 'healthy' };
+  if (state === 'expired') return { text: '会员已过期', tone: 'muted' };
+  return { text: '未开通会员', tone: 'muted' };
+}
+function preferencesIsEmpty(prefs) {
+  if (!prefs) return true;
+  const hidden = prefs.hidden || {};
+  const hasHidden = (hidden.sites || []).length || (hidden.providers || []).length || (hidden.models || []).length;
+  const tagCount = Object.keys(prefs.tags || {}).length;
+  return !hasHidden && !tagCount && !prefs.defaultHealthy;
+}
+// 首次同步合并决策：云端有数据以云端为准；云端为空且本地有数据则把本地上传。
+function mergePreferences(local, cloud) {
+  const cloudEmpty = preferencesIsEmpty(cloud);
+  const localEmpty = preferencesIsEmpty(local);
+  if (!cloudEmpty) return { source: 'cloud', upload: false };
+  if (!localEmpty) return { source: 'local', upload: true };
+  return { source: 'default', upload: false };
+}
+function wishProgress(pledged, target) {
+  if (target == null) return { undecided: true, percent: 0, label: '许愿目标尚未确定' };
+  const capped = target > 0 ? Math.min(1, pledged / target) : 1;
+  return { undecided: false, percent: Math.round(capped * 100), label: `已许愿 ${pledged} / ${target} LDC` };
+}
+function wishStatusBadge(status) {
+  if (status === 'reached') return { text: '已达成，等待接入', tone: 'healthy' };
+  if (status === 'connected') return { text: '已接入', tone: 'accent' };
+  return null;
+}
+// ---- 会员与同步纯函数结束 ----
 
 const formatMetric = (value, suffix = '') => value == null ? '—' : `${Number(value).toFixed(Math.abs(value) < 10 ? 2 : 0)}${suffix}`;
 const formatRatio = (value) => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -1093,8 +1165,7 @@ function handleCustomizeSubmit(event) {
 }
 
 customizeAction.addEventListener('click', () => {
-  renderCustomize();
-  customizeDialog.showModal();
+  openCustomize();
 });
 customizeClose.addEventListener('click', () => customizeDialog.close());
 customizeDialog.addEventListener('close', () => {
@@ -1127,14 +1198,562 @@ customizeTabTags.addEventListener('keydown', (event) => {
 document.addEventListener('click', (event) => {
   const hint = event.target.closest('[data-open-customize]');
   if (hint) {
-    renderCustomize();
-    customizeDialog.showModal();
+    openCustomize();
     return;
   }
   if ((openSiteMenu || openColorMenu) && !event.target.closest('.tag-popover')) closeTagMenus();
 });
 
+// ===== 账号 / 会员 / 定制云同步 / 许愿池 =====
+let currentUser = null;
+let membership = null;
+let cloudSynced = false;
+let cloudSaveTimer = null;
+let siteSettings = { membershipLdcPerDay: 1, wishDefaultTargetLdc: 30 };
+let wishItems = [];
+let pledgeTargetId = null;
+
+const formatDate = (value) => value ? new Date(value).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+const collectLocalPreferences = () => ({
+  hidden: { sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] },
+  defaultHealthy,
+  tags: Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))
+});
+
+function showToast(message, tone = '') {
+  if (!toastRegion) return;
+  const toast = document.createElement('div');
+  toast.className = `toast${tone ? ` ${tone}` : ''}`;
+  toast.textContent = message;
+  toastRegion.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 250);
+  }, 3200);
+}
+
+const membershipIs = () => membership ? membershipState(membership.expiresAt ? new Date(membership.expiresAt).getTime() : 0, Date.now()) : 'none';
+
+function renderUserArea() {
+  if (!userAction) return;
+  const state = membershipIs();
+  const badge = membershipBadge(state);
+  if (currentUser) {
+    userAction.innerHTML = `<span class="user-avatar user-avatar-chip" aria-hidden="true">${escapeHTML((currentUser.username || '?').slice(0, 1).toUpperCase())}</span><span class="user-action-label">${escapeHTML(currentUser.username)}</span>`;
+    userAction.setAttribute('aria-label', `账号 · ${currentUser.username}`);
+    if (userMenuName) {
+      userMenuName.textContent = currentUser.name || currentUser.username;
+      userMenuMembership.textContent = `${badge.text}${state === 'active' && membership?.expiresAt ? ' · ' + formatDate(membership.expiresAt) + '到期' : ''}`;
+      userMenuAvatar.textContent = (currentUser.username || '?').slice(0, 1).toUpperCase();
+    }
+  } else {
+    userAction.innerHTML = '<span class="user-action-label">登录</span>';
+    userAction.setAttribute('aria-label', '登录');
+  }
+}
+
+async function loadUser() {
+  try {
+    const response = await fetch('/api/v1/auth/me', { cache: 'no-store' });
+    if (!response.ok) {
+      currentUser = null;
+      membership = null;
+    } else {
+      const identity = await response.json();
+      currentUser = identity.authenticated ? identity.user : null;
+      membership = identity.membership || null;
+    }
+  } catch { /* 网络失败：保留现状 */ }
+  renderUserArea();
+  updateCustomizeSubtitle();
+  if (currentUser) await syncPreferencesFromCloud();
+  if (!wishPage.hidden) loadWishes();
+}
+
+// ---- 定制云同步：本地即时生效，800ms 防抖上云；首次合并云端优先 ----
+function scheduleCloudSave() {
+  if (!cloudSynced || !currentUser) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(pushPreferencesToCloud, 800);
+}
+
+async function pushPreferencesToCloud() {
+  if (!cloudSynced || !currentUser) return;
+  try {
+    const response = await fetch('/api/v1/me/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectLocalPreferences()) });
+    if (response.status === 403) {
+      cloudSynced = false;
+      membership = { expiresAt: membership?.expiresAt || null, active: false };
+      renderUserArea();
+      updateCustomizeSubtitle();
+      showToast('会员已过期，设置仅保存在本地');
+    }
+  } catch { /* 离线：下次修改再试 */ }
+}
+
+async function syncPreferencesFromCloud() {
+  if (membershipIs() !== 'active') return;
+  try {
+    const response = await fetch('/api/v1/me/preferences', { cache: 'no-store' });
+    if (!response.ok) return;
+    const cloud = await response.json();
+    const decision = mergePreferences(collectLocalPreferences(), cloud);
+    if (decision.source === 'cloud') {
+      const cloudHidden = cloud.hidden || {};
+      hidden = { sites: new Set(cloudHidden.sites || []), providers: new Set(cloudHidden.providers || []), models: new Set(cloudHidden.models || []) };
+      defaultHealthy = !!cloud.defaultHealthy;
+      tags = new Map();
+      for (const [name, tag] of Object.entries(cloud.tags || {})) {
+        if (typeof tag !== 'object' || tag === null) continue;
+        tags.set(name, { color: TAG_COLORS.includes(tag.color) ? tag.color : 'mint', sites: new Set(Array.isArray(tag.sites) ? tag.sites : []) });
+      }
+      healthyOnly.checked = defaultHealthy;
+      // cloudSynced 尚未置真，镜像到 localStorage 不会触发回环上传
+      storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] }));
+      storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0');
+      storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))));
+      render();
+      if (customizeDialog.open) renderCustomize();
+      showToast('已同步你的定制设置');
+    }
+    cloudSynced = true;
+    updateCustomizeSubtitle();
+    if (decision.upload) pushPreferencesToCloud();
+  } catch { /* 离线：保持本地 */ }
+}
+
+// ---- 定制弹窗门禁 ----
+function updateCustomizeSubtitle() {
+  if (!customizeSubtitle) return;
+  if (membershipIs() === 'active') customizeSubtitle.textContent = cloudSynced ? '设置已自动同步到你的账号，换设备也不丢。' : '设置将自动同步到你的账号。';
+  else customizeSubtitle.textContent = '个性化设置仅保存在当前浏览器。';
+}
+
+function openCustomize() {
+  const state = membershipIs();
+  if (customizeNav) customizeNav.hidden = state !== 'active';
+  customizeTagsPanel.hidden = state !== 'active';
+  if (state === 'active') {
+    renderCustomize();
+  } else {
+    renderCustomizeGate(!currentUser);
+  }
+  updateCustomizeSubtitle();
+  customizeDialog.showModal();
+}
+
+function renderCustomizeGate(loggedOut) {
+  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后已保存的设置仍然生效，续期后即可继续编辑。'}</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
+}
+
+// ---- 账号菜单 ----
+userAction.addEventListener('click', () => {
+  if (!currentUser) {
+    window.location.assign('/api/v1/auth/linuxdo');
+    return;
+  }
+  const willOpen = userMenu.hidden;
+  userMenu.hidden = !willOpen;
+  userAction.setAttribute('aria-expanded', String(willOpen));
+});
+document.addEventListener('click', (event) => {
+  if (userMenu && !userMenu.hidden && !event.target.closest('#user-menu') && !event.target.closest('#user-action')) {
+    userMenu.hidden = true;
+    userAction.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && userMenu && !userMenu.hidden) {
+    userMenu.hidden = true;
+    userAction.setAttribute('aria-expanded', 'false');
+  }
+});
+userMenu.addEventListener('click', async (event) => {
+  const item = event.target.closest('[data-user-menu]');
+  if (!item) return;
+  userMenu.hidden = true;
+  userAction.setAttribute('aria-expanded', 'false');
+  const action = item.dataset.userMenu;
+  if (action === 'redeem') {
+    redeemCodeInput.value = '';
+    redeemMessage.textContent = '';
+    redeemMessage.dataset.state = '';
+    redeemDialog.showModal();
+  } else if (action === 'recharge') {
+    openRecharge();
+  } else if (action === 'feedback') {
+    feedbackMessage.textContent = '';
+    feedbackMessage.dataset.state = '';
+    feedbackDialog.showModal();
+  } else if (action === 'logout') {
+    try { await fetch('/api/v1/auth/logout', { method: 'POST' }); } catch { /* 忽略网络错误 */ }
+    currentUser = null;
+    membership = null;
+    cloudSynced = false;
+    renderUserArea();
+    updateCustomizeSubtitle();
+    showToast('已退出登录');
+  }
+});
+
+// ---- 兑换码 ----
+redeemClose.addEventListener('click', () => redeemDialog.close());
+redeemDialog.addEventListener('click', (event) => {
+  if (event.target === redeemDialog) {
+    const bounds = redeemDialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) redeemDialog.close();
+  }
+});
+document.querySelector('#redeem-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  const code = redeemCodeInput.value.trim();
+  redeemMessage.dataset.state = '';
+  if (!code) {
+    redeemMessage.textContent = '请输入兑换码。';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = '兑换中…';
+  try {
+    const response = await fetch('/api/v1/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }), signal: AbortSignal.timeout(20000) });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) {
+      membership = payload.membership || membership;
+      renderUserArea();
+      redeemMessage.dataset.state = 'success';
+      redeemMessage.textContent = `兑换成功，会员有效期至 ${formatDate(membership?.expiresAt)}。`;
+      redeemCodeInput.value = '';
+    } else {
+      redeemMessage.dataset.state = 'error';
+      redeemMessage.textContent = payload.error || '兑换失败，请核对兑换码。';
+    }
+  } catch {
+    redeemMessage.dataset.state = 'error';
+    redeemMessage.textContent = '连接失败，请重试。';
+  } finally {
+    button.disabled = false;
+    button.textContent = '兑换';
+  }
+});
+
+// ---- LDC 直充会员 ----
+function updateRechargePrice() {
+  const days = Math.max(1, Math.min(3650, parseInt(rechargeDaysInput.value, 10) || 0));
+  const rate = siteSettings.membershipLdcPerDay || 1;
+  rechargePrice.textContent = `需支付 ${days * rate} LDC（${days} 天 × ${rate} LDC/天）`;
+}
+function openRecharge() {
+  rechargeDaysInput.value = 30;
+  updateRechargePrice();
+  rechargeMessage.textContent = '';
+  rechargeMessage.dataset.state = '';
+  rechargeDialog.showModal();
+}
+rechargeClose.addEventListener('click', () => rechargeDialog.close());
+rechargeDialog.addEventListener('click', (event) => {
+  if (event.target === rechargeDialog) {
+    const bounds = rechargeDialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) rechargeDialog.close();
+  }
+});
+rechargeDaysInput.addEventListener('input', updateRechargePrice);
+document.querySelectorAll('[data-recharge-days]').forEach((chip) => chip.addEventListener('click', () => {
+  rechargeDaysInput.value = chip.dataset.rechargeDays;
+  updateRechargePrice();
+}));
+document.querySelector('#recharge-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  const days = Math.max(1, Math.min(3650, parseInt(rechargeDaysInput.value, 10) || 0));
+  button.disabled = true;
+  button.textContent = '创建订单…';
+  rechargeMessage.dataset.state = '';
+  try {
+    const response = await fetch('/api/v1/membership/recharge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }), signal: AbortSignal.timeout(20000) });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.payUrl) {
+      rechargeDialog.close();
+      window.location.assign(payload.payUrl);
+    } else {
+      rechargeMessage.dataset.state = 'error';
+      rechargeMessage.textContent = payload.error || '下单失败，请稍后再试。';
+    }
+  } catch {
+    rechargeMessage.dataset.state = 'error';
+    rechargeMessage.textContent = '连接失败，请重试。';
+  } finally {
+    button.disabled = false;
+    button.textContent = '去支付';
+  }
+});
+
+// ---- 定制门禁里的入口按钮 ----
+customizeDialog.addEventListener('click', (event) => {
+  if (event.target.closest('[data-gate-login]')) {
+    customizeDialog.close();
+    window.location.assign('/api/v1/auth/linuxdo');
+    return;
+  }
+  if (event.target.closest('[data-gate-redeem]')) {
+    customizeDialog.close();
+    redeemCodeInput.value = '';
+    redeemMessage.textContent = '';
+    redeemDialog.showModal();
+    return;
+  }
+  if (event.target.closest('[data-gate-recharge]')) {
+    customizeDialog.close();
+    openRecharge();
+  }
+});
+
+// ---- 许愿池页面 ----
+function applyRoute() {
+  const wishView = window.location.hash === '#wishes';
+  wishPage.hidden = !wishView;
+  document.querySelector('.toolbar').hidden = wishView;
+  summaryElement.hidden = wishView;
+  document.querySelector('.filter-layout').hidden = wishView;
+  const navWishes = document.querySelector('[data-nav-wishes]');
+  const navBoard = document.querySelector('[data-nav-board]');
+  if (navWishes && navBoard) {
+    if (wishView) {
+      navWishes.setAttribute('aria-current', 'page');
+      navBoard.removeAttribute('aria-current');
+    } else {
+      navBoard.setAttribute('aria-current', 'page');
+      navWishes.removeAttribute('aria-current');
+    }
+  }
+  if (wishView) loadWishes();
+}
+window.addEventListener('hashchange', applyRoute);
+
+async function loadWishes() {
+  try {
+    const response = await fetch('/api/v1/wishes', { cache: 'no-store' });
+    if (!response.ok) return;
+    const payload = await response.json();
+    wishItems = Array.isArray(payload.wishes) ? payload.wishes : [];
+    renderWishes();
+  } catch {
+    wishList.innerHTML = '<p class="muted">许愿池加载失败，请稍后刷新重试。</p>';
+  }
+}
+
+function renderWishes() {
+  if (!wishItems.length) {
+    wishList.innerHTML = '<div class="empty"><h1>还没有人许愿</h1><p>第一个被许愿的站点最有可能被接入——点右上角「许愿新站点」开个头。</p></div>';
+    return;
+  }
+  wishList.innerHTML = wishItems.map((wish) => {
+    const progress = wishProgress(wish.pledgedLdc, wish.targetLdc);
+    const statusBadge = wishStatusBadge(wish.status);
+    const canPledge = wish.status === 'open' && currentUser;
+    return `<article class="wish-card" data-wish-id="${wish.id}">
+      <div class="wish-card-head">
+        <div class="wish-card-title"><strong class="wish-name">${escapeHTML(wish.name)}</strong><a class="wish-domain" href="${escapeHTML(wish.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(wish.domain)}<span aria-hidden="true"> ↗</span></a></div>
+        <div class="wish-badges">${wish.inviteRequired ? '<span class="wish-badge invite">需邀请码</span>' : ''}${statusBadge ? `<span class="wish-badge ${statusBadge.tone}">${statusBadge.text}</span>` : ''}</div>
+      </div>
+      <div class="wish-progress-row">
+        <div class="wish-progress${progress.undecided ? ' undecided' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100"${progress.undecided ? '' : ` aria-valuenow="${progress.percent}"`} aria-label="${escapeHTML(wish.name)} 许愿进度"><i style="transform: scaleX(${progress.percent / 100})"></i></div>
+        <span class="wish-progress-label${progress.undecided ? ' undecided' : ''}">${escapeHTML(progress.label)}</span>
+      </div>
+      <div class="wish-card-foot">
+        <span class="muted">${wish.pledgers} 人许愿${wish.myPledgedLdc ? ` · 我出了 ${wish.myPledgedLdc} LDC` : ''}</span>
+        ${canPledge ? `<button type="button" class="ghost wish-pledge" data-wish-pledge="${wish.id}">我来许愿</button>` : (wish.status === 'open' && !currentUser ? '<span class="muted">登录后可助力</span>' : '')}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+wishNewButton.addEventListener('click', () => {
+  if (!currentUser) {
+    showToast('请先登录后再许愿');
+    return;
+  }
+  wishNameInput.value = '';
+  wishUrlInput.value = '';
+  wishInviteInput.checked = false;
+  wishFormMessage.textContent = '';
+  wishFormMessage.dataset.state = '';
+  wishFormDialog.showModal();
+});
+wishFormClose.addEventListener('click', () => wishFormDialog.close());
+document.querySelector('#wish-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  const name = wishNameInput.value.trim();
+  const url = wishUrlInput.value.trim();
+  wishFormMessage.dataset.state = '';
+  if (!name || !url) {
+    wishFormMessage.textContent = '请填写网站名和访问网址。';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = '提交中…';
+  try {
+    const response = await fetch('/api/v1/wishes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, url, inviteRequired: wishInviteInput.checked }), signal: AbortSignal.timeout(20000) });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) {
+      wishFormDialog.close();
+      showToast(payload.wish?.inviteRequired ? '许愿成功，等待站长在后台定价' : '许愿成功，目标 30 LDC，快邀请朋友来助力吧', 'success');
+      await loadWishes();
+    } else {
+      wishFormMessage.dataset.state = 'error';
+      wishFormMessage.textContent = payload.error || '提交失败，请稍后再试。';
+    }
+  } catch {
+    wishFormMessage.dataset.state = 'error';
+    wishFormMessage.textContent = '连接失败，请重试。';
+  } finally {
+    button.disabled = false;
+    button.textContent = '提交许愿';
+  }
+});
+
+// ---- 助力（LDC 支付） ----
+wishList.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-wish-pledge]');
+  if (!button) return;
+  const wish = wishItems.find((item) => String(item.id) === button.dataset.wishPledge);
+  if (!wish) return;
+  pledgeTargetId = wish.id;
+  pledgeTitle.textContent = `为「${wish.name}」许愿`;
+  pledgeSubtitle.textContent = wish.targetLdc == null ? '该站点目标尚未确定，你的助力会累计到进度里。' : `当前进度 ${wish.pledgedLdc} / ${wish.targetLdc} LDC`;
+  pledgeAmountInput.value = 10;
+  pledgeMessage.textContent = '';
+  pledgeMessage.dataset.state = '';
+  pledgeDialog.showModal();
+});
+pledgeClose.addEventListener('click', () => pledgeDialog.close());
+document.querySelectorAll('[data-pledge-amount]').forEach((chip) => chip.addEventListener('click', () => {
+  pledgeAmountInput.value = chip.dataset.pledgeAmount;
+}));
+document.querySelector('#pledge-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled || !pledgeTargetId) return;
+  const amount = Math.max(1, Math.min(10000, parseInt(pledgeAmountInput.value, 10) || 0));
+  button.disabled = true;
+  button.textContent = '创建订单…';
+  pledgeMessage.dataset.state = '';
+  try {
+    const response = await fetch(`/api/v1/wishes/${pledgeTargetId}/pledge`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amountLdc: amount }), signal: AbortSignal.timeout(20000) });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.payUrl) {
+      pledgeDialog.close();
+      window.location.assign(payload.payUrl);
+    } else {
+      pledgeMessage.dataset.state = 'error';
+      pledgeMessage.textContent = payload.error || '下单失败，请稍后再试。';
+    }
+  } catch {
+    pledgeMessage.dataset.state = 'error';
+    pledgeMessage.textContent = '连接失败，请重试。';
+  } finally {
+    button.disabled = false;
+    button.textContent = '去支付';
+  }
+});
+
+// ---- 支付回跳确认：轮询订单状态直到落账 ----
+function readPaidOrderNo() {
+  const direct = new URLSearchParams(window.location.search).get('paid');
+  if (direct) return direct;
+  const hashQuery = window.location.hash.split('?')[1];
+  return hashQuery ? new URLSearchParams(hashQuery).get('paid') : null;
+}
+
+function pollOrderStatus(orderNo, attempt = 0) {
+  if (attempt > 10) {
+    showToast('支付确认超时，如已完成支付请稍后刷新页面');
+    return;
+  }
+  fetch(`/api/v1/payment/orders/${encodeURIComponent(orderNo)}`, { cache: 'no-store' })
+    .then((response) => response.ok ? response.json() : null)
+    .then((payload) => {
+      if (!payload || !payload.order) return;
+      if (payload.order.status === 'paid') {
+        if (payload.membership) {
+          membership = payload.membership;
+          renderUserArea();
+          updateCustomizeSubtitle();
+        }
+        showToast(payload.order.kind === 'membership' ? '支付成功，会员已生效' : '支付成功，感谢助力！', 'success');
+        if (!wishPage.hidden) loadWishes();
+        return;
+      }
+      if (payload.order.status === 'cancelled') {
+        showToast('订单已过期，如未完成支付可重新发起');
+        return;
+      }
+      setTimeout(() => pollOrderStatus(orderNo, attempt + 1), 3000);
+    })
+    .catch(() => setTimeout(() => pollOrderStatus(orderNo, attempt + 1), 3000));
+}
+
+async function loadSiteSettings() {
+  try {
+    const response = await fetch('/api/v1/meta', { cache: 'no-store' });
+    if (!response.ok) return;
+    const meta = await response.json();
+    siteSettings.membershipLdcPerDay = parseInt(meta.membershipLdcPerDay, 10) || 1;
+    siteSettings.wishDefaultTargetLdc = parseInt(meta.wishDefaultTargetLdc, 10) || 30;
+  } catch { /* 用默认值 */ }
+}
+
+// ---- 意见反馈 ----
+feedbackClose.addEventListener('click', () => feedbackDialog.close());
+feedbackDialog.addEventListener('click', (event) => {
+  if (event.target !== feedbackDialog) return;
+  const bounds = feedbackDialog.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) feedbackDialog.close();
+});
+document.querySelector('#feedback-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  const content = document.querySelector('#feedback-content').value.trim();
+  feedbackMessage.dataset.state = 'error';
+  if (!content) { feedbackMessage.textContent = '请填写反馈内容。'; return; }
+  button.disabled = true;
+  button.textContent = '正在提交…';
+  feedbackMessage.textContent = '';
+  try {
+    const response = await fetch('/api/v1/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }), signal: AbortSignal.timeout(20000) });
+    if (response.ok) {
+      document.querySelector('#feedback-content').value = '';
+      feedbackMessage.dataset.state = 'success';
+      feedbackMessage.textContent = '反馈已提交。';
+    } else if (response.status === 401) {
+      feedbackDialog.close();
+      currentUser = null;
+      await loadUser();
+    } else {
+      feedbackMessage.textContent = '提交失败，请稍后再试。';
+    }
+  } catch {
+    feedbackMessage.textContent = '连接失败，内容已保留，请重试。';
+  } finally {
+    button.disabled = false;
+    button.textContent = '提交反馈';
+  }
+});
+
 initializeTheme();
 loadPreferences();
 loadRows();
+loadSiteSettings();
+loadUser();
+applyRoute();
+{
+  const paidOrder = readPaidOrderNo();
+  if (paidOrder) pollOrderStatus(paidOrder);
+}
 setInterval(loadRows, 60000);

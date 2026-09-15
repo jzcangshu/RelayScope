@@ -20,8 +20,8 @@ test('public dashboard uses a compact bell control and single announcement title
   assert.match(html, /id="announcement-action" class="theme-toggle announcement-action"/);
   assert.match(html, /运行状态通知/);
   assert.doesNotMatch(html, /service-status|announcement-count|运行公告/);
-  assert.equal((html.match(/class="icon-button"/g) || []).length, 3);
-  assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 3);
+  assert.equal((html.match(/class="icon-button"/g) || []).length, 8);
+  assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 8);
   assert.match(css, /detail-head\.announcement-head h2/);
   assert.match(css, /font-size: 23px/);
   assert.match(css, /color: #000/);
@@ -267,4 +267,70 @@ test('feedback refreshes the login state when the session expires', async () => 
   assert.equal(feedback.getUser(), null);
   assert.equal(feedback.input.value, '待提交的反馈');
   assert.equal(feedback.button.disabled, false);
+});
+
+function loadMembershipHelpers() {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const start = source.indexOf('// ---- 会员与同步纯函数');
+  const end = source.indexOf('// ---- 会员与同步纯函数结束 ----');
+  assert.notEqual(start, -1, 'membership helper block is missing');
+  assert.notEqual(end, -1, 'membership helper end marker is missing');
+  return Function(`${source.slice(start, end)}; return { membershipState, membershipBadge, preferencesIsEmpty, mergePreferences, wishProgress, wishStatusBadge };`)();
+}
+
+const { membershipState, membershipBadge, preferencesIsEmpty, mergePreferences, wishProgress, wishStatusBadge } = loadMembershipHelpers();
+
+test('membershipState classifies none, active and expired', () => {
+  const now = 1_800_000_000_000;
+  assert.equal(membershipState(0, now), 'none');
+  assert.equal(membershipState(null, now), 'none');
+  assert.equal(membershipState(now + 1, now), 'active');
+  assert.equal(membershipState(now, now), 'expired');
+  assert.equal(membershipState(now - 1, now), 'expired');
+  assert.deepEqual(membershipBadge('active'), { text: '会员生效中', tone: 'healthy' });
+  assert.deepEqual(membershipBadge('none'), { text: '未开通会员', tone: 'muted' });
+});
+
+test('mergePreferences prefers cloud, uploads local on first sync', () => {
+  const local = { hidden: { sites: ['a'], providers: [], models: [] }, defaultHealthy: false, tags: {} };
+  const cloud = { hidden: { sites: [], providers: [], models: [] }, defaultHealthy: true, tags: { x: { color: 'mint', sites: [] } } };
+  assert.deepEqual(mergePreferences(local, cloud), { source: 'cloud', upload: false });
+  assert.deepEqual(mergePreferences(local, { hidden: { sites: [], providers: [], models: [] }, defaultHealthy: false, tags: {} }), { source: 'local', upload: true });
+  assert.deepEqual(mergePreferences({ hidden: { sites: [], providers: [], models: [] }, defaultHealthy: false, tags: {} }, null), { source: 'default', upload: false });
+  assert.equal(preferencesIsEmpty(null), true);
+  assert.equal(preferencesIsEmpty({ hidden: { sites: [] }, defaultHealthy: true, tags: {} }), false);
+});
+
+test('wishProgress handles undecided targets and caps the ratio', () => {
+  assert.deepEqual(wishProgress(12, null), { undecided: true, percent: 0, label: '许愿目标尚未确定' });
+  assert.deepEqual(wishProgress(12, 30), { undecided: false, percent: 40, label: '已许愿 12 / 30 LDC' });
+  assert.equal(wishProgress(45, 30).percent, 100);
+  assert.equal(wishProgress(0, 30).percent, 0);
+  assert.equal(wishStatusBadge('open'), null);
+  assert.equal(wishStatusBadge('reached').tone, 'healthy');
+  assert.equal(wishStatusBadge('connected').tone, 'accent');
+});
+
+test('public page wires account, redeem, recharge, wish pool and payment return', () => {
+  const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  assert.match(html, /href="#wishes" data-nav-wishes/);
+  assert.match(html, /id="user-action"/);
+  assert.match(html, /id="user-menu"/);
+  assert.match(html, /id="wish-page"/);
+  assert.match(html, /id="redeem-dialog"/);
+  assert.match(html, /id="recharge-dialog"/);
+  assert.match(html, /id="wish-form-dialog"/);
+  assert.match(html, /注册此站点需要邀请码/);
+  assert.match(html, /id="pledge-dialog"/);
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  assert.match(source, /userAction\.addEventListener\('click'/);
+  assert.match(source, /window\.addEventListener\('hashchange', applyRoute\)/);
+  assert.match(source, /scheduleCloudSave/);
+  assert.match(source, /\/api\/v1\/me\/preferences/);
+  assert.match(source, /\/api\/v1\/redeem/);
+  assert.match(source, /\/api\/v1\/membership\/recharge/);
+  assert.match(source, /\/api\/v1\/wishes/);
+  assert.match(source, /\/api\/v1\/payment\/orders\//);
+  assert.match(source, /membershipIs\(\) !== 'active'/);
+  assert.match(source, /renderCustomizeGate/);
 });

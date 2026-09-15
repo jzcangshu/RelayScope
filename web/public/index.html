@@ -17,8 +17,18 @@
       <span class="brand-mark" aria-hidden="true"><i></i></span>
       <span><strong class="brand">RelayScope</strong><span class="brand-caption">中转站健康监测</span></span>
     </a>
-    <nav class="public-nav" aria-label="主导航"><a href="/" aria-current="page">模型看板</a><a href="/admin/">管理控制台 <span aria-hidden="true">↗</span></a></nav>
+    <nav class="public-nav" aria-label="主导航"><a href="/" aria-current="page" data-nav-board>模型看板</a><a href="#wishes" data-nav-wishes>许愿池</a><a href="/admin/">管理控制台 <span aria-hidden="true">↗</span></a></nav>
     <div class="header-actions">
+      <button id="user-action" class="user-action" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
+        <span class="user-action-label">登录</span>
+      </button>
+      <div id="user-menu" class="user-menu" role="menu" aria-label="账号菜单" hidden>
+        <div class="user-menu-identity"><span id="user-menu-avatar" class="user-avatar" aria-hidden="true"></span><span><strong id="user-menu-name"></strong><small id="user-menu-membership" class="muted"></small></span></div>
+        <button type="button" role="menuitem" data-user-menu="recharge">LDC 直充会员</button>
+        <button type="button" role="menuitem" data-user-menu="redeem">兑换码</button>
+        <button type="button" role="menuitem" data-user-menu="feedback">意见反馈</button>
+        <button type="button" role="menuitem" data-user-menu="logout">退出登录</button>
+      </div>
       <button id="customize-action" type="button" aria-haspopup="dialog" aria-controls="customize-dialog" title="定制">
         <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 6h10m3 0h3M4 12h3m4 0h9M4 18h10m3 0h3" /><circle cx="17" cy="6" r="2.2" /><circle cx="10" cy="12" r="2.2" /><circle cx="17" cy="18" r="2.2" /></svg>
         <span class="customize-label">定制</span>
@@ -50,6 +60,13 @@
         <div class="empty"><h1>正在读取最新数据</h1><p>稍候即可查看各站点最近 24 小时状态。</p></div>
       </section>
     </div>
+    <section id="wish-page" class="wish-page" hidden aria-label="站点许愿池">
+      <div class="wish-head">
+        <div><h1>站点许愿池</h1><p class="muted">用 LDC 许愿你想让站长接入的站点，许愿越多越快排上日程。</p></div>
+        <button id="wish-new" type="button" class="primary-button">许愿新站点</button>
+      </div>
+      <div id="wish-list" class="wish-list" aria-live="polite"><p class="muted">正在读取许愿池…</p></div>
+    </section>
     <dialog id="detail-dialog" class="detail-dialog">
       <div class="detail-head"><div><h2 id="detail-title">模型详情</h2><p id="detail-subtitle" class="muted"></p></div><button id="detail-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div id="detail-content" class="detail-content"></div>
@@ -59,7 +76,7 @@
       <div id="announcement-content" class="announcement-content" aria-live="polite"></div>
     </dialog>
     <dialog id="customize-dialog" class="customize-dialog" aria-labelledby="customize-title">
-      <div class="detail-head customize-head"><div><h2 id="customize-title">定制</h2><p class="muted">个性化设置仅保存在当前浏览器。</p></div><button id="customize-close" class="icon-button" type="button" aria-label="关闭定制" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <div class="detail-head customize-head"><div><h2 id="customize-title">定制</h2><p class="muted" id="customize-subtitle">个性化设置仅保存在当前浏览器。</p></div><button id="customize-close" class="icon-button" type="button" aria-label="关闭定制" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div class="customize-body">
         <nav class="customize-nav" aria-label="定制分类">
           <button id="customize-tab-display" type="button" aria-selected="true" aria-controls="customize-display">
@@ -77,6 +94,60 @@
         </div>
       </div>
     </dialog>
+    <dialog id="feedback-dialog" class="form-dialog">
+      <div class="detail-head form-head"><div><h2>意见反馈</h2><p class="muted">发现数据问题或功能建议，直接告诉站长。</p></div><button id="feedback-close" class="icon-button" type="button" aria-label="关闭反馈" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <form id="feedback-form">
+        <textarea id="feedback-content" rows="4" maxlength="2000" placeholder="描述你遇到的问题或建议…" aria-label="反馈内容"></textarea>
+        <p id="feedback-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="form-actions"><button class="primary-button" type="submit">提交反馈</button></div>
+      </form>
+    </dialog>
+    <dialog id="redeem-dialog" class="form-dialog">
+      <div class="detail-head form-head"><div><h2>兑换会员</h2><p class="muted">输入兑换码即可延长会员有效期，支持叠加延期。</p></div><button id="redeem-close" class="icon-button" type="button" aria-label="关闭兑换" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <form id="redeem-form">
+        <input id="redeem-code" type="text" maxlength="24" placeholder="RS-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" aria-label="兑换码">
+        <p id="redeem-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="form-actions"><button class="primary-button" type="submit">兑换</button></div>
+      </form>
+    </dialog>
+    <dialog id="recharge-dialog" class="form-dialog">
+      <div class="detail-head form-head"><div><h2>LDC 直充会员</h2><p class="muted">使用 LINUX DO Credit 积分支付，支付成功后会员立即生效并与现有有效期叠加。</p></div><button id="recharge-close" class="icon-button" type="button" aria-label="关闭直充" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <form id="recharge-form">
+        <div class="recharge-presets" role="group" aria-label="会员时长">
+          <button type="button" class="preset-chip" data-recharge-days="30">30 天</button>
+          <button type="button" class="preset-chip" data-recharge-days="90">90 天</button>
+          <button type="button" class="preset-chip" data-recharge-days="365">365 天</button>
+        </div>
+        <label class="recharge-days"><span>自定义天数</span><input id="recharge-days" type="number" min="1" max="3650" value="30" aria-label="会员天数"></label>
+        <p class="recharge-price" id="recharge-price" aria-live="polite"></p>
+        <p id="recharge-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="form-actions"><button class="primary-button" type="submit">去支付</button></div>
+      </form>
+    </dialog>
+    <dialog id="wish-form-dialog" class="form-dialog">
+      <div class="detail-head form-head"><div><h2>许愿新站点</h2><p class="muted">相同域名的许愿会自动合并到同一条愿望里。</p></div><button id="wish-form-close" class="icon-button" type="button" aria-label="关闭许愿" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <form id="wish-form">
+        <label class="field"><span>网站名</span><input id="wish-name" type="text" maxlength="60" placeholder="例如：云雾API" aria-label="网站名"></label>
+        <label class="field"><span>访问网址</span><input id="wish-url" type="url" maxlength="300" placeholder="https://" aria-label="访问网址"></label>
+        <label class="check wish-invite"><input id="wish-invite" type="checkbox"><span class="check-box" aria-hidden="true"></span><span>注册此站点需要邀请码<span class="muted check-hint">勾选后目标额度由站长在后台定价；不勾选则默认目标 30 LDC</span></span></label>
+        <p id="wish-form-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="form-actions"><button class="primary-button" type="submit">提交许愿</button></div>
+      </form>
+    </dialog>
+    <dialog id="pledge-dialog" class="form-dialog">
+      <div class="detail-head form-head"><div><h2 id="pledge-title">我来许愿</h2><p class="muted" id="pledge-subtitle"></p></div><button id="pledge-close" class="icon-button" type="button" aria-label="关闭助力" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <form id="pledge-form">
+        <label class="field"><span>助力金额（LDC）</span><input id="pledge-amount" type="number" min="1" max="10000" value="10" aria-label="助力金额"></label>
+        <div class="recharge-presets" role="group" aria-label="常用金额">
+          <button type="button" class="preset-chip" data-pledge-amount="5">5</button>
+          <button type="button" class="preset-chip" data-pledge-amount="10">10</button>
+          <button type="button" class="preset-chip" data-pledge-amount="30">30</button>
+        </div>
+        <p id="pledge-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="form-actions"><button class="primary-button" type="submit">去支付</button></div>
+      </form>
+    </dialog>
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
   </main>
   <script src="/assets/dashboard.js" defer></script>
 </body>

@@ -1940,3 +1940,182 @@
   .tag-editor .primary-button:hover { border-color: var(--shell-accent-hover); background: var(--shell-accent-hover); }
   .pref-reset-all:not(.armed):hover { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text); }
 }
+
+/* ===== 会员 / 兑换 / 直充 / 反馈：通用表单弹窗 ===== */
+.form-dialog {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.form-dialog::backdrop { background: rgb(10 16 14 / 42%); }
+.form-dialog .form-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+.form-dialog .form-head h2 { margin: 0; font-size: var(--font-heading); }
+.form-dialog .form-head .muted { margin: 4px 0 0; font-size: var(--font-small); }
+.form-dialog form { padding: 18px 20px 20px; display: grid; gap: 14px; }
+.form-dialog textarea,
+.form-dialog input[type="text"],
+.form-dialog input[type="url"],
+.form-dialog input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.form-dialog textarea:focus-visible,
+.form-dialog input:focus-visible { outline: none; border-color: var(--accent); background: var(--surface); }
+.form-dialog .field { display: grid; gap: 6px; font-size: var(--font-small); font-weight: 600; color: var(--muted); }
+.form-message { margin: 0; min-height: 1.2em; font-size: var(--font-small); color: var(--failed); }
+.form-message[data-state="success"] { color: var(--healthy); }
+.form-message[data-state="error"] { color: var(--failed); }
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.primary-button {
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease-out, background 140ms ease, opacity 140ms ease;
+}
+.primary-button:hover { background: color-mix(in oklab, var(--accent) 88%, #000); }
+.primary-button:active { transform: scale(0.97); }
+.primary-button:disabled { opacity: 0.6; cursor: default; transform: none; }
+.form-dialog .ghost,
+.wish-card .ghost {
+  padding: 10px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease-out, border-color 140ms ease, background 140ms ease;
+}
+.form-dialog .ghost:hover, .wish-card .ghost:hover { border-color: var(--accent); color: var(--accent); }
+.form-dialog .ghost:active, .wish-card .ghost:active { transform: scale(0.97); }
+.recharge-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.preset-chip {
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 160ms ease-out, border-color 140ms ease, background 140ms ease;
+}
+.preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+.preset-chip:active { transform: scale(0.97); }
+.recharge-days { display: flex; align-items: center; gap: 12px; font-size: var(--font-small); font-weight: 600; color: var(--muted); }
+.recharge-days input { max-width: 110px; }
+.recharge-price { margin: 0; font-size: var(--font-body); font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.check-hint { display: block; font-weight: 400; font-size: var(--font-caption); margin-top: 2px; }
+.wish-invite { align-items: flex-start; }
+
+/* ===== 定制弹窗门禁 ===== */
+.customize-gate { text-align: center; padding: 48px 24px; display: grid; justify-items: center; gap: 12px; }
+.customize-gate .gate-mark { font-size: 30px; color: var(--accent); }
+.customize-gate h3 { margin: 0; font-size: var(--font-heading); }
+.customize-gate p { margin: 0; max-width: 360px; line-height: 1.6; }
+.customize-gate .gate-actions { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* ===== 许愿池 ===== */
+.wish-page { max-width: 860px; margin: 0 auto; padding: 8px 20px 48px; }
+.wish-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 10px 0 18px; flex-wrap: wrap; }
+.wish-head h1 { margin: 0 0 4px; font-size: 21px; }
+.wish-head p { margin: 0; }
+.wish-list { display: grid; gap: 12px; }
+.wish-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.wish-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.wish-card-title { display: grid; gap: 2px; }
+.wish-name { font-size: var(--font-title); }
+.wish-domain { font-size: var(--font-small); color: var(--muted); text-decoration: none; font-family: ui-monospace, "Cascadia Code", monospace; }
+.wish-domain:hover { color: var(--accent); }
+.wish-badges { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wish-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.wish-badge.invite { background: var(--degraded-soft); color: var(--degraded); }
+.wish-badge.healthy { background: var(--healthy-soft); color: var(--healthy); }
+.wish-badge.accent { background: var(--accent-soft); color: var(--accent); }
+.wish-progress-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+.wish-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.wish-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 72%, #fff), var(--accent));
+  transform-origin: left center;
+  transition: transform 480ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.wish-progress.undecided {
+  background: repeating-linear-gradient(-55deg, var(--surface-subtle) 0 6px, var(--surface-hover) 6px 12px);
+}
+.wish-progress-label { font-size: var(--font-small); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wish-progress-label.undecided { color: var(--faint); font-weight: 500; }
+.wish-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: var(--font-small); }
+.wish-card-foot .ghost { padding: 7px 14px; font-size: var(--font-small); }
+
+/* ===== Toast ===== */
+.toast-region {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  z-index: 60;
+  pointer-events: none;
+}
+.toast {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--font-small);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 240ms ease, transform 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.toast.visible { opacity: 1; transform: translateY(0); }
+.toast.success { border-color: color-mix(in oklab, var(--healthy) 40%, var(--border)); }
+@media (prefers-reduced-motion: reduce) {
+  .wish-progress i, .toast { transition: opacity 200ms ease; }
+}
