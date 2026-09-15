@@ -41,6 +41,7 @@
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.8 6.3.8-4.6 4.3 1.2 6.1L12 17l-5.6 3 1.2-6.1L3 9.6l6.3-.8z"/></symbol>
     </defs>
   </svg>
 
@@ -59,6 +60,9 @@
         <span class="nav-section-label">模型目录</span>
         <a class="nav-item" href="#rules" data-tab="rules"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>模型规则</span><span class="badge-count" id="nav-rules-count" hidden></span></a>
         <a class="nav-item" href="#unmatched" data-tab="unmatched"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg><span>未匹配模型</span><span class="nav-count" id="nav-unmatched-count"></span></a>
+        <span class="nav-section-label">会员与许愿</span>
+        <a class="nav-item" href="#redeem-codes" data-tab="redeem-codes"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>兑换码</span></a>
+        <a class="nav-item" href="#wishes" data-tab="wishes"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg><span>许愿池</span></a>
         <span class="nav-section-label">维护</span>
         <a class="nav-item" href="#feedback" data-tab="feedback"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg><span>用户反馈</span></a>
         <a class="nav-item" href="#system" data-tab="system"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>系统</span></a>
@@ -172,6 +176,51 @@
             <div class="card">
               <div class="card-head"><h2>用户反馈</h2></div>
               <div class="card-body flush" id="feedback-list"></div>
+            </div>
+          </section>
+
+          <section id="redeem-codes-panel" class="panel" hidden>
+            <div class="panel-columns">
+              <div class="card">
+                <div class="card-head"><h2>批量生成兑换码</h2><span class="card-hint">站外售卖，用户站内核销延期</span></div>
+                <div class="card-body">
+                  <form id="redeem-generate-form" class="stack-form">
+                    <label class="field"><span>数量（1-500）</span><input id="redeem-count" type="number" min="1" max="500" value="10" required></label>
+                    <label class="field"><span>会员天数（1-3650）</span><input id="redeem-days" type="number" min="1" max="3650" value="30" required></label>
+                    <label class="field"><span>批次备注</span><input id="redeem-note" type="text" maxlength="200" placeholder="例如：首批内测"></label>
+                    <button class="btn btn-primary" type="submit">生成兑换码</button>
+                  </form>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-head"><h2>会员直充定价</h2><span class="card-hint">影响公开页 LDC 直充价格</span></div>
+                <div class="card-body">
+                  <form id="settings-form" class="stack-form">
+                    <label class="field"><span>会员单价（LDC/天）</span><input id="setting-membership-price" type="number" min="1" max="10000" required></label>
+                    <label class="field"><span>许愿默认目标（LDC）</span><input id="setting-wish-target" type="number" min="1" max="10000" required></label>
+                    <button class="btn btn-primary" type="submit">保存设置</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="card" id="redeem-result-card" hidden>
+              <div class="card-head"><h2>生成结果（仅展示一次，请立即保存）</h2><div class="card-hint"><button type="button" class="btn" id="redeem-copy">复制全部</button><button type="button" class="btn" id="redeem-download">下载 .txt</button></div></div>
+              <div class="card-body flush"><pre id="redeem-result" class="code-block" tabindex="0"></pre></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>兑换码列表</h2><div class="card-hint"><select id="redeem-status-filter" aria-label="按状态筛选"><option value="">全部状态</option><option value="unused">未使用</option><option value="used">已使用</option><option value="revoked">已撤销</option></select><button type="button" class="btn" id="redeem-reload">刷新</button></div></div>
+              <div class="card-body flush"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>兑换码</th><th>天数</th><th>备注</th><th>状态</th><th>兑换者</th><th>兑换时间</th><th>操作</th></tr></thead><tbody id="redeem-list"></tbody></table></div></div>
+            </div>
+          </section>
+
+          <section id="wishes-panel" class="panel" hidden>
+            <div class="card">
+              <div class="card-head"><h2>许愿池管理</h2><div class="card-hint"><button type="button" class="btn" id="wish-admin-reload">刷新</button></div></div>
+              <div class="card-body flush"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>站点</th><th>域名</th><th>邀请码</th><th>目标 LDC</th><th>已许愿</th><th>人数</th><th>状态</th><th>操作</th></tr></thead><tbody id="wish-admin-list"></tbody></table></div></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>LDC 订单流水</h2><div class="card-hint"><select id="order-kind-filter" aria-label="按类型筛选订单"><option value="">全部类型</option><option value="membership">会员直充</option><option value="wish">许愿助力</option></select><button type="button" class="btn" id="order-reload">刷新</button></div></div>
+              <div class="card-body flush"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>订单号</th><th>用户</th><th>类型</th><th>内容</th><th>LDC</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="order-list"></tbody></table></div></div>
             </div>
           </section>
 

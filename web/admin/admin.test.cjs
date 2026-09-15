@@ -203,3 +203,24 @@ test('navigation deep links hash-based tabs and sidebar has aria-current', () =>
   assert.match(script, /aria-current/);
   assert.match(html, /class="sidebar-nav"/);
 });
+
+test('admin console exposes membership and wish management tabs', () => {
+  const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  assert.match(html, /href="#redeem-codes" data-tab="redeem-codes"/);
+  assert.match(html, /href="#wishes" data-tab="wishes"/);
+  assert.match(html, /id="redeem-codes-panel"/);
+  assert.match(html, /id="redeem-generate-form"/);
+  assert.match(html, /id="redeem-result-card"/);
+  assert.match(html, /id="settings-form"/);
+  assert.match(html, /id="wish-admin-list"/);
+  assert.match(html, /id="order-list"/);
+  const source = readFileSync(join(__dirname, 'admin.js'), 'utf8');
+  assert.match(source, /\/api\/v1\/admin\/redeem-codes/);
+  assert.match(source, /\/api\/v1\/admin\/redeem-codes\/revoke/);
+  assert.match(source, /\/api\/v1\/admin\/wishes/);
+  assert.match(source, /\/api\/v1\/admin\/orders/);
+  assert.match(source, /\/api\/v1\/admin\/settings/);
+  assert.match(source, /\/refund/);
+  assert.match(source, /URL\.createObjectURL/);
+  assert.doesNotMatch(source, /window\.prompt/);
+});

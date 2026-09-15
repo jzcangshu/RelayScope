@@ -377,3 +377,43 @@ dialog.compact-dialog { width: min(520px, calc(100vw - 40px)); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ===== 兑换码 / 许愿池管理 ===== */
+.panel-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.stack-form { display: grid; gap: 12px; }
+.stack-form .field { display: grid; gap: 6px; font-size: var(--font-small); font-weight: 600; color: var(--muted); }
+.stack-form input {
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.stack-form input:focus-visible { outline: none; border-color: var(--accent); }
+.admin-table-wrap { overflow-x: auto; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: var(--font-small); }
+.admin-table th, .admin-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.admin-table th { color: var(--muted); font-weight: 600; font-size: var(--font-caption); text-transform: uppercase; letter-spacing: 0.04em; }
+.admin-table tbody tr:hover { background: var(--surface-hover); }
+.admin-table .mono { font-family: var(--font-data, ui-monospace, monospace); font-size: var(--font-caption); }
+.admin-table .wish-target-input { width: 90px; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
+.admin-table .wish-actions { display: flex; gap: 6px; }
+.code-block {
+  margin: 0;
+  padding: 14px 16px;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--font-data, ui-monospace, monospace);
+  font-size: var(--font-small);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.chip.status-unused { background: var(--healthy-soft, #e1f3ed); color: var(--healthy, #15936f); }
+.chip.status-used { background: var(--surface-subtle); color: var(--muted); }
+.chip.status-revoked { background: var(--failed-soft, #f9e5e3); color: var(--failed, #c34b46); }
+.chip.status-order-pending { background: var(--surface-subtle); color: var(--muted); }
+.chip.status-order-paid { background: var(--healthy-soft, #e1f3ed); color: var(--healthy, #15936f); }
+.chip.status-order-refunded { background: var(--failed-soft, #f9e5e3); color: var(--failed, #c34b46); }
+.chip.status-order-cancelled { background: var(--surface-subtle); color: var(--faint); }

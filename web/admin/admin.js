@@ -37,8 +37,8 @@ const ACQ_STATES = {
   challenge_failed: ['验证失败', 'chip-danger'],
 };
 const ACQ_ATTENTION = new Set(['collection_failed', 'login_expired', 'challenge_pending', 'challenge_failed']);
-const TAB_TITLES = { overview: '运行概览', sites: '站点管理', rules: '模型规则', runs: '采集记录', unmatched: '未匹配模型', feedback: '用户反馈', system: '系统信息' };
-const TAB_DESCRIPTIONS = { overview: '查看采集概况，优先处理需要关注的站点。', sites: '接入数据来源，管理采集计划与登录状态。', rules: '把不同上游命名归入标准模型，预览命中并处理冲突。', runs: '按站点查看执行结果与失败原因，最新异常优先展示。', unmatched: '检查尚未归类的模型，从这里直接建立匹配规则。', feedback: '完整查看用户报告的问题与建议。', system: '查看当前服务的版本、构建信息与服务器时间。' };
+const TAB_TITLES = { overview: '运行概览', sites: '站点管理', rules: '模型规则', runs: '采集记录', unmatched: '未匹配模型', feedback: '用户反馈', redeemCodes: '兑换码', wishes: '许愿池', system: '系统信息' };
+const TAB_DESCRIPTIONS = { overview: '查看采集概况，优先处理需要关注的站点。', sites: '接入数据来源，管理采集计划与登录状态。', rules: '把不同上游命名归入标准模型，预览命中并处理冲突。', runs: '按站点查看执行结果与失败原因，最新异常优先展示。', unmatched: '检查尚未归类的模型，从这里直接建立匹配规则。', feedback: '完整查看用户报告的问题与建议。', redeemCodes: '批量生成会员兑换码，管理核销与撤销。', wishes: '为许愿站点定价、处理状态与退款。', system: '查看当前服务的版本、构建信息与服务器时间。' };
 const THEME_ICONS = { auto: 'i-monitor', light: 'i-sun', dark: 'i-moon' };
 const THEME_LABELS = { auto: '主题：跟随系统', light: '主题：浅色', dark: '主题：深色' };
 const needsSession = (site) => site.enabled && site.sessionRequired && !site.sessionConfigured;
@@ -255,7 +255,7 @@ async function loadAll() {
   $('#refresh').setAttribute('aria-busy', 'true');
   $('#last-refresh').textContent = '正在更新…';
   Object.keys(collectionViews).forEach(renderCollectionState);
-  const sections = [['系统信息', loadMeta], ['来源类型', loadAdapters], ['站点', loadSites], ['模型规则', loadRules], ['采集记录', loadRuns], ['匹配冲突', loadConflicts], ['反馈', loadFeedback], ['未匹配模型', loadUnmatched]];
+  const sections = [['系统信息', loadMeta], ['来源类型', loadAdapters], ['站点', loadSites], ['模型规则', loadRules], ['采集记录', loadRuns], ['匹配冲突', loadConflicts], ['反馈', loadFeedback], ['未匹配模型', loadUnmatched], ['兑换码', loadRedeemCodes], ['许愿池', loadWishesAdmin], ['运营设置', loadOperationSettings]];
   const results = await Promise.allSettled(sections.map(([, load]) => load()));
   const failed = results.flatMap((result, index) => result.status === 'rejected' ? [sections[index][0]] : []);
   $('#dashboard-message').hidden = !failed.length;
@@ -722,6 +722,173 @@ $('#copy-pair-code').onclick = async () => {
 };
 $('#pair-dialog').addEventListener('close', () => { $('#pair-code').value = ''; });
 $('#session-dialog').addEventListener('close', () => { $('#session-payload').value = ''; });
+
+/* ---------- 会员与许愿：兑换码 / 许愿池 / 订单 / 设置 ---------- */
+
+let redeemCodes = [];
+let adminWishes = [];
+let adminOrders = [];
+let operationSettings = { membershipLdcPerDay: 1, wishDefaultTargetLdc: 30 };
+let lastGeneratedCodes = [];
+
+const REDEEM_STATUS_LABELS = { unused: '未使用', used: '已使用', revoked: '已撤销' };
+const ORDER_STATUS_LABELS = { pending: '待支付', paid: '已支付', refunded: '已退款', cancelled: '已取消' };
+const WISH_STATUS_LABELS = { open: '进行中', reached: '已达成', rejected: '已拒绝', connected: '已接入' };
+
+async function loadRedeemCodes() {
+  const status = $('#redeem-status-filter').value;
+  redeemCodes = (await readJSON('/api/v1/admin/redeem-codes?status=' + encodeURIComponent(status) + '&limit=200')).codes || [];
+  renderRedeemCodes();
+}
+async function loadWishesAdmin() {
+  adminWishes = (await readJSON('/api/v1/admin/wishes')).wishes || [];
+  renderWishesAdmin();
+}
+async function loadOrders() {
+  const kind = $('#order-kind-filter').value;
+  adminOrders = (await readJSON('/api/v1/admin/orders?kind=' + encodeURIComponent(kind) + '&limit=100')).orders || [];
+  renderOrders();
+}
+async function loadOperationSettings() {
+  operationSettings = await readJSON('/api/v1/admin/settings');
+  $('#setting-membership-price').value = operationSettings.membershipLdcPerDay;
+  $('#setting-wish-target').value = operationSettings.wishDefaultTargetLdc;
+}
+
+function renderRedeemCodes() {
+  $('#redeem-list').innerHTML = redeemCodes.length ? redeemCodes.map((code) => '<tr>' +
+    '<td class="mono">' + escapeHTML(code.code) + '</td>' +
+    '<td>' + code.days + ' 天</td>' +
+    '<td>' + (code.note ? escapeHTML(code.note) : '<span class="muted">—</span>') + '</td>' +
+    '<td><span class="chip status-' + code.status + '">' + (REDEEM_STATUS_LABELS[code.status] || code.status) + '</span></td>' +
+    '<td>' + (code.redeemedByName ? '@' + escapeHTML(code.redeemedByName) : '<span class="muted">—</span>') + '</td>' +
+    '<td>' + (code.redeemedAt ? escapeHTML(formatRunTime(code.redeemedAt)) : '<span class="muted">—</span>') + '</td>' +
+    '<td>' + (code.status === 'unused' ? '<button type="button" class="btn btn-ghost" data-redeem-revoke="' + code.id + '">撤销</button>' : '<span class="muted">—</span>') + '</td>' +
+    '</tr>').join('') : '<tr><td colspan="7"><div class="empty-state"><p>还没有兑换码，先用上方表单生成一批。</p></div></td></tr>';
+}
+
+function renderWishesAdmin() {
+  $('#wish-admin-list').innerHTML = adminWishes.length ? adminWishes.map((wish) => {
+    const statusOptions = ['open', 'reached', 'rejected', 'connected'].map((status) => '<option value="' + status + '"' + (wish.status === status ? ' selected' : '') + '>' + WISH_STATUS_LABELS[status] + '</option>').join('');
+    return '<tr data-wish-id="' + wish.id + '">' +
+      '<td><strong>' + escapeHTML(wish.name) + '</strong></td>' +
+      '<td class="mono">' + escapeHTML(wish.domain) + '</td>' +
+      '<td>' + (wish.inviteRequired ? '<span class="chip chip-attention">需要</span>' : '<span class="muted">不需要</span>') + '</td>' +
+      '<td><input class="wish-target-input" type="number" min="1" max="1000000" value="' + (wish.targetLdc ?? '') + '" placeholder="未定价" aria-label="' + escapeHTML(wish.name) + ' 目标额度"></td>' +
+      '<td>' + wish.pledgedLdc + ' LDC</td>' +
+      '<td>' + wish.pledgers + '</td>' +
+      '<td><select class="wish-status-select" aria-label="' + escapeHTML(wish.name) + ' 状态">' + statusOptions + '</select></td>' +
+      '<td class="wish-actions"><button type="button" class="btn btn-ghost" data-wish-save="' + wish.id + '">保存</button><button type="button" class="btn btn-ghost" data-wish-delete="' + wish.id + '">删除</button></td>' +
+      '</tr>';
+  }).join('') : '<tr><td colspan="8"><div class="empty-state"><p>许愿池还是空的。</p></div></td></tr>';
+}
+
+function renderOrders() {
+  $('#order-list').innerHTML = adminOrders.length ? adminOrders.map((order) => {
+    const content = order.kind === 'membership'
+      ? (order.days ?? '—') + ' 天会员'
+      : (adminWishes.find((wish) => wish.id === order.wishSiteId)?.name || '站点 #' + (order.wishSiteId ?? '—'));
+    return '<tr>' +
+      '<td class="mono">' + escapeHTML(order.orderNo) + '</td>' +
+      '<td>@' + escapeHTML(order.username || String(order.userId)) + '</td>' +
+      '<td>' + (order.kind === 'membership' ? '会员直充' : '许愿助力') + '</td>' +
+      '<td>' + escapeHTML(content) + '</td>' +
+      '<td>' + order.amountLdc + '</td>' +
+      '<td><span class="chip status-order-' + order.status + '">' + (ORDER_STATUS_LABELS[order.status] || order.status) + '</span></td>' +
+      '<td>' + escapeHTML(formatRunTime(order.createdAt)) + '</td>' +
+      '<td>' + (order.status === 'paid' ? '<button type="button" class="btn btn-ghost" data-order-refund="' + order.id + '">退款</button>' : '<span class="muted">—</span>') + '</td>' +
+      '</tr>';
+  }).join('') : '<tr><td colspan="8"><div class="empty-state"><p>还没有 LDC 订单。</p></div></td></tr>';
+}
+
+$('#redeem-status-filter').addEventListener('change', () => runAction($('#redeem-reload'), loadRedeemCodes));
+$('#redeem-reload').addEventListener('click', () => runAction($('#redeem-reload'), loadRedeemCodes));
+$('#wish-admin-reload').addEventListener('click', () => runAction($('#wish-admin-reload'), async () => { await Promise.allSettled([loadWishesAdmin(), loadOrders()]); }));
+$('#order-kind-filter').addEventListener('change', () => runAction($('#order-reload'), loadOrders));
+$('#order-reload').addEventListener('click', () => runAction($('#order-reload'), loadOrders));
+
+$('#redeem-generate-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  runAction(event.submitter, async () => {
+    const payload = { count: Number($('#redeem-count').value), days: Number($('#redeem-days').value), note: $('#redeem-note').value.trim() };
+    const response = await saveRequest('/api/v1/admin/redeem-codes', 'POST', payload);
+    lastGeneratedCodes = (await response.json()).codes || [];
+    $('#redeem-result').textContent = lastGeneratedCodes.join('\n');
+    $('#redeem-result-card').hidden = false;
+    toast('已生成 ' + lastGeneratedCodes.length + ' 个兑换码，请立即保存', 'success');
+    await loadRedeemCodes();
+  });
+});
+
+$('#redeem-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(lastGeneratedCodes.join('\n')); toast('已复制全部兑换码', 'success'); }
+  catch { toast('复制失败，请手动选中文本复制', 'error'); }
+});
+$('#redeem-download').addEventListener('click', () => {
+  const blob = new Blob([lastGeneratedCodes.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'relayscope-redeem-codes-' + new Date().toISOString().slice(0, 10) + '.txt';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
+$('#redeem-list').addEventListener('click', (event) => {
+  const revoke = event.target.closest('[data-redeem-revoke]');
+  if (!revoke) return;
+  runAction(revoke, async () => {
+    const response = await saveRequest('/api/v1/admin/redeem-codes/revoke', 'POST', { ids: [Number(revoke.dataset.redeemRevoke)] });
+    const payload = await response.json();
+    toast('已撤销 ' + payload.revoked + ' 个兑换码', 'success');
+    await loadRedeemCodes();
+  });
+});
+
+$('#settings-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  runAction(event.submitter, async () => {
+    await saveRequest('/api/v1/admin/settings', 'PATCH', {
+      membershipLdcPerDay: Number($('#setting-membership-price').value),
+      wishDefaultTargetLdc: Number($('#setting-wish-target').value)
+    });
+    toast('运营设置已保存', 'success');
+  });
+});
+
+$('#wish-admin-list').addEventListener('click', (event) => {
+  const save = event.target.closest('[data-wish-save]');
+  const remove = event.target.closest('[data-wish-delete]');
+  if (save) {
+    runAction(save, async () => {
+      const row = save.closest('tr');
+      const rawTarget = row.querySelector('.wish-target-input').value.trim();
+      const payload = { status: row.querySelector('.wish-status-select').value };
+      if (rawTarget !== '') payload.targetLdc = Number(rawTarget);
+      await saveRequest('/api/v1/admin/wishes/' + save.dataset.wishSave, 'PATCH', payload);
+      toast('许愿站点已更新', 'success');
+      await loadWishesAdmin();
+    });
+  }
+  if (remove) {
+    if (!window.confirm('删除该许愿站点将同时删除其全部助力订单，确定？')) return;
+    runAction(remove, async () => {
+      await saveRequest('/api/v1/admin/wishes/' + remove.dataset.wishDelete, 'DELETE');
+      toast('许愿站点已删除', 'success');
+      await Promise.allSettled([loadWishesAdmin(), loadOrders()]);
+    });
+  }
+});
+
+$('#order-list').addEventListener('click', (event) => {
+  const refund = event.target.closest('[data-order-refund]');
+  if (!refund) return;
+  if (!window.confirm('确认对该订单发起平台全额退款？退款后许愿进度会同步回落。')) return;
+  runAction(refund, async () => {
+    await saveRequest('/api/v1/admin/orders/' + refund.dataset.orderRefund + '/refund', 'POST', {});
+    toast('退款已完成登记', 'success');
+    await Promise.allSettled([loadOrders(), loadWishesAdmin()]);
+  });
+});
 
 async function checkAdminSession() {
   applyTheme();
