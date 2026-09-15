@@ -19,7 +19,10 @@
     </a>
     <nav class="public-nav" aria-label="主导航"><a href="/" aria-current="page">模型看板</a><a href="/admin/">管理控制台 <span aria-hidden="true">↗</span></a></nav>
     <div class="header-actions">
-      <button id="user-action" type="button">登录</button>
+      <button id="customize-action" type="button" aria-haspopup="dialog" aria-controls="customize-dialog" title="定制">
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 6h10m3 0h3M4 12h3m4 0h9M4 18h10m3 0h3" /><circle cx="17" cy="6" r="2.2" /><circle cx="10" cy="12" r="2.2" /><circle cx="17" cy="18" r="2.2" /></svg>
+        <span class="customize-label">定制</span>
+      </button>
       <div class="header-tools" role="group" aria-label="页面工具">
         <button id="announcement-action" class="theme-toggle announcement-action" type="button" aria-label="查看运行通知" title="查看运行通知" aria-haspopup="dialog" aria-controls="announcement-dialog">
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8.5 13h5" /></svg>
@@ -51,13 +54,28 @@
       <div class="detail-head"><div><h2 id="detail-title">模型详情</h2><p id="detail-subtitle" class="muted"></p></div><button id="detail-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div id="detail-content" class="detail-content"></div>
     </dialog>
-	<dialog id="feedback-dialog" class="detail-dialog" aria-labelledby="feedback-title">
-	  <div class="detail-head"><div><h2 id="feedback-title">反馈问题</h2><p class="muted">请描述异常现象或建议。</p></div><button id="feedback-close" class="icon-button" type="button" aria-label="关闭反馈" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
-	  <form id="feedback-form" class="detail-content"><label>反馈内容<textarea id="feedback-content" aria-describedby="feedback-message" rows="6" maxlength="2000" required placeholder="例如：某个站点的模型状态与实际不一致"></textarea></label><button class="primary-button" type="submit">提交反馈</button><p id="feedback-message" class="form-message" role="status"></p></form>
-    </dialog>
     <dialog id="announcement-dialog" class="announcement-dialog">
       <div class="detail-head announcement-head"><h2>运行状态通知</h2><button id="announcement-close" class="icon-button" type="button" aria-label="关闭公告" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div id="announcement-content" class="announcement-content" aria-live="polite"></div>
+    </dialog>
+    <dialog id="customize-dialog" class="customize-dialog" aria-labelledby="customize-title">
+      <div class="detail-head customize-head"><div><h2 id="customize-title">定制</h2><p class="muted">个性化设置仅保存在当前浏览器。</p></div><button id="customize-close" class="icon-button" type="button" aria-label="关闭定制" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+      <div class="customize-body">
+        <nav class="customize-nav" aria-label="定制分类">
+          <button id="customize-tab-display" type="button" aria-selected="true" aria-controls="customize-display">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7v5l3 2" /><path d="M21 6v4h-4" /></svg>
+            <span>显示内容</span>
+          </button>
+          <button id="customize-tab-tags" type="button" aria-selected="false" aria-controls="customize-tags">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="8" cy="8" r="1.4" /></svg>
+            <span>标签</span>
+          </button>
+        </nav>
+        <div class="customize-panels">
+          <div id="customize-display" class="customize-panel" role="tabpanel" aria-labelledby="customize-tab-display"></div>
+          <div id="customize-tags" class="customize-panel" role="tabpanel" aria-labelledby="customize-tab-tags" hidden></div>
+        </div>
+      </div>
     </dialog>
   </main>
   <script src="/assets/dashboard.js" defer></script>

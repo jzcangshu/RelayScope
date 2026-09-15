@@ -12,9 +12,13 @@ const healthyOnly = document.querySelector('#healthy-only');
 const filterPanel = document.querySelector('#filter-panel');
 const clearFilters = document.querySelector('#clear-filters');
 const themeToggle = document.querySelector('#theme-toggle');
-const userAction = document.querySelector('#user-action');
-const feedbackDialog = document.querySelector('#feedback-dialog');
-const feedbackMessage = document.querySelector('#feedback-message');
+const customizeDialog = document.querySelector('#customize-dialog');
+const customizeAction = document.querySelector('#customize-action');
+const customizeClose = document.querySelector('#customize-close');
+const customizeTabDisplay = document.querySelector('#customize-tab-display');
+const customizeTabTags = document.querySelector('#customize-tab-tags');
+const customizeDisplayPanel = document.querySelector('#customize-display');
+const customizeTagsPanel = document.querySelector('#customize-tags');
 const announcementDialog = document.querySelector('#announcement-dialog');
 const announcementAction = document.querySelector('#announcement-action');
 const announcementClose = document.querySelector('#announcement-close');
@@ -28,11 +32,31 @@ let view = 'model';
 let revision = null;
 let currentPage = 1;
 let pageSize = 20;
-let currentUser = null;
 let announcements = [];
 let announcementSignature = '';
 
-const selectedFilters = { provider: new Set(), model: new Set(), site: new Set() };
+// 定制个性化（全部保存在浏览器本地）
+const TAG_COLORS = ['mint', 'blue', 'violet', 'amber', 'rose', 'slate'];
+const CUSTOMIZE_DIMENSIONS = [
+  { key: 'sites', title: '站点', valueOf: (card) => card.siteName },
+  { key: 'providers', title: '模型供应商', valueOf: (card) => card.provider || '未归类' },
+  { key: 'models', title: '标准模型', valueOf: (card) => card.ruleName || card.rawModelName }
+];
+const HIDDEN_KEYS = { site: 'sites', provider: 'providers', model: 'models' };
+
+let hidden = { sites: new Set(), providers: new Set(), models: new Set() };
+let defaultHealthy = false;
+let tags = new Map();
+let customizeTab = 'display';
+let tagFormMode = null;
+let tagArmed = null;
+let resetArmed = false;
+let resetTimer = null;
+let openTagMenu = null;
+let customizeSearches = { sites: '', providers: '', models: '', tagSites: '' };
+let searchFocusKey = null;
+
+const selectedFilters = { provider: new Set(), model: new Set(), site: new Set(), tag: new Set() };
 const stateLabels = { healthy: '健康', degraded: '降级', failed: '故障', no_samples: '暂无样本', unknown: '未知' };
 const acquisitionLabels = { fresh: '采集正常', stale: '采集过期', collection_failed: '采集失败', login_expired: '登录失效', challenge_pending: '等待验证', challenge_failed: '验证失败', unknown: '采集未知' };
 const filterDefinitions = [
@@ -43,6 +67,49 @@ const filterDefinitions = [
 const slotCount = 48;
 const slotDuration = 30 * 60 * 1000;
 const pageSizeOptions = [20, 40, 60, 100];
+
+const tagDefinition = { key: 'tag', title: '标签', allLabel: '全部标签', anyOf: true, value: (card) => card.tagNames || [] };
+const activeFilterDefinitions = () => (tags.size ? [...filterDefinitions, tagDefinition] : filterDefinitions);
+
+const storageGet = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+const storageSet = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+const stringSet = (value) => new Set(Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []);
+
+function loadPreferences() {
+  try {
+    const raw = JSON.parse(storageGet('relayscope-hidden') || '{}');
+    hidden = { sites: stringSet(raw.sites), providers: stringSet(raw.providers), models: stringSet(raw.models) };
+  } catch {
+    hidden = { sites: new Set(), providers: new Set(), models: new Set() };
+  }
+  defaultHealthy = storageGet('relayscope-default-healthy') === '1';
+  try {
+    const raw = JSON.parse(storageGet('relayscope-tags') || '{}');
+    tags = new Map();
+    for (const [name, value] of Object.entries(raw)) {
+      if (typeof value !== 'object' || value === null) continue;
+      tags.set(name, { color: TAG_COLORS.includes(value.color) ? value.color : 'mint', sites: stringSet(value.sites) });
+    }
+  } catch {
+    tags = new Map();
+  }
+  healthyOnly.checked = defaultHealthy;
+}
+
+const saveHidden = () => storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] }));
+const saveDefaultHealthy = () => storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0');
+const saveTags = () => storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))));
+
+function isHiddenCard(card) {
+  return hidden.sites.has(card.siteName)
+    || hidden.providers.has(card.provider || '未归类')
+    || hidden.models.has(card.ruleName || card.rawModelName);
+}
+
+function cardTagsOf(siteName) {
+  if (!tags.size) return [];
+  return [...tags.entries()].filter(([, tag]) => tag.sites.has(siteName)).map(([name]) => name);
+}
 
 const formatMetric = (value, suffix = '') => value == null ? '—' : `${Number(value).toFixed(Math.abs(value) < 10 ? 2 : 0)}${suffix}`;
 const formatRatio = (value) => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -147,6 +214,7 @@ function buildCards() {
     card.groups = grouped.get(card.key).groups;
     card.key = cardKey(card.siteId, card.rawModelName);
     card.searchText = [card.provider, card.ruleName, card.siteName, card.rawModelName, ...card.groups.map((group) => group.groupName)].join(' ').toLowerCase();
+    card.tagNames = cardTagsOf(card.siteName);
     const cardHistory = historyByCard.get(card.key) || [];
     card.hasHistory = cardHistory.length > 0;
     card.timeline = buildTimeline(cardHistory);
@@ -155,9 +223,11 @@ function buildCards() {
   });
 
   for (const definition of filterDefinitions) {
+    const hiddenKey = HIDDEN_KEYS[definition.key];
     const known = new Set(cards.map(definition.value));
-    selectedFilters[definition.key] = new Set([...selectedFilters[definition.key]].filter((value) => known.has(value)));
+    selectedFilters[definition.key] = new Set([...selectedFilters[definition.key]].filter((value) => known.has(value) && !(hiddenKey && hidden[hiddenKey].has(value))));
   }
+  selectedFilters.tag = new Set([...selectedFilters.tag].filter((name) => tags.has(name)));
 }
 
 function compareRepresentativeRows(a, b) {
@@ -186,9 +256,14 @@ function lowestPrice(groups) {
 }
 
 function cardMatchesFilters(card, excludedCategory = '') {
-  return filterDefinitions.every((definition) => definition.key === excludedCategory
-    || !selectedFilters[definition.key].size
-    || selectedFilters[definition.key].has(definition.value(card)));
+  return activeFilterDefinitions().every((definition) => {
+    if (definition.key === excludedCategory) return true;
+    const selected = selectedFilters[definition.key];
+    if (!selected.size) return true;
+    const value = definition.value(card);
+    if (definition.anyOf) return value?.some((item) => selected.has(item)) || false;
+    return selected.has(value);
+  });
 }
 
 function updateFilterSelection(category, value, selectAll) {
@@ -208,14 +283,19 @@ function updateFilterSelection(category, value, selectAll) {
 }
 
 function renderFilters() {
-  filterPanel.innerHTML = filterDefinitions.map((definition) => {
-    const available = cards.filter((card) => cardMatchesFilters(card, definition.key));
+  const visibleCards = cards.filter((card) => !isHiddenCard(card));
+  filterPanel.innerHTML = activeFilterDefinitions().map((definition) => {
+    const available = visibleCards.filter((card) => cardMatchesFilters(card, definition.key));
     const counts = new Map();
     for (const card of available) {
-      const value = definition.value(card);
-      counts.set(value, (counts.get(value) || 0) + 1);
+      if (definition.anyOf) {
+        for (const item of definition.value(card)) counts.set(item, (counts.get(item) || 0) + 1);
+      } else {
+        const value = definition.value(card);
+        counts.set(value, (counts.get(value) || 0) + 1);
+      }
     }
-    const values = [...new Set(cards.map(definition.value))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    const values = [...new Set(visibleCards.flatMap((card) => (definition.anyOf ? definition.value(card) : [definition.value(card)])))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
     const allSelected = selectedFilters[definition.key].size === 0;
     const options = values.map((value) => {
       const selected = selectedFilters[definition.key].has(value);
@@ -248,11 +328,17 @@ function renderCard(card) {
   const title = view === 'model'
     ? `<strong class="card-title"><span>${escapeHTML(card.siteName)}</span><small> · ${escapeHTML(card.rawModelName)}</small></strong>`
     : `<strong>${escapeHTML(card.rawModelName)}</strong>`;
+  const tagsHTML = (card.tagNames || []).length
+    ? `<div class="card-tags">${card.tagNames.map((name) => {
+      const color = tags.get(name)?.color || 'mint';
+      return `<button type="button" class="tag-chip ${color}" data-tag-name="${escapeHTML(name)}" title="按标签筛选：${escapeHTML(name)}"><i aria-hidden="true"></i>${escapeHTML(name)}</button>`;
+    }).join('')}</div>`
+    : '';
   const groups = card.groups.map((group) => {
     const multiplier = formatMultiplier(group.price);
     return `<span class="group-chip" title="${escapeHTML(group.groupName)}：${stateLabels[group.serviceState] || group.serviceState}"><i class="${group.serviceState}"></i>${escapeHTML(group.groupName)}${multiplier ? ` (${multiplier})` : ''}</span>`;
   }).join('');
-  return `<article class="model-card ${card.serviceState}" tabindex="0" data-model="${escapeHTML(card.rawModelName)}" data-site="${escapeHTML(card.siteName)}"><div class="card-head"><div>${title}</div><span class="state-badge ${card.serviceState}">${stateLabels[card.serviceState] || card.serviceState}</span></div><div class="card-price${card.lowestPrice ? '' : ' unavailable'}">${formatPrice(card.lowestPrice)}</div><div class="card-metrics"><div><span>24 小时成功率</span><strong>${formatRatio(card.successRatio)}</strong></div><div><span>24 小时平均延迟</span><strong>${formatMetric(card.averageLatencyMs, ' ms')}</strong></div></div>${renderTimeline(card.timeline)}<div class="group-list" aria-label="站内分组">${groups}</div><footer><span title="${escapeHTML(acquisitionLabels[card.acquisitionState] || card.acquisitionState)}">${escapeHTML(acquisitionLabels[card.acquisitionState] || card.acquisitionState)}</span><time>更新 ${formatCompactTime(card.collectedAt)}</time></footer></article>`;
+  return `<article class="model-card ${card.serviceState}" tabindex="0" data-model="${escapeHTML(card.rawModelName)}" data-site="${escapeHTML(card.siteName)}"><div class="card-head"><div>${title}</div><span class="state-badge ${card.serviceState}">${stateLabels[card.serviceState] || card.serviceState}</span></div>${tagsHTML}<div class="card-price${card.lowestPrice ? '' : ' unavailable'}">${formatPrice(card.lowestPrice)}</div><div class="card-metrics"><div><span>24 小时成功率</span><strong>${formatRatio(card.successRatio)}</strong></div><div><span>24 小时平均延迟</span><strong>${formatMetric(card.averageLatencyMs, ' ms')}</strong></div></div>${renderTimeline(card.timeline)}<div class="group-list" aria-label="站内分组">${groups}</div><footer><span title="${escapeHTML(acquisitionLabels[card.acquisitionState] || card.acquisitionState)}">${escapeHTML(acquisitionLabels[card.acquisitionState] || card.acquisitionState)}</span><time>更新 ${formatCompactTime(card.collectedAt)}</time></footer></article>`;
 }
 
 function orderedCards(items) {
@@ -306,16 +392,20 @@ function bindPagination() {
 
 function render() {
   const query = searchElement.value.trim().toLowerCase();
-  const filtered = cards.filter((card) => cardMatchesFilters(card)
+  const visibleCards = cards.filter((card) => !isHiddenCard(card));
+  const filtered = visibleCards.filter((card) => cardMatchesFilters(card)
     && (!healthyOnly.checked || (card.serviceState === 'healthy' && card.acquisitionState === 'fresh'))
     && (!query || card.searchText.includes(query)));
   const groupCount = filtered.reduce((total, card) => total + card.groups.length, 0);
-  summaryElement.innerHTML = `<span><strong>${filtered.length}</strong> / ${cards.length} 个模型入口 · ${groupCount} 个站内分组</span><span class="timeline-legend" aria-label="状态条图例"><i class="healthy"></i>健康<i class="degraded"></i>降级<i class="failed"></i>故障<i class="no_samples"></i>无样本</span>`;
+  const hiddenCount = cards.length - visibleCards.length;
+  summaryElement.innerHTML = `<span><strong>${filtered.length}</strong> / ${visibleCards.length} 个模型入口 · ${groupCount} 个站内分组${hiddenCount ? ` <button type="button" class="customize-hint" data-open-customize>已屏蔽 ${hiddenCount} 项</button>` : ''}</span><span class="timeline-legend" aria-label="状态条图例"><i class="healthy"></i>健康<i class="degraded"></i>降级<i class="failed"></i>故障<i class="no_samples"></i>无样本</span>`;
   renderFilters();
 
   if (!filtered.length) {
     currentPage = 1;
-    contentElement.innerHTML = '<div class="empty"><h1>暂无匹配数据</h1><p>当前没有符合筛选条件的已采集记录，或站点还没有成功采集。</p></div>';
+    contentElement.innerHTML = visibleCards.length
+      ? '<div class="empty"><h1>暂无匹配数据</h1><p>当前没有符合筛选条件的已采集记录，或站点还没有成功采集。</p></div>'
+      : '<div class="empty"><h1>内容已被屏蔽</h1><p>顶栏「定制」中可以恢复被屏蔽的站点、供应商或模型。</p><button type="button" class="customize-hint" data-open-customize>打开定制</button></div>';
     return;
   }
 
@@ -341,11 +431,20 @@ function render() {
   contentElement.querySelectorAll('.model-card').forEach((element) => {
     element.addEventListener('click', () => openDetails(element.dataset.model, element.dataset.site));
     element.addEventListener('keydown', (event) => {
+      if (event.target !== element) return;
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         openDetails(element.dataset.model, element.dataset.site);
       }
     });
+    element.querySelectorAll('.tag-chip').forEach((chip) => chip.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const name = chip.dataset.tagName;
+      if (selectedFilters.tag.has(name)) selectedFilters.tag.delete(name);
+      else selectedFilters.tag.add(name);
+      currentPage = 1;
+      render();
+    }));
   });
   bindPagination();
 }
@@ -500,67 +599,316 @@ systemTheme.addEventListener('change', () => {
   if (themeToggle.dataset.mode === 'auto') applyTheme('auto');
 });
 
-async function loadUser() {
-  try {
-    const response = await fetch('/api/v1/auth/me', { cache: 'no-store' });
-    if (!response.ok) {
-      userAction.hidden = true;
-      return;
-    }
-    const identity = await response.json();
-    currentUser = identity.authenticated ? identity.user : null;
-    userAction.innerHTML = currentUser ? `<span>反馈</span><span class="user-identity"> · ${escapeHTML(currentUser.username)}</span>` : '登录';
-    userAction.setAttribute('aria-label', currentUser ? `反馈 · ${currentUser.username}` : '登录');
-    userAction.hidden = false;
-  } catch { userAction.hidden = true; }
+/* ---------- 定制个性化弹窗 ---------- */
+
+function focusTagInput() {
+  const input = customizeTagsPanel.querySelector('[data-tag-name-input]');
+  if (input) { input.focus(); input.select(); }
 }
 
-userAction.addEventListener('click', () => {
-  if (currentUser) {
-    feedbackMessage.textContent = '';
-    feedbackDialog.showModal();
+function renderCustomize() {
+  if (customizeTab === 'display') renderCustomizeDisplay();
+  else renderCustomizeTags();
+  if (searchFocusKey) {
+    const panel = customizeTab === 'display' ? customizeDisplayPanel : customizeTagsPanel;
+    const input = panel.querySelector(`[data-pref-search="${searchFocusKey}"]`);
+    if (input) {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }
+}
+
+function setCustomizeTab(tab) {
+  customizeTab = tab;
+  customizeTabDisplay.setAttribute('aria-selected', String(tab === 'display'));
+  customizeTabTags.setAttribute('aria-selected', String(tab === 'tags'));
+  customizeDisplayPanel.hidden = tab !== 'display';
+  customizeTagsPanel.hidden = tab !== 'tags';
+  customizeTagsPanel.scrollTop = 0;
+  customizeDisplayPanel.scrollTop = 0;
+  renderCustomize();
+}
+
+function dimensionCounts(definition) {
+  const counts = new Map();
+  for (const card of cards) {
+    const value = definition.valueOf(card);
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'zh-CN'));
+}
+
+function renderCustomizeDisplay() {
+  const groups = CUSTOMIZE_DIMENSIONS.map((definition) => {
+    const query = customizeSearches[definition.key].trim().toLowerCase();
+    const rows = dimensionCounts(definition)
+      .filter((item) => !query || item.value.toLowerCase().includes(query))
+      .map((item) => {
+        const visible = !hidden[definition.key].has(item.value);
+        return `<label class="pref-row"><span class="pref-row-text"><strong>${escapeHTML(item.value)}</strong><small>${item.count} 个模型入口</small></span><span class="toggle"><input type="checkbox" data-pref-toggle data-pref-key="${definition.key}" data-pref-value="${escapeHTML(item.value)}"${visible ? ' checked' : ''} aria-label="显示 ${escapeHTML(item.value)}"><i></i></span></label>`;
+      }).join('');
+    const hiddenCount = hidden[definition.key].size;
+    return `<section class="pref-section"><div class="pref-head"><h3>${definition.title}</h3>${hiddenCount ? `<span class="pref-count" data-pref-count="${definition.key}">已屏蔽 ${hiddenCount} 项</span><button type="button" class="pref-reset" data-pref-reset="${definition.key}">全部显示</button>` : ''}</div><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${definition.key}" value="${escapeHTML(customizeSearches[definition.key])}" placeholder="筛选${definition.title}"></label><div class="pref-list" data-pref-list="${definition.key}">${rows || '<p class="pref-empty">没有匹配的条目</p>'}</div></section>`;
+  });
+  customizeDisplayPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>默认状态</h3></div><label class="pref-row toggle-row"><span class="pref-row-text"><strong>默认只看当前可用模型</strong><small>开启后每次打开页面都会自动勾选首页的“只看当前可用”，当次访问仍可手动取消</small></span><span class="toggle"><input id="pref-default-healthy" type="checkbox"${defaultHealthy ? ' checked' : ''} aria-label="默认只看当前可用模型"><i></i></span></label></section>${groups.join('')}<section class="pref-foot"><p class="muted">新出现的站点、供应商或模型默认都会展示，需要时再在这里屏蔽。</p><button type="button" class="pref-reset-all${resetArmed ? ' armed' : ''}" data-pref-reset-all>${resetArmed ? '再次点击确认恢复' : '恢复默认'}</button></section>`;
+}
+
+function renderCustomizeTags() {
+  const manager = [...tags.keys()].map((name) => {
+    const tag = tags.get(name);
+    const armed = tagArmed?.name === name;
+    return `<span class="tag-chip ${tag.color}${armed ? ' armed' : ''}"><button type="button" class="tag-dot" data-tag-color="${escapeHTML(name)}" title="更换颜色" aria-label="更换标签 ${escapeHTML(name)} 的颜色"></button><span class="tag-name">${escapeHTML(name)}</span>${armed
+      ? `<button type="button" class="tag-confirm-x" data-tag-delete="${escapeHTML(name)}">确认删除？</button>`
+      : `<button type="button" class="tag-tool" data-tag-rename="${escapeHTML(name)}" title="重命名" aria-label="重命名标签 ${escapeHTML(name)}"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17zm11.5-14 3 3" /></svg></button><button type="button" class="tag-tool tag-x" data-tag-delete="${escapeHTML(name)}" title="删除标签" aria-label="删除标签 ${escapeHTML(name)}">✕</button>`}</span>`;
+  }).join('');
+  const formVisible = tagFormMode !== null;
+  const form = `<form class="tag-create${formVisible ? '' : ' hidden'}" data-tag-form><input data-tag-name-input maxlength="12" placeholder="${tagFormMode === 'create' ? '新标签名称' : '重命名标签'}" value="${escapeHTML(tagFormMode === 'create' ? '' : (tagFormMode || ''))}" aria-label="标签名称" autocomplete="off"><button class="primary-button" type="submit">${tagFormMode === 'create' ? '添加' : '保存'}</button><button class="ghost" type="button" data-tag-cancel>取消</button><p class="form-message" data-tag-message role="status" aria-live="polite" hidden></p></form>`;
+  const taggedSites = new Set();
+  for (const tag of tags.values()) for (const site of tag.sites) taggedSites.add(site);
+  const allSites = [...new Set([...cards.map((card) => card.siteName), ...taggedSites])].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  const query = customizeSearches.tagSites.trim().toLowerCase();
+  const rows = allSites.filter((name) => !query || name.toLowerCase().includes(query)).map((name) => {
+    const chips = [...tags.entries()].filter(([, tag]) => tag.sites.has(name)).map(([tagName]) => `<button type="button" class="tag-chip ${tags.get(tagName).color}" data-site-tag-remove="${escapeHTML(JSON.stringify([name, tagName]))}" title="移除标签" aria-label="从 ${escapeHTML(name)} 移除标签 ${escapeHTML(tagName)}"><i aria-hidden="true"></i>${escapeHTML(tagName)}</button>`).join('');
+    const open = openTagMenu === name;
+    const menuItems = [...tags.keys()].map((tagName) => `<button type="button" role="menuitemcheckbox" aria-checked="${tags.get(tagName).sites.has(name)}" data-tag-menu-item="${escapeHTML(JSON.stringify([name, tagName]))}"><i class="${tags.get(tagName).color}" aria-hidden="true"></i>${escapeHTML(tagName)}</button>`).join('');
+    return `<div class="pref-row site-tag-row"><span class="pref-row-text"><strong>${escapeHTML(name)}</strong></span><span class="site-tags">${chips}<span class="site-tag-menu-wrap"><button type="button" class="tag-add" data-tag-add="${escapeHTML(name)}" aria-haspopup="menu" aria-expanded="${open}">＋</button><div class="tag-menu" role="${menuItems ? 'menu' : ''}"${open ? '' : ' hidden'}>${menuItems || '<p class="tag-menu-empty">先在上方新建标签</p>'}</div></span></span></div>`;
+  }).join('');
+  customizeTagsPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>我的标签</h3><span class="pref-note">点色点可更换颜色</span></div><div class="tag-manager">${manager || '<span class="muted">还没有标签，点击下方按钮新建。</span>'}<button type="button" class="tag-new" data-tag-new>＋ 新建标签</button></div>${form}</section><section class="pref-section"><div class="pref-head"><h3>站点标签</h3><span class="pref-count">已标记 ${taggedSites.size} 个</span></div><label class="pref-search"><span>搜索站点</span><input type="search" data-pref-search="tagSites" value="${escapeHTML(customizeSearches.tagSites)}" placeholder="筛选站点"></label><div class="pref-list" data-pref-list="tagSites">${rows || '<p class="pref-empty">没有匹配的站点</p>'}</div></section>`;
+}
+
+function closeTagMenu() {
+  openTagMenu = null;
+  customizeTagsPanel.querySelectorAll('[data-tag-add][aria-expanded="true"]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  customizeTagsPanel.querySelectorAll('.tag-menu').forEach((menu) => { menu.hidden = true; });
+}
+
+function handleCustomizeClick(event) {
+  const target = event.target.closest('[data-pref-reset],[data-pref-reset-all],[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-color],[data-tag-rename],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item]');
+  if (!target) return;
+
+  if (target.matches('[data-pref-reset]')) {
+    hidden[target.dataset.prefReset].clear();
+    saveHidden();
+    currentPage = 1;
+    render();
+    renderCustomize();
     return;
   }
-  window.location.assign('/api/v1/auth/linuxdo');
-});
-document.querySelector('#feedback-close').addEventListener('click', () => feedbackDialog.close());
-feedbackDialog.addEventListener('click', (event) => {
-  if (event.target !== feedbackDialog) return;
-  const bounds = feedbackDialog.getBoundingClientRect();
-  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) feedbackDialog.close();
-});
-document.querySelector('#feedback-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const button = event.currentTarget.querySelector('button[type="submit"]');
-  if (button.disabled) return;
-  const content = document.querySelector('#feedback-content').value.trim();
-  feedbackMessage.dataset.state = 'error';
-  if (!content) { feedbackMessage.textContent = '请填写反馈内容。'; return; }
-  button.disabled = true;
-  button.textContent = '正在提交…';
-  feedbackMessage.textContent = '';
-  try {
-    const response = await fetch('/api/v1/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }), signal: AbortSignal.timeout(20000) });
-    if (response.ok) {
-      document.querySelector('#feedback-content').value = '';
-      feedbackMessage.dataset.state = 'success';
-      feedbackMessage.textContent = '反馈已提交。';
-    } else if (response.status === 401) {
-      feedbackDialog.close();
-      currentUser = null;
-      await loadUser();
+  if (target.matches('[data-pref-reset-all]')) {
+    if (resetArmed) {
+      window.clearTimeout(resetTimer);
+      resetArmed = false;
+      hidden.sites.clear();
+      hidden.providers.clear();
+      hidden.models.clear();
+      defaultHealthy = false;
+      saveHidden();
+      saveDefaultHealthy();
+      currentPage = 1;
+      render();
+      renderCustomize();
     } else {
-      feedbackMessage.textContent = '提交失败，请稍后再试。';
+      resetArmed = true;
+      resetTimer = window.setTimeout(() => { resetArmed = false; if (customizeDialog.open) renderCustomize(); }, 2200);
+      renderCustomize();
     }
-  } catch {
-    feedbackMessage.textContent = '连接失败，内容已保留，请重试。';
-  } finally {
-    button.disabled = false;
-    button.textContent = '提交反馈';
+    return;
   }
+  if (target.matches('[data-tag-new]')) {
+    tagFormMode = 'create';
+    renderCustomize();
+    focusTagInput();
+    return;
+  }
+  if (target.matches('[data-tag-cancel]')) {
+    tagFormMode = null;
+    renderCustomize();
+    return;
+  }
+  if (target.matches('[data-tag-delete]')) {
+    const name = target.dataset.tagDelete;
+    if (tagArmed?.name === name) {
+      clearTimeout(tagArmed.timer);
+      tagArmed = null;
+      tags.delete(name);
+      saveTags();
+      render();
+      renderCustomize();
+    } else {
+      if (tagArmed) clearTimeout(tagArmed.timer);
+      tagArmed = { name, timer: window.setTimeout(() => { tagArmed = null; if (customizeDialog.open) renderCustomize(); }, 2200) };
+      renderCustomize();
+    }
+    return;
+  }
+  if (target.matches('[data-tag-color]')) {
+    const tag = tags.get(target.dataset.tagColor);
+    if (!tag) return;
+    tag.color = TAG_COLORS[(TAG_COLORS.indexOf(tag.color) + 1) % TAG_COLORS.length];
+    saveTags();
+    render();
+    renderCustomize();
+    return;
+  }
+  if (target.matches('[data-tag-rename]')) {
+    tagFormMode = target.dataset.tagRename;
+    renderCustomize();
+    focusTagInput();
+    return;
+  }
+  if (target.matches('[data-tag-add]')) {
+    const site = target.dataset.tagAdd;
+    if (openTagMenu === site) { closeTagMenu(); return; }
+    openTagMenu = site;
+    customizeTagsPanel.querySelectorAll('[data-tag-add]').forEach((button) => button.setAttribute('aria-expanded', button.dataset.tagAdd === site ? 'true' : 'false'));
+    customizeTagsPanel.querySelectorAll('.tag-menu').forEach((menu) => { menu.hidden = menu.parentElement.querySelector('[data-tag-add]').dataset.tagAdd !== site; });
+    return;
+  }
+  if (target.matches('[data-tag-menu-item]')) {
+    const [site, tagName] = JSON.parse(target.dataset.tagMenuItem);
+    const tag = tags.get(tagName);
+    if (!tag) return;
+    if (tag.sites.has(site)) tag.sites.delete(site);
+    else tag.sites.add(site);
+    saveTags();
+    render();
+    closeTagMenu();
+    renderCustomize();
+    return;
+  }
+  if (target.matches('[data-site-tag-remove]')) {
+    const [site, tagName] = JSON.parse(target.dataset.siteTagRemove);
+    tags.get(tagName)?.sites.delete(site);
+    saveTags();
+    render();
+    renderCustomize();
+  }
+}
+
+function handleCustomizeChange(event) {
+  const input = event.target;
+  if (input.id === 'pref-default-healthy') {
+    defaultHealthy = input.checked;
+    saveDefaultHealthy();
+    healthyOnly.checked = defaultHealthy;
+    currentPage = 1;
+    render();
+    return;
+  }
+  if (!input.matches('[data-pref-toggle]')) return;
+  const key = input.dataset.prefKey;
+  const value = input.dataset.prefValue;
+  if (input.checked) hidden[key].delete(value);
+  else hidden[key].add(value);
+  saveHidden();
+  currentPage = 1;
+  render();
+  const count = customizeDisplayPanel.querySelector(`[data-pref-count="${key}"]`);
+  const resetButton = customizeDisplayPanel.querySelector(`[data-pref-reset="${key}"]`);
+  const n = hidden[key].size;
+  if (n) {
+    if (count) { count.textContent = `已屏蔽 ${n} 项`; count.hidden = false; }
+    if (resetButton) resetButton.hidden = false;
+  } else {
+    if (count) count.hidden = true;
+    if (resetButton) resetButton.hidden = true;
+  }
+}
+
+function handleCustomizeInput(event) {
+  const search = event.target.closest('[data-pref-search]');
+  if (!search) return;
+  const key = search.dataset.prefSearch;
+  customizeSearches[key] = search.value;
+  searchFocusKey = key;
+  const list = search.closest('.pref-section').querySelector('.pref-list');
+  if (!list) return;
+  const q = search.value.trim().toLowerCase();
+  let matches = 0;
+  list.querySelectorAll(':scope .pref-row').forEach((row) => {
+    const name = row.querySelector('strong')?.textContent || '';
+    const visible = !q || name.toLowerCase().includes(q);
+    row.hidden = !visible;
+    if (visible) matches += 1;
+  });
+  let empty = list.querySelector(':scope .pref-empty');
+  if (!matches) {
+    if (!empty) {
+      empty = document.createElement('p');
+      empty.className = 'pref-empty';
+      empty.textContent = '没有匹配的条目';
+      list.appendChild(empty);
+    }
+    empty.hidden = false;
+  } else if (empty) {
+    empty.hidden = true;
+  }
+}
+
+function handleCustomizeSubmit(event) {
+  const form = event.target.closest('[data-tag-form]');
+  if (!form) return;
+  event.preventDefault();
+  const message = form.querySelector('[data-tag-message]');
+  const input = form.querySelector('[data-tag-name-input]');
+  const name = input.value.trim();
+  message.hidden = true;
+  const fail = (text) => { message.textContent = text; message.hidden = false; input.focus(); };
+  if (!name) return fail('请输入标签名称。');
+  if (tagFormMode === 'create') {
+    if (tags.has(name)) return fail('已存在同名标签。');
+    tags.set(name, { color: TAG_COLORS[tags.size % TAG_COLORS.length], sites: new Set() });
+  } else if (typeof tagFormMode === 'string' && tags.has(tagFormMode)) {
+    if (name !== tagFormMode && tags.has(name)) return fail('已存在同名标签。');
+    const tag = tags.get(tagFormMode);
+    tags.delete(tagFormMode);
+    tags.set(name, tag);
+  }
+  tagFormMode = null;
+  saveTags();
+  render();
+  renderCustomize();
+}
+
+customizeAction.addEventListener('click', () => {
+  renderCustomize();
+  customizeDialog.showModal();
+});
+customizeClose.addEventListener('click', () => customizeDialog.close());
+customizeDialog.addEventListener('click', (event) => {
+  if (event.target === customizeDialog) {
+    const bounds = customizeDialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) customizeDialog.close();
+  }
+  handleCustomizeClick(event);
+});
+customizeDialog.addEventListener('change', handleCustomizeChange);
+customizeDialog.addEventListener('input', handleCustomizeInput);
+customizeDialog.addEventListener('submit', handleCustomizeSubmit);
+customizeDialog.addEventListener('focusin', (event) => {
+  const search = event.target.closest('[data-pref-search]');
+  if (search) searchFocusKey = search.dataset.prefSearch;
+});
+customizeTabDisplay.addEventListener('click', () => setCustomizeTab('display'));
+customizeTabTags.addEventListener('click', () => setCustomizeTab('tags'));
+customizeTabDisplay.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); setCustomizeTab('tags'); customizeTabTags.focus(); }
+});
+customizeTabTags.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); setCustomizeTab('display'); customizeTabDisplay.focus(); }
+});
+document.addEventListener('click', (event) => {
+  const hint = event.target.closest('[data-open-customize]');
+  if (hint) {
+    renderCustomize();
+    customizeDialog.showModal();
+    return;
+  }
+  if (openTagMenu && !event.target.closest('.site-tag-menu-wrap')) closeTagMenu();
 });
 
 initializeTheme();
+loadPreferences();
 loadRows();
-loadUser();
 setInterval(loadRows, 60000);
