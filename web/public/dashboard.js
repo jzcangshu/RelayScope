@@ -579,8 +579,9 @@ async function loadRows() {
     rows = dashboard.rows || [];
     historyBuckets = dashboard.buckets || [];
     historyEnd = meta.serverTime ? Date.parse(meta.serverTime) : Date.now();
-    // Let the page paint before building the large card tree on mobile.
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    // 让浏览器先绘制首帧再构建大卡片树；不能用 rAF：窗口被遮挡时 rAF 永不触发，
+    // 而后续轮询会因 revision 未变提前返回，看板将一直空白。
+    await new Promise((resolve) => setTimeout(resolve, 0));
     buildCards();
     render();
   } catch {}

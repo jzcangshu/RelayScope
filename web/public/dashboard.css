@@ -2119,3 +2119,6 @@
 @media (prefers-reduced-motion: reduce) {
   .wish-progress i, .toast { transition: opacity 200ms ease; }
 }
+
+/* hash 路由切换：display 规则会覆盖 [hidden] 默认值，这里显式压制 */
+.toolbar[hidden], .summary[hidden], .filter-layout[hidden], #wish-page[hidden] { display: none; }
