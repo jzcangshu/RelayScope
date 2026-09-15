@@ -64,7 +64,7 @@ func TestFeedbackRequiresLinuxDOLoginAndPersistsSubmission(t *testing.T) {
 	if denied.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated status = %d", denied.Code)
 	}
-	user, err := db.UpsertUser(context.Background(), "linuxdo", "42", "tester", "Tester", "")
+	user, err := db.UpsertUser(context.Background(), "linuxdo", "42", "tester", "Tester", "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}

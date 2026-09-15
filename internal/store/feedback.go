@@ -14,6 +14,7 @@ type User struct {
 	Username   string    `json:"username"`
 	Name       string    `json:"name"`
 	AvatarURL  string    `json:"avatarUrl"`
+	TrustLevel int       `json:"trustLevel"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
@@ -24,15 +25,15 @@ type Feedback struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func (s *Store) UpsertUser(ctx context.Context, provider, externalID, username, name, avatarURL string) (User, error) {
+func (s *Store) UpsertUser(ctx context.Context, provider, externalID, username, name, avatarURL string, trustLevel int) (User, error) {
 	provider = strings.TrimSpace(provider)
 	externalID = strings.TrimSpace(externalID)
 	username = strings.TrimSpace(username)
-	if provider == "" || externalID == "" || username == "" || len(provider) > 100 || len(externalID) > 200 || len(username) > 200 || len(name) > 200 || len(avatarURL) > 1000 {
+	if provider == "" || externalID == "" || username == "" || len(provider) > 100 || len(externalID) > 200 || len(username) > 200 || len(name) > 200 || len(avatarURL) > 1000 || trustLevel < 0 || trustLevel > 10 {
 		return User{}, errors.New("invalid user")
 	}
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO users(provider, external_id, username, name, avatar_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, external_id) DO UPDATE SET username=excluded.username, name=excluded.name, avatar_url=excluded.avatar_url, updated_at=excluded.updated_at`, provider, externalID, username, strings.TrimSpace(name), strings.TrimSpace(avatarURL), unixMilli(now), unixMilli(now))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO users(provider, external_id, username, name, avatar_url, trust_level, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, external_id) DO UPDATE SET username=excluded.username, name=excluded.name, avatar_url=excluded.avatar_url, trust_level=excluded.trust_level, updated_at=excluded.updated_at`, provider, externalID, username, strings.TrimSpace(name), strings.TrimSpace(avatarURL), trustLevel, unixMilli(now), unixMilli(now))
 	if err != nil {
 		return User{}, err
 	}
@@ -42,7 +43,7 @@ func (s *Store) UpsertUser(ctx context.Context, provider, externalID, username, 
 func (s *Store) GetUserByExternalID(ctx context.Context, provider, externalID string) (User, error) {
 	var u User
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, provider, external_id, username, name, avatar_url, created_at FROM users WHERE provider = ? AND external_id = ?`, strings.TrimSpace(provider), strings.TrimSpace(externalID)).Scan(&u.ID, &u.Provider, &u.ExternalID, &u.Username, &u.Name, &u.AvatarURL, &created)
+	err := s.db.QueryRowContext(ctx, `SELECT id, provider, external_id, username, name, avatar_url, trust_level, created_at FROM users WHERE provider = ? AND external_id = ?`, strings.TrimSpace(provider), strings.TrimSpace(externalID)).Scan(&u.ID, &u.Provider, &u.ExternalID, &u.Username, &u.Name, &u.AvatarURL, &u.TrustLevel, &created)
 	if err != nil {
 		return User{}, err
 	}
@@ -53,7 +54,7 @@ func (s *Store) GetUserByExternalID(ctx context.Context, provider, externalID st
 func (s *Store) GetUser(ctx context.Context, id int64) (User, error) {
 	var u User
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, provider, external_id, username, name, avatar_url, created_at FROM users WHERE id = ?`, id).Scan(&u.ID, &u.Provider, &u.ExternalID, &u.Username, &u.Name, &u.AvatarURL, &created)
+	err := s.db.QueryRowContext(ctx, `SELECT id, provider, external_id, username, name, avatar_url, trust_level, created_at FROM users WHERE id = ?`, id).Scan(&u.ID, &u.Provider, &u.ExternalID, &u.Username, &u.Name, &u.AvatarURL, &u.TrustLevel, &created)
 	if err != nil {
 		return User{}, err
 	}
@@ -74,7 +75,7 @@ func (s *Store) ListFeedback(ctx context.Context, limit int) ([]Feedback, error)
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT f.id, f.content, f.created_at, u.id, u.provider, u.external_id, u.username, u.name, u.avatar_url, u.created_at FROM feedback f JOIN users u ON u.id=f.user_id ORDER BY f.created_at DESC, f.id DESC LIMIT ?`, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT f.id, f.content, f.created_at, u.id, u.provider, u.external_id, u.username, u.name, u.avatar_url, u.trust_level, u.created_at FROM feedback f JOIN users u ON u.id=f.user_id ORDER BY f.created_at DESC, f.id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,7 @@ func (s *Store) ListFeedback(ctx context.Context, limit int) ([]Feedback, error)
 	for rows.Next() {
 		var f Feedback
 		var created, userCreated int64
-		if err := rows.Scan(&f.ID, &f.Content, &created, &f.User.ID, &f.User.Provider, &f.User.ExternalID, &f.User.Username, &f.User.Name, &f.User.AvatarURL, &userCreated); err != nil {
+		if err := rows.Scan(&f.ID, &f.Content, &created, &f.User.ID, &f.User.Provider, &f.User.ExternalID, &f.User.Username, &f.User.Name, &f.User.AvatarURL, &f.User.TrustLevel, &userCreated); err != nil {
 			return nil, err
 		}
 		f.CreatedAt = time.UnixMilli(created).UTC()

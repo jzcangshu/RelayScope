@@ -202,6 +202,18 @@ func runMaintenance(ctx context.Context, dbStore *store.Store, logger *slog.Logg
 				logger.Warn("maintenance cleanup failed", "error", err)
 				continue
 			}
+			// 过期用户会话与滞留过久的待支付订单一并清理
+			if sessions, err := dbStore.CleanupUserSessions(ctx, time.Now().UTC()); err != nil {
+				logger.Warn("user session cleanup failed", "error", err)
+			} else if sessions > 0 {
+				removed += sessions
+			}
+			if cancelled, err := dbStore.CancelExpiredOrders(ctx, time.Now().UTC().Add(-24*time.Hour)); err != nil {
+				logger.Warn("expired order cleanup failed", "error", err)
+			} else if cancelled > 0 {
+				removed += cancelled
+				logger.Info("cancelled stale pending orders", "rows", cancelled)
+			}
 			if removed > 0 {
 				logger.Info("maintenance cleanup complete", "rows", removed)
 			}
