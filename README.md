@@ -62,6 +62,9 @@ docker run -d -p 8080:8080 -v relayscope-data:/app/data ghcr.io/jzcangshu/relays
 | `RELAYSCOPE_PUBLIC_URL` | _空_ | 规范公网地址（OAuth 回调用） |
 | `RELAYSCOPE_OAUTH_CLIENT_ID` | _空_ | OAuth 登录 Client ID（与 SECRET 成对配置） |
 | `RELAYSCOPE_OAUTH_CLIENT_SECRET` | _空_ | OAuth 登录 Client Secret（只保存在服务器上） |
+| `RELAYSCOPE_PAY_GATEWAY` | `https://credit.linux.do/epay` | LDC 支付网关（LINUX DO Credit 易支付兼容协议） |
+| `RELAYSCOPE_PAY_PID` | _空_ | LDC 支付商户 Client ID（与 PAY_KEY 成对配置后开启直充与助力支付） |
+| `RELAYSCOPE_PAY_KEY` | _空_ | LDC 支付商户 Client Secret（只保存在服务器上） |
 | `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | _空_ | 加密导入站点会话的密钥 |
 | `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | _空_ | 可选的 FlareSolverr 端点（限环回） |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作最大并发数 |

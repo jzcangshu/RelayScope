@@ -1,20 +1,38 @@
 """本地前端验证用的模拟服务：静态托管 web/public，并模拟看板 API。
 
 用法: python mock_server.py [端口]
+环境变量 MOCK_LOGGED_IN=1 模拟已登录会员，便于联调登录态 UI。
 """
 import json
 import mimetypes
+import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PUBLIC = Path(__file__).resolve().parent.parent / "web" / "public"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
+LOGGED_IN = bool(os.environ.get("MOCK_LOGGED_IN"))
 
 NOW = datetime.now(timezone.utc).isoformat()
 HOURS_AGO = lambda h: datetime.now(timezone.utc).timestamp() * 1000 - h * 3600 * 1000
+
+MOCK_USER = {"id": 1, "provider": "linuxdo", "externalId": "42", "username": "tester", "name": "Tester", "avatarUrl": "", "trustLevel": 2, "createdAt": NOW}
+MOCK_MEMBERSHIP = {"expiresAt": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(), "active": True}
+MOCK_PREFERENCES = {"hidden": {"sites": [], "providers": [], "models": []}, "defaultHealthy": False, "tags": {"主力": {"color": "mint", "sites": []}}, "updatedAt": NOW}
+MOCK_WISHES = [
+    {"id": 1, "domain": "example.com", "name": "示例中转", "url": "https://example.com", "inviteRequired": False, "targetLdc": 30, "status": "open", "pledgedLdc": 12, "pledgers": 3, "myPledgedLdc": 5, "myPending": False},
+    {"id": 2, "domain": "secret.example.org", "name": "神秘站点", "url": "https://secret.example.org", "inviteRequired": True, "targetLdc": None, "status": "open", "pledgedLdc": 45, "pledgers": 6, "myPledgedLdc": 0, "myPending": False},
+    {"id": 3, "domain": "done.example.net", "name": "已达成站点", "url": "https://done.example.net", "inviteRequired": False, "targetLdc": 30, "status": "reached", "pledgedLdc": 32, "pledgers": 5, "myPledgedLdc": 0, "myPending": False},
+]
+MOCK_ORDERS = [
+    {"id": 1, "orderNo": "LDmock0001", "userId": 1, "kind": "membership", "wishSiteId": None, "days": 30, "amountLdc": 30, "status": "paid", "platformTradeNo": "T1", "username": "tester", "createdAt": NOW, "paidAt": NOW},
+]
+MOCK_REDEEM_CODES = [
+    {"id": 1, "code": "RS-AAAA-BBBB-CCCC", "days": 30, "note": "mock", "status": "unused", "redeemedBy": 0, "redeemedByName": "", "redeemedAt": None, "createdAt": NOW},
+]
 
 PRICE = {
     "available": True, "mode": "token",
@@ -70,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/api/v1/meta":
-            return self._json({"revision": "mock-1", "serverTime": NOW})
+            return self._json({"revision": "mock-1", "serverTime": NOW, "membershipLdcPerDay": "1", "wishDefaultTargetLdc": "30", "authProviders": ["linuxdo"]})
         if path == "/api/v1/public/dashboard":
             return self._json({"revision": "mock-1", "rows": ROWS, "buckets": BUCKETS, "hours": 24})
         if path == "/api/v1/public/announcements":
@@ -78,7 +96,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/public/details":
             return self._json({"buckets": BUCKETS, "groups": [g for g in ROWS if g["siteName"] == "星云中转" or g["groupName"] == "官方"]})
         if path == "/api/v1/auth/me":
-            return self._json({"authenticated": False}, status=404)
+            if LOGGED_IN:
+                return self._json({"authenticated": True, "user": MOCK_USER, "membership": MOCK_MEMBERSHIP})
+            return self._json({"authenticated": False})
+        if path == "/api/v1/me/preferences":
+            return self._json(MOCK_PREFERENCES)
+        if path == "/api/v1/wishes":
+            return self._json({"wishes": MOCK_WISHES})
+        if path.startswith("/api/v1/payment/orders/"):
+            if LOGGED_IN:
+                return self._json({"order": {"orderNo": path.rsplit("/", 1)[-1], "kind": "wish", "status": "paid", "amountLdc": 10}, "membership": MOCK_MEMBERSHIP})
+            return self._json({"error": "请先登录"}, status=401)
+        if path == "/api/v1/admin/redeem-codes":
+            return self._json({"codes": MOCK_REDEEM_CODES})
+        if path == "/api/v1/admin/wishes":
+            return self._json({"wishes": MOCK_WISHES})
+        if path == "/api/v1/admin/orders":
+            return self._json({"orders": MOCK_ORDERS})
+        if path == "/api/v1/admin/settings":
+            return self._json({"membershipLdcPerDay": 1, "wishDefaultTargetLdc": 30})
         requested = path.lstrip("/")
         if requested.startswith("assets/"):
             requested = requested[len("assets/"):]
@@ -96,7 +132,28 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        self._json({}, status=404)
+        path = self.path.split("?")[0]
+        if path == "/api/v1/redeem":
+            return self._json({"status": "ok", "membership": MOCK_MEMBERSHIP})
+        if path in ("/api/v1/membership/recharge",) or path.endswith("/pledge"):
+            return self._json({"orderNo": "LDmock" + str(int(time.time())), "payUrl": "https://credit.linux.do/paying?order_no=mock", "amountLdc": 30})
+        if path == "/api/v1/wishes":
+            return self._json({"wish": MOCK_WISHES[0]})
+        if path == "/api/v1/feedback":
+            return self._json({"status": "ok"})
+        if path.startswith("/api/v1/admin/"):
+            return self._json({"status": "ok", "revoked": 1, "codes": ["RS-MOCK-0000-0000"]})
+        return self._json({}, status=404)
+
+    def do_PATCH(self):
+        if self.path.split("?")[0].startswith("/api/v1/admin/"):
+            return self._json({"status": "ok"})
+        return self._json({}, status=404)
+
+    def do_DELETE(self):
+        if self.path.split("?")[0].startswith("/api/v1/admin/"):
+            return self._json({"status": "ok"})
+        return self._json({}, status=404)
 
     def do_OPTIONS(self):
         self.send_response(204)

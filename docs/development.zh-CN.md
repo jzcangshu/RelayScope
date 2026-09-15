@@ -36,6 +36,9 @@
 | `RELAYSCOPE_PUBLIC_URL` | 空 | 可选的公网 HTTP/HTTPS 源（origin），在生产域名就绪后配置 |
 | `RELAYSCOPE_OAUTH_CLIENT_ID` | 空 | OAuth 提供方客户端 ID；与客户端密钥一起配置后启用公开登录（当前为 LinuxDo） |
 | `RELAYSCOPE_OAUTH_CLIENT_SECRET` | 空 | OAuth 提供方客户端密钥；只保存在受保护的部署配置中 |
+| `RELAYSCOPE_PAY_GATEWAY` | `https://credit.linux.do/epay` | LDC 支付网关地址（易支付兼容协议） |
+| `RELAYSCOPE_PAY_PID` | 空 | LDC 支付商户 ID；与密钥成对配置后启用会员直充与许愿助力 |
+| `RELAYSCOPE_PAY_KEY` | 空 | LDC 支付商户密钥；只保存在受保护的部署配置中 |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作的最大并发数（1-32） |
 | `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集的超时时间 |
 | `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |

@@ -8,6 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Membership system backed by LinuxDO OAuth login. Users sign in through
+  LINUX DO Connect; sessions persist in SQLite (SHA-256-hashed tokens) so
+  logins survive restarts. Membership validity is extended either by
+  redeeming admin-generated codes (`RS-XXXX-XXXX-XXXX`, Crockford base32,
+  60-bit entropy) or by paying LDC through the LINUX DO Credit EasyPay
+  compatible gateway. Extension semantics stack from the later of "now" and
+  the current expiry. Admins batch-generate codes (1-500 per batch), review
+  redemptions, revoke unused codes, and set the per-day LDC recharge price.
+- Cloud-synced customization. The customize dialog (hidden sites/providers/
+  models, default healthy toggle, tags) now syncs to a per-user
+  `user_preferences` row with debounced writes; first login merges with
+  cloud-first precedence and uploads local settings when the cloud row is
+  empty. Editing requires an active membership; saved settings keep applying
+  after expiry.
+- Site wish pool. Logged-in users submit wishes (site name, URL, invite-code
+  checkbox) that deduplicate by normalized domain; non-invite sites default
+  to a 30 LDC target (admin-adjustable) while invite-required sites stay
+  "target undecided" until the admin prices them. Visitors pledge LDC via
+  payment orders; only verified payments count toward progress, targets
+  auto-flip to "reached", refunds (full, via platform API) drop progress and
+  can reopen a wish.
+- Pluggable payment layer (`internal/payment`) with an EasyPay-compatible
+  implementation of the LINUX DO Credit protocol (MD5 signing, GET notify
+  callback verified by signature plus amount, order-query fallback, full
+  refunds). Payment endpoints answer 501 until credentials are configured.
+
+### Changed
+- Public dashboard header restores the account entry (login button /
+  user menu with redeem, recharge, feedback and logout) and adds a hash-routed
+  wish pool page. The feedback dialog returns (its four regression tests pass
+  again); the customize dialog is membership-gated with login/redeem guidance.
+- Maintenance loop also prunes expired user sessions and pending LDC orders
+  older than 24 hours.
+
+### Added
 - Per-site model keyword blocking. A site's adapter config may now carry
   `"blockedKeywords": ["…"]`; during collection the collector drops models
   whose raw name contains any keyword (case-insensitive) before observations
