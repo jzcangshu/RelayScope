@@ -74,6 +74,121 @@ test('lowestPrice returns no price when every priced group is unusable', () => {
   assert.equal(lowestPrice(groups), null);
 });
 
+function loadTagHelpers() {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const start = source.indexOf('function tagPickColor(sourceMap, palette)');
+  const end = source.indexOf('// ---- 标签数据操作结束 ----');
+  assert.notEqual(start, -1, 'tagPickColor helper is missing');
+  assert.notEqual(end, -1, 'tag helper end marker is missing');
+  const TAG_COLORS = ['mint', 'blue', 'violet', 'amber', 'rose', 'slate'];
+  return Function('TAG_COLORS', `${source.slice(start, end)}; return { tagPickColor, tagCreate, tagRename, tagSetColor, tagSetSite, tagSnapshot };`)(TAG_COLORS);
+}
+
+const { tagCreate, tagRename, tagSetColor, tagSetSite, tagPickColor, tagSnapshot } = loadTagHelpers();
+
+test('tagCreate adds a tag with the least-used palette color and rejects duplicates', () => {
+  const tags = new Map();
+  assert.deepEqual(tagCreate(tags, '新品监控'), { ok: true });
+  assert.equal(tags.has('新品监控'), true);
+  assert.equal(tags.get('新品监控').color, 'mint');
+  assert.deepEqual([...tags.get('新品监控').sites], []);
+  assert.equal(tagCreate(tags, '新品监控').error, '已存在同名标签。');
+  assert.equal(tagCreate(tags, '').error, '请输入标签名称。');
+  assert.equal(tags.size, 1);
+});
+
+test('tagPickColor prefers the least-used palette color', () => {
+  const tags = new Map();
+  tagCreate(tags, 'a');
+  tagCreate(tags, 'b');
+  assert.equal(tags.get('a').color, 'mint');
+  assert.equal(tags.get('b').color, 'blue');
+  tagSetColor(tags, 'b', 'mint');
+  assert.equal(tagPickColor(tags, ['mint', 'blue', 'violet', 'amber', 'rose', 'slate']), 'blue');
+});
+
+test('tagRename migrates the storage key and preserves color and sites', () => {
+  const tags = new Map([['旧名', { color: 'rose', sites: new Set(['星云中转']) }]]);
+  assert.deepEqual(tagRename(tags, '旧名', '主力'), { ok: true });
+  assert.equal(tags.has('旧名'), false);
+  assert.ok(tags.get('主力'));
+  assert.equal(tags.get('主力').color, 'rose');
+  assert.deepEqual([...tags.get('主力').sites], ['星云中转']);
+  assert.equal(tagRename(tags, '主力', '主力').ok, true);
+  assert.equal(tagRename(tags, '主力', '').error, '请输入标签名称。');
+  assert.equal(tagRename(tags, '不存在', '新名').error, '标签不存在。');
+  tagCreate(tags, '新名');
+  assert.equal(tagRename(tags, '主力', '新名').error, '已存在同名标签。');
+});
+
+test('tagSetColor only accepts palette colors and updates in place', () => {
+  const tags = new Map([['x', { color: 'mint', sites: new Set() }]]);
+  assert.equal(tagSetColor(tags, 'x', 'amber'), true);
+  assert.equal(tags.get('x').color, 'amber');
+  assert.equal(tagSetColor(tags, 'x', 'neon'), false);
+  assert.equal(tags.get('x').color, 'amber');
+  assert.equal(tagSetColor(tags, 'ghost', 'blue'), false);
+});
+
+test('tagSetSite attaches and detaches a site without touching other state', () => {
+  const tags = new Map([['x', { color: 'mint', sites: new Set(['A']) }]]);
+  assert.equal(tagSetSite(tags, 'B', 'x', true), true);
+  assert.deepEqual([...tags.get('x').sites].sort(), ['A', 'B']);
+  assert.equal(tagSetSite(tags, 'A', 'x', false), true);
+  assert.deepEqual([...tags.get('x').sites], ['B']);
+  assert.equal(tagSetSite(tags, 'C', 'ghost', true), false);
+});
+
+test('tagSnapshot is a deep copy that later mutations cannot corrupt', () => {
+  const tags = new Map([['x', { color: 'mint', sites: new Set(['A']) }]]);
+  const snap = tagSnapshot(tags);
+  tags.get('x').color = 'rose';
+  tags.get('x').sites.add('B');
+  tags.set('y', { color: 'blue', sites: new Set() });
+  assert.equal(snap.get('x').color, 'mint');
+  assert.deepEqual([...snap.get('x').sites], ['A']);
+  assert.equal(snap.has('y'), false);
+  const restored = tagSnapshot(snap);
+  assert.deepEqual([...restored.get('x').sites], ['A']);
+  assert.equal(snap.get('x') === restored.get('x'), false);
+});
+
+test('tag manager panel keeps its containers and exposes the new affordances', () => {
+  const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  assert.match(html, /id="customize-tags"/);
+  assert.match(html, /id="customize-tab-tags"/);
+  assert.match(source, /data-tag-swatch/);
+  assert.match(source, /data-tag-color-option/);
+  assert.match(source, /data-tag-menu-item/);
+  assert.match(source, /data-tag-undo/);
+  assert.match(source, /role="menuitemradio"/);
+  assert.match(source, /data-tag-form/);
+  assert.match(source, /data-tag-status/);
+  assert.doesNotMatch(source, /tagFormMode|tagArmed|openTagMenu/);
+  assert.doesNotMatch(css, /\.tag-dot|\.tag-confirm-x|\.tag-tool|\.tag-manager|\.tag-create|\.tag-menu i/);
+});
+
+test('tag controls keep generous touch targets and self-sufficient button styles', () => {
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  assert.match(css, /\.public-dashboard \.tag-swatch \{[\s\S]{0,500}?width: 28px/);
+  assert.match(css, /\.public-dashboard \.tag-swatch \{[\s\S]{0,500}?min-height: 28px/);
+  assert.match(css, /\.public-dashboard \.tag-swatch \{[\s\S]{0,500}?appearance: none/);
+  assert.match(css, /\.public-dashboard \.tag-color-option \{[\s\S]{0,500}?min-height: 36px/);
+  assert.match(css, /\.public-dashboard \.tag-menu-item \{[\s\S]{0,500}?min-height: 38px/);
+});
+
+test('tag rows count their own sites, and site rows count their own tags', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  assert.match(source, /const tagSiteCount = \(name\) => tags\.get\(name\)\?\.sites\.size \|\| 0;/);
+  const item = source.slice(source.indexOf('function tagItemHTML'), source.indexOf('function tagItemHTML') + 700);
+  assert.match(item, /tagSiteCount\(name\)/);
+  assert.doesNotMatch(item, /siteTagCount\(name\)/);
+  const siteRow = source.slice(source.indexOf('function siteTagRowHTML'), source.indexOf('function siteTagRowHTML') + 700);
+  assert.match(siteRow, /siteTagCount\(name\)/);
+});
+
 function feedbackHarness(fetch) {
   const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
   const start = source.indexOf("document.querySelector('#feedback-form').addEventListener('submit'");

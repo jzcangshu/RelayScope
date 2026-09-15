@@ -33,6 +33,7 @@ Thumbs.db
 *.swp
 
 # Local agent/tool residue
+.zcode/
 .codex-read-write-test.txt
 relayscope.exe~
 

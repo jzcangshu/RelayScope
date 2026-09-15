@@ -37,6 +37,7 @@ let announcementSignature = '';
 
 // 定制个性化（全部保存在浏览器本地）
 const TAG_COLORS = ['mint', 'blue', 'violet', 'amber', 'rose', 'slate'];
+const TAG_COLOR_LABELS = { mint: '薄荷绿', blue: '天蓝', violet: '紫罗兰', amber: '琥珀', rose: '玫红', slate: '石板灰' };
 const CUSTOMIZE_DIMENSIONS = [
   { key: 'sites', title: '站点', valueOf: (card) => card.siteName },
   { key: 'providers', title: '模型供应商', valueOf: (card) => card.provider || '未归类' },
@@ -48,11 +49,13 @@ let hidden = { sites: new Set(), providers: new Set(), models: new Set() };
 let defaultHealthy = false;
 let tags = new Map();
 let customizeTab = 'display';
-let tagFormMode = null;
-let tagArmed = null;
+let tagEditor = null;
 let resetArmed = false;
 let resetTimer = null;
-let openTagMenu = null;
+let openSiteMenu = null;
+let openColorMenu = null;
+let tagStatus = { text: '', undo: null };
+let tagFocusAfterRender = null;
 let customizeSearches = { sites: '', providers: '', models: '', tagSites: '' };
 let searchFocusKey = null;
 
@@ -110,6 +113,45 @@ function cardTagsOf(siteName) {
   if (!tags.size) return [];
   return [...tags.entries()].filter(([, tag]) => tag.sites.has(siteName)).map(([name]) => name);
 }
+
+// ---- 标签数据操作（纯函数，供面板与测试共用，此块到 formatMetric 为止） ----
+function tagPickColor(sourceMap, palette) {
+  const counts = new Map(palette.map((color) => [color, 0]));
+  for (const tag of sourceMap.values()) counts.set(tag.color, (counts.get(tag.color) || 0) + 1);
+  return [...counts.entries()].sort((left, right) => left[1] - right[1])[0][0];
+}
+const tagSnapshot = (sourceMap) => new Map([...sourceMap].map(([name, tag]) => [name, { color: tag.color, sites: new Set(tag.sites) }]));
+function tagCreate(sourceMap, name) {
+  if (!name) return { error: '请输入标签名称。' };
+  if (sourceMap.has(name)) return { error: '已存在同名标签。' };
+  sourceMap.set(name, { color: tagPickColor(sourceMap, TAG_COLORS), sites: new Set() });
+  return { ok: true };
+}
+function tagRename(sourceMap, oldName, name) {
+  if (!name) return { error: '请输入标签名称。' };
+  if (!sourceMap.has(oldName)) return { error: '标签不存在。' };
+  if (name !== oldName && sourceMap.has(name)) return { error: '已存在同名标签。' };
+  if (name !== oldName) {
+    const tag = sourceMap.get(oldName);
+    sourceMap.delete(oldName);
+    sourceMap.set(name, tag);
+  }
+  return { ok: true };
+}
+function tagSetColor(sourceMap, name, color) {
+  const tag = sourceMap.get(name);
+  if (!tag || !TAG_COLORS.includes(color)) return false;
+  tag.color = color;
+  return true;
+}
+function tagSetSite(sourceMap, site, name, attach) {
+  const tag = sourceMap.get(name);
+  if (!tag) return false;
+  if (attach) tag.sites.add(site);
+  else tag.sites.delete(site);
+  return true;
+}
+// ---- 标签数据操作结束 ----
 
 const formatMetric = (value, suffix = '') => value == null ? '—' : `${Number(value).toFixed(Math.abs(value) < 10 ? 2 : 0)}${suffix}`;
 const formatRatio = (value) => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -609,7 +651,7 @@ function focusTagInput() {
 function renderCustomize() {
   if (customizeTab === 'display') renderCustomizeDisplay();
   else renderCustomizeTags();
-  if (searchFocusKey) {
+  if (searchFocusKey && !tagFocusAfterRender) {
     const panel = customizeTab === 'display' ? customizeDisplayPanel : customizeTagsPanel;
     const input = panel.querySelector(`[data-pref-search="${searchFocusKey}"]`);
     if (input) {
@@ -627,6 +669,9 @@ function setCustomizeTab(tab) {
   customizeTagsPanel.hidden = tab !== 'tags';
   customizeTagsPanel.scrollTop = 0;
   customizeDisplayPanel.scrollTop = 0;
+  tagEditor = null;
+  openSiteMenu = null;
+  openColorMenu = null;
   renderCustomize();
 }
 
@@ -654,37 +699,182 @@ function renderCustomizeDisplay() {
   customizeDisplayPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>默认状态</h3></div><label class="pref-row toggle-row"><span class="pref-row-text"><strong>默认只看当前可用模型</strong><small>开启后每次打开页面都会自动勾选首页的“只看当前可用”，当次访问仍可手动取消</small></span><span class="toggle"><input id="pref-default-healthy" type="checkbox"${defaultHealthy ? ' checked' : ''} aria-label="默认只看当前可用模型"><i></i></span></label></section>${groups.join('')}<section class="pref-foot"><p class="muted">新出现的站点、供应商或模型默认都会展示，需要时再在这里屏蔽。</p><button type="button" class="pref-reset-all${resetArmed ? ' armed' : ''}" data-pref-reset-all>${resetArmed ? '再次点击确认恢复' : '恢复默认'}</button></section>`;
 }
 
-function renderCustomizeTags() {
-  const manager = [...tags.keys()].map((name) => {
-    const tag = tags.get(name);
-    const armed = tagArmed?.name === name;
-    return `<span class="tag-chip ${tag.color}${armed ? ' armed' : ''}"><button type="button" class="tag-dot" data-tag-color="${escapeHTML(name)}" title="更换颜色" aria-label="更换标签 ${escapeHTML(name)} 的颜色"></button><span class="tag-name">${escapeHTML(name)}</span>${armed
-      ? `<button type="button" class="tag-confirm-x" data-tag-delete="${escapeHTML(name)}">确认删除？</button>`
-      : `<button type="button" class="tag-tool" data-tag-rename="${escapeHTML(name)}" title="重命名" aria-label="重命名标签 ${escapeHTML(name)}"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17zm11.5-14 3 3" /></svg></button><button type="button" class="tag-tool tag-x" data-tag-delete="${escapeHTML(name)}" title="删除标签" aria-label="删除标签 ${escapeHTML(name)}">✕</button>`}</span>`;
+function siteTagCount(site) {
+  // 站点行角标：该站点挂了多少个标签
+  let count = 0;
+  for (const tag of tags.values()) if (tag.sites.has(site)) count += 1;
+  return count;
+}
+// 标签行角标：该标签挂了多少个站点
+const tagSiteCount = (name) => tags.get(name)?.sites.size || 0;
+
+const taggedSiteCount = () => [...new Set([...tags.values()].flatMap((tag) => [...tag.sites]))].length;
+
+function siteTagChipsHTML(site) {
+  return [...tags.entries()].filter(([, tag]) => tag.sites.has(site)).map(([tagName]) => {
+    const tag = tags.get(tagName);
+    return `<button type="button" class="tag-chip ${tag.color}" data-site-tag-remove="${escapeHTML(JSON.stringify([site, tagName]))}" title="从「${escapeHTML(site)}」移除标签「${escapeHTML(tagName)}」" aria-label="从「${escapeHTML(site)}」移除标签「${escapeHTML(tagName)}」"><i aria-hidden="true"></i><span class="chip-label">${escapeHTML(tagName)}</span><span class="chip-x" aria-hidden="true">✕</span></button>`;
   }).join('');
-  const formVisible = tagFormMode !== null;
-  const form = `<form class="tag-create${formVisible ? '' : ' hidden'}" data-tag-form><input data-tag-name-input maxlength="12" placeholder="${tagFormMode === 'create' ? '新标签名称' : '重命名标签'}" value="${escapeHTML(tagFormMode === 'create' ? '' : (tagFormMode || ''))}" aria-label="标签名称" autocomplete="off"><button class="primary-button" type="submit">${tagFormMode === 'create' ? '添加' : '保存'}</button><button class="ghost" type="button" data-tag-cancel>取消</button><p class="form-message" data-tag-message role="status" aria-live="polite" hidden></p></form>`;
+}
+
+function siteTagMenuHTML(site) {
+  const items = [...tags.keys()].map((tagName) => {
+    const checked = tags.get(tagName).sites.has(site);
+    return `<button type="button" role="menuitemcheckbox" class="tag-menu-item" data-tag-menu-item="${escapeHTML(JSON.stringify([site, tagName]))}" aria-checked="${checked}" tabindex="${checked ? 0 : -1}"><i class="${tags.get(tagName).color}" aria-hidden="true"></i><span class="chip-label">${escapeHTML(tagName)}</span></button>`;
+  }).join('');
+  return `<div class="site-tag-menu" role="menu" aria-label="为「${escapeHTML(site)}」选择标签"${openSiteMenu === site ? '' : ' hidden'}>${items || '<p class="tag-menu-empty">还没有标签，先在上方新建。</p>'}</div>`;
+}
+
+function siteTagRowHTML(name) {
+  const isOpen = openSiteMenu === name;
+  return `<div class="pref-row site-tag-row" data-site-row="${escapeHTML(name)}"><span class="site-tag-head"><strong>${escapeHTML(name)}</strong><span class="site-tag-count" data-site-tag-count>${siteTagCount(name)} 个标签</span></span><span class="site-tags"><span class="site-tags-chips" data-site-tags>${siteTagChipsHTML(name)}</span><span class="tag-popover"><button type="button" class="tag-add" data-tag-add="${escapeHTML(name)}" aria-haspopup="menu" aria-expanded="${isOpen}" aria-label="为「${escapeHTML(name)}」添加或移除标签" title="添加或移除标签">＋ 添加标签</button>${siteTagMenuHTML(name)}</span></span></div>`;
+}
+
+function tagColorMenuHTML(name) {
+  const isOpen = openColorMenu === name;
+  const options = TAG_COLORS.map((color) => {
+    const checked = tags.get(name)?.color === color;
+    return `<button type="button" role="menuitemradio" class="tag-color-option" data-tag-color-option="${escapeHTML(name)}" data-color="${color}" aria-checked="${checked}" tabindex="${checked ? 0 : -1}" title="改用${TAG_COLOR_LABELS[color]}"><i class="${color}" aria-hidden="true"></i><span class="chip-label">${TAG_COLOR_LABELS[color]}</span></button>`;
+  }).join('');
+  return `<div class="tag-color-menu" role="menu" aria-label="「${escapeHTML(name)}」的颜色"${isOpen ? '' : ' hidden'}>${options}</div>`;
+}
+
+function tagItemHTML(name) {
+  const count = tagSiteCount(name);
+  return `<div class="tag-item" data-tag-item="${escapeHTML(name)}"><span class="tag-popover tag-swatch-wrap"><button type="button" class="tag-swatch ${tags.get(name).color}" data-tag-swatch="${escapeHTML(name)}" aria-haspopup="menu" aria-expanded="${openColorMenu === name}" aria-label="更改「${escapeHTML(name)}」的颜色" title="更改颜色"><i aria-hidden="true"></i></button>${tagColorMenuHTML(name)}</span><button type="button" class="tag-rename" data-tag-rename="${escapeHTML(name)}" aria-label="重命名标签「${escapeHTML(name)}」" title="重命名标签"><span class="chip-label">${escapeHTML(name)}</span><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17zm11.5-14 3 3" /></svg></button><span class="tag-count" data-tag-count>${count} 个站点</span><button type="button" class="tag-delete" data-tag-delete="${escapeHTML(name)}" aria-label="删除标签「${escapeHTML(name)}」" title="删除标签">删除</button></div>`;
+}
+
+function tagEditorHTML() {
+  const isCreate = tagEditor.mode === 'create';
+  return `<form class="tag-editor" data-tag-form><div class="tag-editor-field"><input data-tag-name-input maxlength="12" value="${isCreate ? '' : escapeHTML(tagEditor.name)}" placeholder="${isCreate ? '输入新标签名称' : '输入新名称'}" aria-label="标签名称" autocomplete="off"><p class="tag-editor-error" data-tag-message role="alert" hidden></p></div><span class="tag-editor-actions"><button class="primary-button" type="submit">${isCreate ? '添加' : '保存'}</button><button class="ghost" type="button" data-tag-cancel>取消</button></span></form>`;
+}
+
+function tagStatusHTML() {
+  if (!tagStatus.text) return '';
+  return `<div class="tag-status" data-tag-status><span class="tag-status-message" role="status">${escapeHTML(tagStatus.text)}</span>${tagStatus.undo ? `<button type="button" class="tag-undo" data-tag-undo>撤销</button>` : ''}</div>`;
+}
+
+function refreshSiteTagRow(site) {
+  const row = [...customizeTagsPanel.querySelectorAll('[data-site-row]')].find((node) => node.dataset.siteRow === site);
+  if (!row) return;
+  const slot = row.querySelector('[data-site-tags]');
+  if (slot) slot.innerHTML = siteTagChipsHTML(site);
+  row.querySelectorAll('[data-tag-menu-item]').forEach((item) => {
+    const tagName = JSON.parse(item.dataset.tagMenuItem)[1];
+    item.setAttribute('aria-checked', String(Boolean(tags.get(tagName)?.sites.has(site))));
+  });
+  const count = row.querySelector('[data-site-tag-count]');
+  if (count) count.textContent = `${siteTagCount(site)} 个标签`;
+  customizeTagsPanel.querySelectorAll('[data-tag-count]').forEach((badge) => {
+    const tagName = badge.closest('[data-tag-item]')?.dataset.tagItem;
+    if (tagName) badge.textContent = `${tagSiteCount(tagName)} 个站点`;
+  });
+  const total = customizeTagsPanel.querySelector('[data-tagged-count]');
+  if (total) total.textContent = `已标记 ${taggedSiteCount()} 个站点`;
+}
+
+function handleTagMenuKeydown(event) {
+  const menu = event.currentTarget;
+  const items = [...menu.querySelectorAll('[role="menuitemcheckbox"], [role="menuitemradio"]')];
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const focusItem = (next) => {
+    event.preventDefault();
+    items.forEach((item) => { item.tabIndex = -1; });
+    next.tabIndex = 0;
+    next.focus();
+  };
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    if (current === -1) focusItem(items[0]);
+    else focusItem(items[(current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]);
+    return;
+  }
+  if (event.key === 'Home' || event.key === 'End') {
+    focusItem(event.key === 'Home' ? items[0] : items[items.length - 1]);
+    return;
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    if (current >= 0) items[current].click();
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    const kind = menu.classList.contains('tag-color-menu') ? 'swatch' : 'add';
+    const value = kind === 'swatch' ? openColorMenu : openSiteMenu;
+    const lookup = kind === 'swatch' ? 'tagSwatch' : 'tagAdd';
+    tagFocusAfterRender = () => [...customizeTagsPanel.querySelectorAll(kind === 'swatch' ? '[data-tag-swatch]' : '[data-tag-add]')].find((node) => node.dataset[lookup] === value) || null;
+    closeTagMenus();
+    return;
+  }
+  if (event.key === 'Tab') closeTagMenus();
+}
+
+function bindTagPanelBehaviors() {
+  const editor = customizeTagsPanel.querySelector('[data-tag-form]');
+  if (editor) {
+    const input = editor.querySelector('[data-tag-name-input]');
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelTagEditor();
+      }
+    });
+    input.addEventListener('blur', (event) => {
+      if (event.relatedTarget && editor.contains(event.relatedTarget)) return;
+      cancelTagEditor();
+    });
+  }
+  customizeTagsPanel.querySelectorAll('.tag-color-menu:not([hidden]), .site-tag-menu:not([hidden])').forEach((menu) => menu.addEventListener('keydown', handleTagMenuKeydown));
+}
+
+function renderCustomizeTags() {
+  const editing = tagEditor;
+  const tagRows = [...tags.keys()].map((name) =>
+    (editing?.mode === 'rename' && editing.name === name) ? tagEditorHTML() : tagItemHTML(name)
+  ).join('');
+  const createEditor = editing?.mode === 'create' ? tagEditorHTML() : '';
+  const tagList = `<div class="tag-list" data-tag-list>${tagRows || (!editing ? '<p class="tag-empty">还没有标签，新建一个来标记常用站点，标签会显示在卡片上。</p>' : '')}<button type="button" class="tag-new" data-tag-new>＋ 新建标签</button>${createEditor}</div>`;
   const taggedSites = new Set();
   for (const tag of tags.values()) for (const site of tag.sites) taggedSites.add(site);
   const allSites = [...new Set([...cards.map((card) => card.siteName), ...taggedSites])].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   const query = customizeSearches.tagSites.trim().toLowerCase();
-  const rows = allSites.filter((name) => !query || name.toLowerCase().includes(query)).map((name) => {
-    const chips = [...tags.entries()].filter(([, tag]) => tag.sites.has(name)).map(([tagName]) => `<button type="button" class="tag-chip ${tags.get(tagName).color}" data-site-tag-remove="${escapeHTML(JSON.stringify([name, tagName]))}" title="移除标签" aria-label="从 ${escapeHTML(name)} 移除标签 ${escapeHTML(tagName)}"><i aria-hidden="true"></i>${escapeHTML(tagName)}</button>`).join('');
-    const open = openTagMenu === name;
-    const menuItems = [...tags.keys()].map((tagName) => `<button type="button" role="menuitemcheckbox" aria-checked="${tags.get(tagName).sites.has(name)}" data-tag-menu-item="${escapeHTML(JSON.stringify([name, tagName]))}"><i class="${tags.get(tagName).color}" aria-hidden="true"></i>${escapeHTML(tagName)}</button>`).join('');
-    return `<div class="pref-row site-tag-row"><span class="pref-row-text"><strong>${escapeHTML(name)}</strong></span><span class="site-tags">${chips}<span class="site-tag-menu-wrap"><button type="button" class="tag-add" data-tag-add="${escapeHTML(name)}" aria-haspopup="menu" aria-expanded="${open}">＋</button><div class="tag-menu" role="${menuItems ? 'menu' : ''}"${open ? '' : ' hidden'}>${menuItems || '<p class="tag-menu-empty">先在上方新建标签</p>'}</div></span></span></div>`;
-  }).join('');
-  customizeTagsPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>我的标签</h3><span class="pref-note">点色点可更换颜色</span></div><div class="tag-manager">${manager || '<span class="muted">还没有标签，点击下方按钮新建。</span>'}<button type="button" class="tag-new" data-tag-new>＋ 新建标签</button></div>${form}</section><section class="pref-section"><div class="pref-head"><h3>站点标签</h3><span class="pref-count">已标记 ${taggedSites.size} 个</span></div><label class="pref-search"><span>搜索站点</span><input type="search" data-pref-search="tagSites" value="${escapeHTML(customizeSearches.tagSites)}" placeholder="筛选站点"></label><div class="pref-list" data-pref-list="tagSites">${rows || '<p class="pref-empty">没有匹配的站点</p>'}</div></section>`;
+  const siteRows = allSites.filter((name) => !query || name.toLowerCase().includes(query)).map(siteTagRowHTML).join('');
+  customizeTagsPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>我的标签</h3><span class="pref-note">点名称重命名 · 点色块换颜色 · 删除可随时撤销</span></div>${tagStatusHTML()}${tagList}</section><section class="pref-section"><div class="pref-head"><h3>站点标签</h3><span class="pref-count" data-tagged-count>已标记 ${taggedSites.size} 个站点</span></div><label class="pref-search"><span>搜索站点</span><input type="search" data-pref-search="tagSites" value="${escapeHTML(customizeSearches.tagSites)}" placeholder="筛选站点"></label><div class="pref-list" data-pref-list="tagSites">${siteRows || `<p class="pref-empty">${allSites.length ? '没有匹配的站点' : '暂无站点数据。'}</p>`}</div></section>`;
+  bindTagPanelBehaviors();
+  if (openSiteMenu) {
+    const menu = customizeTagsPanel.querySelector('.site-tag-menu:not([hidden])');
+    const first = menu
+      ? [...menu.querySelectorAll('[data-tag-menu-item]')].find((item) => item.getAttribute('aria-checked') === 'true') || menu.querySelector('[data-tag-menu-item]')
+      : null;
+    if (first) first.focus();
+  } else if (openColorMenu) {
+    const menu = customizeTagsPanel.querySelector('.tag-color-menu:not([hidden])');
+    const current = menu?.querySelector('[aria-checked="true"]') || menu?.querySelector('[data-tag-color-option]');
+    if (current) current.focus();
+  }
+  if (tagFocusAfterRender) {
+    const target = tagFocusAfterRender();
+    tagFocusAfterRender = null;
+    if (target) target.focus();
+  }
 }
 
-function closeTagMenu() {
-  openTagMenu = null;
-  customizeTagsPanel.querySelectorAll('[data-tag-add][aria-expanded="true"]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
-  customizeTagsPanel.querySelectorAll('.tag-menu').forEach((menu) => { menu.hidden = true; });
+function closeTagMenus() {
+  if (!openSiteMenu && !openColorMenu) return;
+  openSiteMenu = null;
+  openColorMenu = null;
+  renderCustomize();
+}
+
+function cancelTagEditor() {
+  if (!tagEditor) return;
+  tagEditor = null;
+  renderCustomize();
 }
 
 function handleCustomizeClick(event) {
-  const target = event.target.closest('[data-pref-reset],[data-pref-reset-all],[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-color],[data-tag-rename],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item]');
+  const target = event.target.closest('[data-pref-reset],[data-pref-reset-all],[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo]');
   if (!target) return;
 
   if (target.matches('[data-pref-reset]')) {
@@ -716,73 +906,97 @@ function handleCustomizeClick(event) {
     return;
   }
   if (target.matches('[data-tag-new]')) {
-    tagFormMode = 'create';
+    tagEditor = { mode: 'create' };
     renderCustomize();
     focusTagInput();
     return;
   }
   if (target.matches('[data-tag-cancel]')) {
-    tagFormMode = null;
-    renderCustomize();
-    return;
-  }
-  if (target.matches('[data-tag-delete]')) {
-    const name = target.dataset.tagDelete;
-    if (tagArmed?.name === name) {
-      clearTimeout(tagArmed.timer);
-      tagArmed = null;
-      tags.delete(name);
-      saveTags();
-      render();
-      renderCustomize();
-    } else {
-      if (tagArmed) clearTimeout(tagArmed.timer);
-      tagArmed = { name, timer: window.setTimeout(() => { tagArmed = null; if (customizeDialog.open) renderCustomize(); }, 2200) };
-      renderCustomize();
-    }
-    return;
-  }
-  if (target.matches('[data-tag-color]')) {
-    const tag = tags.get(target.dataset.tagColor);
-    if (!tag) return;
-    tag.color = TAG_COLORS[(TAG_COLORS.indexOf(tag.color) + 1) % TAG_COLORS.length];
-    saveTags();
-    render();
-    renderCustomize();
+    cancelTagEditor();
     return;
   }
   if (target.matches('[data-tag-rename]')) {
-    tagFormMode = target.dataset.tagRename;
+    tagEditor = { mode: 'rename', name: target.dataset.tagRename };
     renderCustomize();
     focusTagInput();
     return;
   }
+  if (target.matches('[data-tag-delete]')) {
+    const name = target.dataset.tagDelete;
+    tagStatus = { text: `已删除标签「${name}」。`, undo: tagSnapshot(tags) };
+    tags.delete(name);
+    saveTags();
+    render();
+    tagFocusAfterRender = () => customizeTagsPanel.querySelector('[data-tag-undo]');
+    renderCustomize();
+    return;
+  }
+  if (target.matches('[data-tag-undo]')) {
+    if (!tagStatus.undo) return;
+    tags = tagStatus.undo;
+    tagStatus = { text: '', undo: null };
+    saveTags();
+    render();
+    renderCustomize();
+    return;
+  }
+  if (target.matches('[data-tag-swatch]')) {
+    const name = target.dataset.tagSwatch;
+    if (openColorMenu === name) {
+      closeTagMenus();
+      return;
+    }
+    openColorMenu = name;
+    openSiteMenu = null;
+    renderCustomize();
+    return;
+  }
+  if (target.matches('[data-tag-color-option]')) {
+    const name = target.dataset.tagColorOption;
+    const color = target.dataset.color;
+    const tag = tags.get(name);
+    if (!tag) return;
+    if (tag.color !== color) {
+      tagStatus = { text: `「${name}」已改为${TAG_COLOR_LABELS[color] || color}色。`, undo: tagSnapshot(tags) };
+      tagSetColor(tags, name, color);
+      saveTags();
+      render();
+    }
+    tagFocusAfterRender = () => [...customizeTagsPanel.querySelectorAll('[data-tag-swatch]')].find((node) => node.dataset.tagSwatch === name) || null;
+    closeTagMenus();
+    return;
+  }
   if (target.matches('[data-tag-add]')) {
     const site = target.dataset.tagAdd;
-    if (openTagMenu === site) { closeTagMenu(); return; }
-    openTagMenu = site;
-    customizeTagsPanel.querySelectorAll('[data-tag-add]').forEach((button) => button.setAttribute('aria-expanded', button.dataset.tagAdd === site ? 'true' : 'false'));
-    customizeTagsPanel.querySelectorAll('.tag-menu').forEach((menu) => { menu.hidden = menu.parentElement.querySelector('[data-tag-add]').dataset.tagAdd !== site; });
+    if (openSiteMenu === site) {
+      closeTagMenus();
+      return;
+    }
+    openSiteMenu = site;
+    openColorMenu = null;
+    renderCustomize();
     return;
   }
   if (target.matches('[data-tag-menu-item]')) {
     const [site, tagName] = JSON.parse(target.dataset.tagMenuItem);
-    const tag = tags.get(tagName);
-    if (!tag) return;
-    if (tag.sites.has(site)) tag.sites.delete(site);
-    else tag.sites.add(site);
-    saveTags();
-    render();
-    closeTagMenu();
-    renderCustomize();
+    const attach = !tags.get(tagName)?.sites.has(site);
+    if (tagSetSite(tags, site, tagName, attach)) {
+      saveTags();
+      render();
+      refreshSiteTagRow(site);
+    }
     return;
   }
   if (target.matches('[data-site-tag-remove]')) {
     const [site, tagName] = JSON.parse(target.dataset.siteTagRemove);
-    tags.get(tagName)?.sites.delete(site);
-    saveTags();
-    render();
-    renderCustomize();
+    if (tagSetSite(tags, site, tagName, false)) {
+      saveTags();
+      render();
+      refreshSiteTagRow(site);
+      const addButton = [...customizeTagsPanel.querySelectorAll('[data-tag-add]')].find((node) => node.dataset.tagAdd === site);
+      if (addButton) addButton.focus();
+    }
+    return;
   }
 }
 
@@ -848,24 +1062,31 @@ function handleCustomizeInput(event) {
 
 function handleCustomizeSubmit(event) {
   const form = event.target.closest('[data-tag-form]');
-  if (!form) return;
+  if (!form || !tagEditor) return;
   event.preventDefault();
   const message = form.querySelector('[data-tag-message]');
   const input = form.querySelector('[data-tag-name-input]');
   const name = input.value.trim();
   message.hidden = true;
   const fail = (text) => { message.textContent = text; message.hidden = false; input.focus(); };
-  if (!name) return fail('请输入标签名称。');
-  if (tagFormMode === 'create') {
-    if (tags.has(name)) return fail('已存在同名标签。');
-    tags.set(name, { color: TAG_COLORS[tags.size % TAG_COLORS.length], sites: new Set() });
-  } else if (typeof tagFormMode === 'string' && tags.has(tagFormMode)) {
-    if (name !== tagFormMode && tags.has(name)) return fail('已存在同名标签。');
-    const tag = tags.get(tagFormMode);
-    tags.delete(tagFormMode);
-    tags.set(name, tag);
+  const snapshot = tagSnapshot(tags);
+  if (tagEditor.mode === 'create') {
+    const result = tagCreate(tags, name);
+    if (result.error) return fail(result.error);
+    tagStatus = { text: `已创建标签「${name}」。`, undo: snapshot };
+  } else if (tagEditor.mode === 'rename') {
+    if (name === tagEditor.name) {
+      tagEditor = null;
+      renderCustomize();
+      return;
+    }
+    const result = tagRename(tags, tagEditor.name, name);
+    if (result.error) return fail(result.error);
+    tagStatus = { text: `已重命名为「${name}」。`, undo: snapshot };
+  } else {
+    return;
   }
-  tagFormMode = null;
+  tagEditor = null;
   saveTags();
   render();
   renderCustomize();
@@ -876,6 +1097,11 @@ customizeAction.addEventListener('click', () => {
   customizeDialog.showModal();
 });
 customizeClose.addEventListener('click', () => customizeDialog.close());
+customizeDialog.addEventListener('close', () => {
+  tagEditor = null;
+  openSiteMenu = null;
+  openColorMenu = null;
+});
 customizeDialog.addEventListener('click', (event) => {
   if (event.target === customizeDialog) {
     const bounds = customizeDialog.getBoundingClientRect();
@@ -905,7 +1131,7 @@ document.addEventListener('click', (event) => {
     customizeDialog.showModal();
     return;
   }
-  if (openTagMenu && !event.target.closest('.site-tag-menu-wrap')) closeTagMenu();
+  if ((openSiteMenu || openColorMenu) && !event.target.closest('.tag-popover')) closeTagMenus();
 });
 
 initializeTheme();
