@@ -37,6 +37,9 @@ type Config struct {
 	PublicURL            string
 	OAuthClientID        string
 	OAuthClientSecret    string
+	PayGateway           string
+	PayPID               string
+	PayKey               string
 }
 
 func Load() (Config, error) {
@@ -57,6 +60,9 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		PublicURL:            strings.TrimRight(strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_PUBLIC_URL", "")), "/"),
 		OAuthClientID:        strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_OAUTH_CLIENT_ID", "")),
 		OAuthClientSecret:    strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_OAUTH_CLIENT_SECRET", "")),
+		PayGateway:           strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_PAY_GATEWAY", "")),
+		PayPID:               strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_PAY_PID", "")),
+		PayKey:               valueOrDefault(lookup, "RELAYSCOPE_PAY_KEY", ""),
 	}
 
 	if err := validateListenAddr(cfg.ListenAddr); err != nil {
@@ -67,6 +73,9 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 	}
 	if (cfg.OAuthClientID == "") != (cfg.OAuthClientSecret == "") {
 		return Config{}, errors.New("RELAYSCOPE_OAUTH_CLIENT_ID and RELAYSCOPE_OAUTH_CLIENT_SECRET must be configured together")
+	}
+	if (cfg.PayPID == "") != (cfg.PayKey == "") {
+		return Config{}, errors.New("RELAYSCOPE_PAY_PID and RELAYSCOPE_PAY_KEY must be configured together")
 	}
 	if (cfg.OAuthClientID != "" || cfg.OAuthClientSecret != "") && cfg.PublicURL == "" {
 		return Config{}, errors.New("RELAYSCOPE_PUBLIC_URL is required when OAuth is configured")

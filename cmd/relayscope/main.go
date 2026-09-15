@@ -23,6 +23,8 @@ import (
 	"relayscope/internal/httpserver"
 	"relayscope/internal/linuxdo"
 	"relayscope/internal/logging"
+	"relayscope/internal/payment"
+	"relayscope/internal/payment/epay"
 	"relayscope/internal/scheduler"
 	"relayscope/internal/session"
 	"relayscope/internal/store"
@@ -115,6 +117,10 @@ func run() error {
 		return fmt.Errorf("refresh model matches: %w", err)
 	}
 	siteScheduler := scheduler.NewWithCollectionTimeout(dbStore, siteCollector, logger, time.Now, cfg.CollectionTimeout)
+	var payProvider payment.Provider = payment.Unconfigured{}
+	if cfg.PayPID != "" && cfg.PayKey != "" {
+		payProvider = epay.New(epay.Config{Gateway: cfg.PayGateway, PID: cfg.PayPID, Key: cfg.PayKey})
+	}
 	handler, err := httpserver.NewHandler(httpserver.Options{
 		Logger:       logger,
 		Version:      version,
@@ -127,6 +133,7 @@ func run() error {
 		PublicURL:    cfg.PublicURL,
 		SessionSync:  session.NewSyncManager(time.Now),
 		LinuxDO:      linuxdo.New(linuxdo.Config{ClientID: cfg.OAuthClientID, ClientSecret: cfg.OAuthClientSecret, CallbackURL: cfg.PublicURL + "/api/v1/auth/linuxdo/callback"}, dbStore),
+		Payment:      payProvider,
 	})
 	if err != nil {
 		return fmt.Errorf("build HTTP handler: %w", err)

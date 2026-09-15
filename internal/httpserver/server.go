@@ -12,6 +12,7 @@ import (
 	"relayscope/internal/admin"
 	"relayscope/internal/collector"
 	"relayscope/internal/linuxdo"
+	"relayscope/internal/payment"
 	"relayscope/internal/session"
 	"relayscope/internal/store"
 )
@@ -29,6 +30,7 @@ type Options struct {
 	PublicURL    string
 	SessionSync  *session.SyncManager
 	LinuxDO      *linuxdo.Service
+	Payment      payment.Provider
 }
 
 type sessionSyncSite struct {

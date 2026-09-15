@@ -63,6 +63,26 @@ func (s *Store) CreateOrder(ctx context.Context, order LDCOrder) (LDCOrder, erro
 	return order, nil
 }
 
+func (s *Store) GetOrder(ctx context.Context, id int64) (LDCOrder, error) {
+	var o LDCOrder
+	var wishID, days *int64
+	var created int64
+	var paidAt *int64
+	err := s.db.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, status, platform_trade_no, created_at, paid_at FROM ldc_orders WHERE id = ?`, id).
+		Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Status, &o.PlatformTradeNo, &created, &paidAt)
+	if err != nil {
+		return LDCOrder{}, err
+	}
+	o.WishSiteID = wishID
+	o.Days = days
+	o.CreatedAt = time.UnixMilli(created).UTC()
+	if paidAt != nil {
+		at := time.UnixMilli(*paidAt).UTC()
+		o.PaidAt = &at
+	}
+	return o, nil
+}
+
 func (s *Store) GetOrderByNo(ctx context.Context, orderNo string) (LDCOrder, error) {
 	var o LDCOrder
 	var wishID, days *int64
@@ -174,6 +194,13 @@ func (s *Store) CancelExpiredOrders(ctx context.Context, cutoff time.Time) (int6
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+// CancelOrder 作废单个待支付订单（如平台下单失败时）。
+func (s *Store) CancelOrder(ctx context.Context, orderNo string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE ldc_orders SET status = ? WHERE order_no = ? AND status = ?`,
+		OrderStatusCancelled, orderNo, OrderStatusPending)
+	return err
 }
 
 // ListOrders 管理端订单流水。userID>0 按用户过滤，kind/status 空串不过滤。

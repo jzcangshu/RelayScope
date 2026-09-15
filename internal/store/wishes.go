@@ -34,10 +34,10 @@ type WishSite struct {
 
 type WishSummary struct {
 	WishSite
-	PledgedLDC   int64             `json:"pledgedLdc"`
-	Pledgers     int64             `json:"pledgers"`
-	MyPledgedLDC int64             `json:"myPledgedLdc"`
-	MyPending    bool              `json:"myPending"`
+	PledgedLDC   int64 `json:"pledgedLdc"`
+	Pledgers     int64 `json:"pledgers"`
+	MyPledgedLDC int64 `json:"myPledgedLdc"`
+	MyPending    bool  `json:"myPending"`
 }
 
 // NormalizeWishDomain 把用户输入的网址归一化为去重键：小写主机名、去掉前导 www.。
@@ -160,6 +160,32 @@ func (s *Store) ListWishSites(ctx context.Context, viewerID int64) ([]WishSummar
 		}
 	}
 	return items, nil
+}
+
+// ListAllWishSites 管理端视图：包含全部状态（rejected/connected 也展示）。
+func (s *Store) ListAllWishSites(ctx context.Context) ([]WishSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT w.id, w.domain, w.name, w.url, w.invite_required, w.target_ldc, w.status, w.created_by, w.created_at,
+		COALESCE(SUM(CASE WHEN o.status = 'paid' THEN o.amount_ldc END), 0) AS pledged,
+		COALESCE(COUNT(DISTINCT CASE WHEN o.status = 'paid' THEN o.user_id END), 0) AS pledgers
+		FROM wish_sites w LEFT JOIN ldc_orders o ON o.wish_site_id = w.id
+		GROUP BY w.id
+		ORDER BY w.id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WishSummary{}
+	for rows.Next() {
+		var item WishSummary
+		var invite, created int64
+		if err := rows.Scan(&item.ID, &item.Domain, &item.Name, &item.URL, &invite, &item.TargetLDC, &item.Status, &item.CreatedBy, &created, &item.PledgedLDC, &item.Pledgers); err != nil {
+			return nil, err
+		}
+		item.InviteRequired = invite == 1
+		item.CreatedAt = time.UnixMilli(created).UTC()
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *Store) GetWishSite(ctx context.Context, id int64) (WishSite, error) {

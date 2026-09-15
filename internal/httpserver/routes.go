@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"relayscope/internal/domain"
+	"relayscope/internal/payment"
 	"relayscope/internal/session"
 	"relayscope/internal/store"
 	webassets "relayscope/web"
@@ -27,6 +28,9 @@ func NewHandler(options Options) (http.Handler, error) {
 	}
 	if options.SessionSync == nil {
 		options.SessionSync = session.NewSyncManager(options.Now)
+	}
+	if options.Payment == nil {
+		options.Payment = payment.Unconfigured{}
 	}
 
 	publicAssets, err := fs.Sub(webassets.Assets, "public")
@@ -71,6 +75,13 @@ func NewHandler(options Options) (http.Handler, error) {
 			if revision, err := options.Store.Revision(context.Background()); err == nil {
 				meta["revision"] = revision
 			}
+			// 运营设置公开给前端展示价格用
+			if value, err := options.Store.GetSetting(context.Background(), settingMembershipLdcPerDay, defaultMembershipLdcPerDay); err == nil {
+				meta["membershipLdcPerDay"] = value
+			}
+			if value, err := options.Store.GetSetting(context.Background(), settingWishDefaultTarget, defaultWishDefaultTarget); err == nil {
+				meta["wishDefaultTargetLdc"] = value
+			}
 		}
 		return meta
 	}))
@@ -96,7 +107,13 @@ func NewHandler(options Options) (http.Handler, error) {
 		})
 		mux.HandleFunc("GET /api/v1/auth/me", func(writer http.ResponseWriter, request *http.Request) {
 			if user, ok := linuxDOUser(options.LinuxDO, request); ok {
-				writeJSON(writer, map[string]any{"authenticated": true, "user": user})
+				response := map[string]any{"authenticated": true, "user": user}
+				if options.Store != nil {
+					if membership, err := options.Store.GetMembership(request.Context(), user.ID); err == nil {
+						response["membership"] = membership
+					}
+				}
+				writeJSON(writer, response)
 				return
 			}
 			writeJSON(writer, map[string]any{"authenticated": false})
@@ -381,7 +398,9 @@ func NewHandler(options Options) (http.Handler, error) {
 			writeJSON(writer, map[string]any{"sites": public})
 		})
 		registerAdminRoutes(mux, options)
+		registerAdminMembershipRoutes(mux, options)
 	}
+	registerUserRoutes(mux, options)
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(publicAssets))))
 	mux.Handle("GET /admin/", noStore(http.StripPrefix("/admin/", http.FileServer(http.FS(adminAssets)))))
 	mux.Handle("GET /", http.FileServer(http.FS(publicAssets)))

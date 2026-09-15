@@ -23,15 +23,15 @@ const (
 var ErrRedeemCodeInvalid = errors.New("兑换码无效或已被使用")
 
 type RedeemCode struct {
-	ID            int64      `json:"id"`
-	Code          string     `json:"code"`
-	Days          int64      `json:"days"`
-	Note          string     `json:"note"`
-	Status        string     `json:"status"`
-	RedeemedBy    int64      `json:"redeemedBy"`
-	RedeemedByName string    `json:"redeemedByName"`
-	RedeemedAt    *time.Time `json:"redeemedAt"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID             int64      `json:"id"`
+	Code           string     `json:"code"`
+	Days           int64      `json:"days"`
+	Note           string     `json:"note"`
+	Status         string     `json:"status"`
+	RedeemedBy     int64      `json:"redeemedBy"`
+	RedeemedByName string     `json:"redeemedByName"`
+	RedeemedAt     *time.Time `json:"redeemedAt"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 func randomRedeemCode() (display, canonical string, err error) {

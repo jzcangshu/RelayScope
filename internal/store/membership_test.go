@@ -24,7 +24,7 @@ func TestMigration004CreatesNewTables(t *testing.T) {
 	db := newTestStore(t)
 	ctx := context.Background()
 	for _, table := range []string{"user_sessions", "user_preferences", "redeem_codes", "wish_sites", "ldc_orders"} {
-		if _, err := db.db.ExecContext(ctx, "SELECT 1 FROM " + table + " LIMIT 1"); err != nil {
+		if _, err := db.db.ExecContext(ctx, "SELECT 1 FROM "+table+" LIMIT 1"); err != nil {
 			t.Fatalf("table %s missing: %v", table, err)
 		}
 	}
