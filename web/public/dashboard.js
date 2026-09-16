@@ -1409,7 +1409,7 @@ function enterCustomize() {
 }
 
 function renderCustomizeGate(loggedOut) {
-  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后定制已暂停生效（看板恢复默认展示），你的设置仍保留在服务器，续期后自动恢复。'}</p><p class="gate-pitch">成为会员：<b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC / 月</b><br>每月额外获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> <a class="gate-wish-link" href="#wishes">许愿</a>额度</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
+  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后，您的定制设置仍保留在服务器，续期后自动恢复。'}</p><p class="gate-pitch">成为会员：<b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC / 月</b><br>每月额外获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> <a class="gate-wish-link" href="#wishes">许愿</a>额度</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
 }
 
 // ---- 账号菜单 ----
