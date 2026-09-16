@@ -71,6 +71,55 @@ func TestUptimeKumaAdapterUsesEachMonitorTimeline(t *testing.T) {
 	}
 }
 
+func TestUptimeKumaPendingStatusDoesNotProduceDegradedTimeline(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	fetcher := uptimeKumaTestFetcher{
+		"https://status.example.test/api/status-page/ai":           []byte(`{"config":{"autoRefreshInterval":300},"publicGroupList":[{"name":"OpenAI","monitorList":[{"id":1,"name":"pending-model"},{"id":2,"name":"mixed-model"}]}]}`),
+		"https://status.example.test/api/status-page/heartbeat/ai": []byte(`{"heartbeatList":{"1":[{"status":2,"time":"2026-08-15T11:00:00Z"},{"status":2,"time":"2026-08-15T11:30:00Z"},{"status":1,"time":"2026-08-15T11:59:00Z"}],"2":[{"status":1,"time":"2026-08-15T11:00:00Z"},{"status":2,"time":"2026-08-15T11:30:00Z"},{"status":0,"time":"2026-08-15T11:59:00Z"}]}}`),
+	}
+	collection, err := (UptimeKumaAdapter{}).Collect(context.Background(), Site{
+		ID: 7, BaseURL: "https://status.example.test", SourceURL: "https://status.example.test/status/ai", ConfigJSON: `{}`,
+	}, fetcher, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingModel := uptimeKumaTestModel(t, collection, "pending-model")
+	pg := pendingModel.Groups[0]
+	// The latest heartbeat (status=1) is within grace, so current state is healthy.
+	if pg.ServiceState != domain.ServiceHealthy {
+		t.Fatalf("pending-model current state = %s; want healthy", pg.ServiceState)
+	}
+	// But the timeline buckets should NOT contain any degraded entries —
+	// status 2 (PENDING) must map to no_samples, not degraded.
+	for _, bucket := range pg.Buckets {
+		if bucket.Metrics.SuccessRatio != nil && *bucket.Metrics.SuccessRatio == 0.5 {
+			t.Fatalf("pending-model timeline contains degraded bucket (status 2 mis-mapped): %+v", bucket)
+		}
+	}
+	// The first two PENDING samples produce nil-ratio buckets (no_samples),
+	// so only the final healthy sample should yield a bucket with ratio 1.
+	if len(pg.Buckets) == 0 {
+		t.Fatal("pending-model produced zero timeline buckets")
+	}
+	lastBucket := pg.Buckets[len(pg.Buckets)-1]
+	if lastBucket.Metrics.SuccessRatio == nil || *lastBucket.Metrics.SuccessRatio != 1 {
+		t.Fatalf("pending-model last bucket ratio = %v; want 1", lastBucket.Metrics.SuccessRatio)
+	}
+
+	mixedModel := uptimeKumaTestModel(t, collection, "mixed-model")
+	mg := mixedModel.Groups[0]
+	// Latest is status=0 (DOWN), so current state is failed.
+	if mg.ServiceState != domain.ServiceFailed {
+		t.Fatalf("mixed-model current state = %s; want failed", mg.ServiceState)
+	}
+	// The middle bucket (status=2 PENDING) must not appear as degraded.
+	for i, bucket := range mg.Buckets {
+		if bucket.Metrics.SuccessRatio != nil && *bucket.Metrics.SuccessRatio == 0.5 {
+			t.Fatalf("mixed-model bucket[%d] is degraded from PENDING status: %+v", i, bucket)
+		}
+	}
+}
+
 func TestUptimeKumaAdapterRejectsMissingStatusSlug(t *testing.T) {
 	_, err := (UptimeKumaAdapter{}).Collect(context.Background(), Site{
 		ID: 1, BaseURL: "https://status.example.test", SourceURL: "https://status.example.test/",

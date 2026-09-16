@@ -376,8 +376,11 @@ func uptimeKumaState(status int) domain.ServiceState {
 	case 0:
 		return domain.ServiceFailed
 	case 2:
-		return domain.ServiceDegraded
+		// PENDING — no check has completed yet; treat as missing data so
+		// the timeline does not paint it as a degraded segment.
+		return domain.ServiceNoSamples
 	default:
+		// Covers status 3 (MAINTENANCE) and any unknown values.
 		return domain.ServiceNoSamples
 	}
 }
