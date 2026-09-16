@@ -15,12 +15,15 @@ from pathlib import Path
 PUBLIC = Path(__file__).resolve().parent.parent / "web" / "public"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8099
 LOGGED_IN = bool(os.environ.get("MOCK_LOGGED_IN"))
+# MOCK_MEMBER_EXPIRED=1：已登录但会员已过期（用于验证定制页门禁），需配合 MOCK_LOGGED_IN=1
+MEMBER_EXPIRED = bool(os.environ.get("MOCK_MEMBER_EXPIRED"))
 
 NOW = datetime.now(timezone.utc).isoformat()
 HOURS_AGO = lambda h: datetime.now(timezone.utc).timestamp() * 1000 - h * 3600 * 1000
 
 MOCK_USER = {"id": 1, "provider": "linuxdo", "externalId": "42", "username": "tester", "name": "Tester", "avatarUrl": "", "trustLevel": 2, "createdAt": NOW}
-MOCK_MEMBERSHIP = {"expiresAt": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(), "active": True}
+MOCK_MEMBERSHIP_ACTIVE = {"expiresAt": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(), "active": True}
+MOCK_MEMBERSHIP = ({"expiresAt": (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(), "active": False} if MEMBER_EXPIRED else MOCK_MEMBERSHIP_ACTIVE)
 MOCK_PREFERENCES = {"hidden": {"sites": [], "providers": [], "models": []}, "defaultHealthy": False, "tags": {"主力": {"color": "mint", "sites": []}}, "updatedAt": NOW}
 MOCK_WISHES = [
     {"id": 1, "domain": "example.com", "name": "示例中转", "url": "https://example.com", "inviteRequired": False, "targetLdc": 30, "status": "open", "pledgedLdc": 12, "pledgers": 3, "myPledgedLdc": 5, "myPending": False},

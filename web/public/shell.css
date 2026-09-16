@@ -198,6 +198,9 @@
   border-right: 1px solid var(--border);
   background: var(--surface-subtle);
 }
+.customize-nav[hidden] { display: none; }
+/* 门禁态（非会员/已过期）导航隐藏，网格收为单列，避免面板被挤进 184px 侧栏列 */
+.customize-body:has(> .customize-nav[hidden]) { grid-template-columns: minmax(0, 1fr); }
 .customize-nav button {
   display: flex;
   align-items: center;

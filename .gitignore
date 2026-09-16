@@ -42,3 +42,5 @@ relayscope.exe~
 
 # Production deployment record with credentials (never commit)
 /DEPLOYMENT.md
+__pycache__/
+*.pyc

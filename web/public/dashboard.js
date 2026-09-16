@@ -134,6 +134,20 @@ function loadPreferences() {
   healthyOnly.checked = defaultHealthy;
 }
 
+// 非会员/已过期：定制暂停生效，看板恢复默认展示；本地与服务端数据都保留，续期后自动恢复
+function clearAppliedPreferences() {
+  hidden = { sites: new Set(), providers: new Set(), models: new Set() };
+  defaultHealthy = false;
+  tags = new Map();
+  healthyOnly.checked = false;
+  render();
+}
+
+function applyPreferencesForMembership() {
+  if (membershipIs() === 'active') loadPreferences();
+  else clearAppliedPreferences();
+}
+
 const saveHidden = () => { storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] })); scheduleCloudSave(); };
 const saveDefaultHealthy = () => { storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0'); scheduleCloudSave(); };
 const saveTags = () => { storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }])))); scheduleCloudSave(); };
@@ -791,6 +805,8 @@ function renderCustomize() {
 }
 
 function setCustomizeTab(tab) {
+  // 非会员（含已过期）永远停留在门禁页，禁止通过切换标签渲染出定制内容
+  if (membershipIs() !== 'active') { enterCustomize(); return; }
   customizeTab = tab;
   customizeTabDisplay.setAttribute('aria-selected', String(tab === 'display'));
   customizeTabTags.setAttribute('aria-selected', String(tab === 'tags'));
@@ -1311,6 +1327,7 @@ async function loadUser() {
   renderUserArea();
   updateCustomizeSubtitle();
   renderWishBanner();
+  applyPreferencesForMembership();
   if (currentUser) await syncPreferencesFromCloud();
   if (!wishPage.hidden) loadWishes();
 }
@@ -1331,7 +1348,9 @@ async function pushPreferencesToCloud() {
       membership = { expiresAt: membership?.expiresAt || null, active: false };
       renderUserArea();
       updateCustomizeSubtitle();
-      showToast('会员已过期，设置仅保存在本地');
+      if (!customizePage.hidden) enterCustomize();
+      clearAppliedPreferences();
+      showToast('会员已过期，定制已暂停生效，数据已保留');
     }
   } catch { /* 离线：下次修改再试 */ }
 }
@@ -1371,7 +1390,7 @@ async function syncPreferencesFromCloud() {
 function updateCustomizeSubtitle() {
   if (!customizeSubtitle) return;
   if (membershipIs() === 'active') customizeSubtitle.textContent = cloudSynced ? '设置已自动同步到你的账号，换设备也不丢。' : '设置将自动同步到你的账号。';
-  else customizeSubtitle.textContent = '个性化设置仅保存在当前浏览器。';
+  else customizeSubtitle.textContent = '会员有效期内定制才会生效；到期后暂停，数据保留，续期后自动恢复。';
 }
 
 function enterCustomize() {
@@ -1390,7 +1409,7 @@ function enterCustomize() {
 }
 
 function renderCustomizeGate(loggedOut) {
-  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后已保存的设置仍然生效，续期后即可继续编辑。'}</p><p class="gate-pitch">成为会员：<b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC / 月</b> 丨 每月额外获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> <a class="gate-wish-link" href="#wishes">许愿</a>额度</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
+  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后定制已暂停生效（看板恢复默认展示），你的设置仍保留在服务器，续期后自动恢复。'}</p><p class="gate-pitch">成为会员：<b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC / 月</b><br>每月额外获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> <a class="gate-wish-link" href="#wishes">许愿</a>额度</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
 }
 
 // ---- 账号菜单 ----
@@ -1594,7 +1613,7 @@ function renderWishBanner() {
   const member = membershipIs() === 'active';
   wishBanner.hidden = member;
   if (member) return;
-  wishBanner.innerHTML = `花 <b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC</b> 开通会员，每月可获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> 许愿额度，并获得 <b>定制功能 &amp; 云端同步</b> 权限<span class="wish-banner-arrow" aria-hidden="true">→</span>`;
+  wishBanner.innerHTML = `花 <b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC</b> 开通会员，每月可获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> 许愿额度，并获得 <b>定制功能 &amp; 云端同步</b> 权限<a class="wish-banner-cta" href="#customize">开通会员 →</a>`;
 }
 
 function renderWishes() {
@@ -1830,11 +1849,10 @@ document.querySelector('#feedback-form').addEventListener('submit', async (event
 });
 
 initializeTheme();
-loadPreferences();
 loadRows();
 loadSiteSettings();
-loadUser();
-applyRoute();
+// 登录态就绪后再做首次路由渲染，否则 #customize 刷新会因 currentUser 尚为空而误显登录门禁
+loadUser().finally(applyRoute);
 {
   const paidOrder = readPaidOrderNo();
   if (paidOrder) pollOrderStatus(paidOrder);

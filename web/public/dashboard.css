@@ -2148,13 +2148,15 @@
 .wish-head { align-items: center; margin: 14px 0 20px; }
 .wish-head h1 { font-size: 24px; letter-spacing: -0.2px; }
 .wish-head .primary-button {
-  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 62%, #7cc4b4));
-  box-shadow: 0 4px 14px color-mix(in oklab, var(--accent) 28%, transparent);
+  background: linear-gradient(135deg, #f6bd45, #e79a2b);
+  color: #3c2a04;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(246, 189, 69, 0.28);
   padding: 11px 20px;
 }
 .wish-head .primary-button:hover {
-  background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 92%, #000), color-mix(in oklab, var(--accent) 56%, #7cc4b4));
-  box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 34%, transparent);
+  background: linear-gradient(135deg, #f8c85a, #d98d20);
+  box-shadow: 0 6px 18px rgba(246, 189, 69, 0.36);
 }
 
 /* 统计条：一眼看到池子的热度 */
@@ -2302,28 +2304,40 @@
   line-height: 1.7;
 }
 .gate-pitch b { color: var(--accent); font-variant-numeric: tabular-nums; }
-.gate-wish-link { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.gate-wish-link { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
 
 /* ===== 许愿页会员 banner ===== */
 .wish-banner {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
   margin-bottom: 14px;
-  padding: 10px 18px;
+  padding: 12px 20px;
   border: 1px solid color-mix(in oklab, var(--accent) 32%, var(--border));
-  border-radius: 999px;
+  border-radius: 14px;
   background: linear-gradient(135deg, var(--accent-soft), color-mix(in oklab, var(--accent-soft) 55%, var(--surface)));
   color: var(--text);
-  font-size: var(--font-small);
+  font-size: 14px;
+  line-height: 1.7;
   text-align: center;
-  transition: transform 160ms ease-out, border-color 140ms ease;
 }
-.wish-banner:hover { border-color: var(--accent); transform: translateY(-1px); }
 .wish-banner b { color: var(--accent); font-variant-numeric: tabular-nums; }
-.wish-banner-arrow { margin-left: 6px; color: var(--accent); font-weight: 700; }
+.wish-banner-cta {
+  margin-left: 8px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--shell-on-accent);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 140ms ease;
+}
+.wish-banner-cta:hover { filter: brightness(1.08); }
+.wish-banner-cta:active { transform: scale(0.96); }
 .wish-banner[hidden] { display: none; }
 
 /* 短内容页面（许愿池/定制空态）在暗色下不再露出 html 默认白底 */
