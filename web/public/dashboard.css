@@ -2303,3 +2303,25 @@
 }
 .gate-pitch b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .gate-wish-link { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ===== 许愿页会员 banner ===== */
+.wish-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 18px;
+  border: 1px solid color-mix(in oklab, var(--accent) 32%, var(--border));
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent-soft), color-mix(in oklab, var(--accent-soft) 55%, var(--surface)));
+  color: var(--text);
+  font-size: var(--font-small);
+  text-align: center;
+  transition: transform 160ms ease-out, border-color 140ms ease;
+}
+.wish-banner:hover { border-color: var(--accent); transform: translateY(-1px); }
+.wish-banner b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.wish-banner-arrow { margin-left: 6px; color: var(--accent); font-weight: 700; }
+.wish-banner[hidden] { display: none; }

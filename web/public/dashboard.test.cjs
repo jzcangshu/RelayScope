@@ -336,6 +336,7 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(html, /id="user-action"/);
   assert.match(html, /id="user-menu"/);
   assert.match(html, /id="wish-page"/);
+  assert.match(html, /id="wish-banner"/);
   assert.match(html, /id="redeem-dialog"/);
   assert.match(html, /id="recharge-dialog"/);
   assert.match(html, /id="wish-form-dialog"/);

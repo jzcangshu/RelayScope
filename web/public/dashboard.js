@@ -57,6 +57,7 @@ const pledgeMessage = document.querySelector('#pledge-message');
 const customizeSubtitle = document.querySelector('#customize-subtitle');
 const customizeNav = document.querySelector('.customize-nav');
 const toastRegion = document.querySelector('#toast-region');
+const wishBanner = document.querySelector('#wish-banner');
 
 let rows = [];
 let cards = [];
@@ -1309,6 +1310,7 @@ async function loadUser() {
   } catch { /* 网络失败：保留现状 */ }
   renderUserArea();
   updateCustomizeSubtitle();
+  renderWishBanner();
   if (currentUser) await syncPreferencesFromCloud();
   if (!wishPage.hidden) loadWishes();
 }
@@ -1587,7 +1589,16 @@ function wishStats(items) {
   return { open, reached, totalLdc, pledgers };
 }
 
+function renderWishBanner() {
+  if (!wishBanner) return;
+  const member = membershipIs() === 'active';
+  wishBanner.hidden = member;
+  if (member) return;
+  wishBanner.innerHTML = `花 <b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC</b> 开通会员，每月可获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> 许愿额度，并获得 <b>定制功能 &amp; 云端同步</b> 权限<span class="wish-banner-arrow" aria-hidden="true">→</span>`;
+}
+
 function renderWishes() {
+  renderWishBanner();
   const stats = wishStats(wishItems);
   const statsHTML = `<div class="wish-stats" role="group" aria-label="许愿池统计">
       <div class="wish-stat"><strong>${stats.open}</strong><span>正在许愿</span></div>
