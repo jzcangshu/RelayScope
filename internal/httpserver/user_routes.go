@@ -103,7 +103,7 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]any{"status": "ok", "membership": membership})
 	})
 
-	// POST /api/v1/membership/recharge —— LDC 直充会员（只能按月起充）
+	// POST /api/v1/membership/recharge —— LDC 直充会员（按月计费，1-36 个月）
 	mux.HandleFunc("POST /api/v1/membership/recharge", func(writer http.ResponseWriter, request *http.Request) {
 		user, ok := requireUser(options, writer, request)
 		if !ok {
@@ -113,11 +113,22 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 			writeError(writer, http.StatusTooManyRequests, "操作过于频繁，请稍后再试")
 			return
 		}
-		days := membershipDaysPerMonth
+		var payload struct {
+			Months int64 `json:"months"`
+		}
+		months := int64(1)
+		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 4<<10)).Decode(&payload); err == nil && payload.Months > 0 {
+			months = payload.Months
+		}
+		if months < 1 || months > 36 {
+			writeError(writer, http.StatusBadRequest, "充值时长需为 1-36 个月")
+			return
+		}
+		days := months * membershipDaysPerMonth
 		chargeOrder, err := createChargeOrder(options, request.Context(), user.ID, store.LDCOrder{
 			UserID: user.ID, Kind: store.OrderKindMembership, Days: &days,
-			AmountLDC: membershipMonthlyPrice(request.Context(), options.Store),
-		}, "会员 1 个月")
+			AmountLDC: membershipMonthlyPrice(request.Context(), options.Store) * months,
+		}, "会员 "+strconv.FormatInt(months, 10)+" 个月")
 		if err != nil {
 			emitOrderError(writer, err)
 			return

@@ -111,13 +111,24 @@
         <div class="form-actions"><button class="primary-button" type="submit">兑换</button></div>
       </form>
     </dialog>
-    <dialog id="recharge-dialog" class="form-dialog">
-      <div class="detail-head form-head"><div><h2>LDC 直充会员</h2><p class="muted">使用 LINUX DO Credit 积分支付，按月起充，支付成功后与现有有效期叠加。</p></div><button id="recharge-close" class="icon-button" type="button" aria-label="关闭直充" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+    <dialog id="recharge-dialog" class="form-dialog recharge-dialog">
+      <div class="detail-head form-head recharge-head">
+        <div>
+          <h2><span class="recharge-mark" aria-hidden="true">✦</span>开通 / 续费会员</h2>
+          <p class="muted">LINUX DO Credit 积分支付 · 时长与现有有效期叠加</p>
+        </div>
+        <button id="recharge-close" class="icon-button" type="button" aria-label="关闭直充" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+      </div>
       <form id="recharge-form">
-        <p class="recharge-summary">会员时长：<strong>1 个月</strong><span class="muted">（30 天）</span></p>
-        <p class="recharge-price" id="recharge-price" aria-live="polite"></p>
+        <div class="recharge-plans" role="radiogroup" aria-label="选择会员时长">
+          <label class="recharge-plan"><input type="radio" name="recharge-months" value="1" checked><span class="plan-name">1 个月</span><span class="plan-price" data-plan-price="1"></span></label>
+          <label class="recharge-plan"><input type="radio" name="recharge-months" value="3"><span class="plan-flag" aria-hidden="true">常用</span><span class="plan-name">3 个月</span><span class="plan-price" data-plan-price="3"></span></label>
+          <label class="recharge-plan"><input type="radio" name="recharge-months" value="12"><span class="plan-flag plan-flag-gold" aria-hidden="true">超值</span><span class="plan-name">12 个月</span><span class="plan-price" data-plan-price="12"></span></label>
+          <label class="recharge-plan recharge-plan-custom"><input type="radio" name="recharge-months" value="custom"><span class="plan-name">自定义</span><span class="plan-custom-input"><input id="recharge-months" type="number" min="1" max="36" value="6" aria-label="自定义月数"> 个月</span></label>
+        </div>
+        <div class="recharge-total"><span>需支付</span><strong id="recharge-price" aria-live="polite"></strong></div>
         <p id="recharge-message" class="form-message" role="status" aria-live="polite"></p>
-        <div class="form-actions"><button class="primary-button" type="submit">去支付</button></div>
+        <div class="form-actions recharge-actions"><button class="primary-button recharge-pay" type="submit">✦ 立即开通</button></div>
       </form>
     </dialog>
     <dialog id="wish-form-dialog" class="form-dialog">

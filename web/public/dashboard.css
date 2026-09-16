@@ -2352,3 +2352,73 @@ body.public-dashboard {
 body.public-dashboard > main { flex: 1 1 auto; }
 .public-footer { margin-top: auto; }
 body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
+
+/* ===== LDC 充值弹窗（金色尊贵风） ===== */
+.recharge-dialog { width: min(500px, calc(100vw - 32px)); }
+.recharge-head h2 { display: flex; align-items: center; gap: 8px; }
+.recharge-mark { color: #e8a33d; font-size: 18px; }
+.recharge-plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 14px; }
+.recharge-plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 16px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 140ms ease, box-shadow 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.recharge-plan input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.plan-name { font-weight: 700; font-size: 15px; }
+.plan-price { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plan-flag {
+  position: absolute;
+  top: -9px;
+  right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--shell-on-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.plan-flag-gold { background: linear-gradient(135deg, #f6bd45, #e79a2b); color: #3c2a04; }
+.recharge-plan:hover { border-color: color-mix(in oklab, #e8a33d 55%, var(--border)); transform: translateY(-1px); }
+.recharge-plan:has(input:checked) {
+  border-color: #e8a33d;
+  background: linear-gradient(160deg, color-mix(in oklab, #f6bd45 14%, var(--surface)), var(--surface));
+  box-shadow: 0 2px 12px rgb(232 163 61 / 26%);
+}
+.recharge-plan:has(input:checked) .plan-price { color: #b07615; font-weight: 700; }
+:root[data-theme="dark"] .recharge-plan:has(input:checked) .plan-price { color: #eeb457; }
+.recharge-plan-custom { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 10px; padding: 11px 8px; }
+.plan-custom-input { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.plan-custom-input input { width: 76px; padding: 4px 8px; text-align: center; }
+.recharge-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px dashed color-mix(in oklab, #e8a33d 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in oklab, #f6bd45 7%, var(--surface));
+}
+.recharge-total span { color: var(--muted); font-size: 13px; }
+.recharge-total strong { font-size: 22px; color: #e8a33d; font-variant-numeric: tabular-nums; }
+:root[data-theme="dark"] .recharge-total strong { color: #f0b95c; }
+.recharge-actions { margin-top: 14px; }
+.recharge-pay {
+  width: 100%;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f6bd45, #e79a2b);
+  color: #3c2a04;
+  box-shadow: 0 4px 16px rgb(246 189 69 / 30%);
+}
+.recharge-pay:hover { background: linear-gradient(135deg, #f8c85a, #d98d20); box-shadow: 0 6px 20px rgb(246 189 69 / 40%); }
+.recharge-pay:active { transform: scale(0.98); }

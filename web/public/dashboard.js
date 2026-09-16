@@ -1504,10 +1504,22 @@ document.querySelector('#redeem-form').addEventListener('submit', async (event) 
   }
 });
 
-// ---- LDC 直充会员 ----
+// ---- LDC 直充会员（金色尊贵风：快捷档位 + 自定义月数） ----
+const rechargeForm = document.querySelector('#recharge-form');
+const rechargeMonthsInput = document.querySelector('#recharge-months');
+let rechargeMonths = 1;
+function selectedRechargeMonths() {
+  const checked = rechargeForm.querySelector('input[name="recharge-months"]:checked');
+  if (!checked) return 1;
+  return checked.value === 'custom' ? Math.min(36, Math.max(1, Math.round(Number(rechargeMonthsInput.value) || 0))) : Number(checked.value);
+}
 function updateRechargePrice() {
-  const price = siteSettings.membershipMonthlyPriceLdc || 15;
-  rechargePrice.textContent = `需支付 ${price} LDC（1 个月）`;
+  const unit = Number(siteSettings.membershipMonthlyPriceLdc) || 15;
+  for (const label of rechargeForm.querySelectorAll('[data-plan-price]')) {
+    label.textContent = `${Number(label.dataset.planPrice) * unit} LDC`;
+  }
+  rechargeMonths = selectedRechargeMonths();
+  rechargePrice.textContent = `${rechargeMonths * unit} LDC · ${rechargeMonths} 个月`;
 }
 function openRecharge() {
   updateRechargePrice();
@@ -1522,7 +1534,15 @@ rechargeDialog.addEventListener('click', (event) => {
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) rechargeDialog.close();
   }
 });
-document.querySelector('#recharge-form').addEventListener('submit', async (event) => {
+rechargeForm.addEventListener('change', (event) => {
+  if (event.target.name !== 'recharge-months') return;
+  if (event.target.value === 'custom') rechargeMonthsInput.focus();
+  updateRechargePrice();
+});
+rechargeMonthsInput.addEventListener('input', () => {
+  if (rechargeForm.querySelector('input[name="recharge-months"]:checked')?.value === 'custom') updateRechargePrice();
+});
+rechargeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]');
   if (button.disabled) return;
@@ -1530,7 +1550,7 @@ document.querySelector('#recharge-form').addEventListener('submit', async (event
   button.textContent = '创建订单…';
   rechargeMessage.dataset.state = '';
   try {
-    const response = await fetch('/api/v1/membership/recharge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(20000) });
+    const response = await fetch('/api/v1/membership/recharge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: selectedRechargeMonths() }), signal: AbortSignal.timeout(20000) });
     const payload = await response.json().catch(() => ({}));
     if (response.ok && payload.payUrl) {
       rechargeDialog.close();
@@ -1544,7 +1564,7 @@ document.querySelector('#recharge-form').addEventListener('submit', async (event
     rechargeMessage.textContent = '连接失败，请重试。';
   } finally {
     button.disabled = false;
-    button.textContent = '去支付';
+    button.textContent = '✦ 立即开通';
   }
 });
 

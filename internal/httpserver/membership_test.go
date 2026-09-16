@@ -236,6 +236,29 @@ func TestPaymentFlowWithFakeProvider(t *testing.T) {
 		t.Fatalf("unexpected charge response: %s", recorder.Body.String())
 	}
 
+	// 多月直充：3 个月 → 金额 = 3 × 月价，天数 = 90
+	multi := httptest.NewRequest(http.MethodPost, "/api/v1/membership/recharge", strings.NewReader(`{"months":3}`))
+	multi.AddCookie(cookie)
+	multiRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(multiRecorder, multi)
+	if multiRecorder.Code != http.StatusOK {
+		t.Fatalf("multi-month recharge status = %d body=%s", multiRecorder.Code, multiRecorder.Body.String())
+	}
+	var multiCharge map[string]any
+	_ = json.Unmarshal(multiRecorder.Body.Bytes(), &multiCharge)
+	if amount, _ := multiCharge["amountLdc"].(float64); amount != 45 {
+		t.Fatalf("3-month recharge amount = %v, want 45", multiCharge["amountLdc"])
+	}
+
+	// 非法月数 → 400
+	bad := httptest.NewRequest(http.MethodPost, "/api/v1/membership/recharge", strings.NewReader(`{"months":40}`))
+	bad.AddCookie(cookie)
+	badRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(badRecorder, bad)
+	if badRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("months=40 should be 400, got %d", badRecorder.Code)
+	}
+
 	// 平台异步通知 → 落账 → 会员生效
 	notifyQuery := url.Values{"out_trade_no": {orderNo}, "money": {"15.00"}}
 	notify := httptest.NewRequest(http.MethodGet, "/api/v1/payment/notify?"+notifyQuery.Encode(), nil)
