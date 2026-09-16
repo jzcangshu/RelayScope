@@ -15,6 +15,14 @@ func noStore(next http.Handler) http.Handler {
 	})
 }
 
+// cache5min 允许 CDN 缓存5分钟后回源，适用于静态资源。
+func cache5min(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Cache-Control", "public, max-age=300")
+		next.ServeHTTP(writer, request)
+	})
+}
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'")

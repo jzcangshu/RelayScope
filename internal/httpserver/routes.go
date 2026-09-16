@@ -408,7 +408,7 @@ func NewHandler(options Options) (http.Handler, error) {
 		registerAdminMembershipRoutes(mux, options)
 	}
 	registerUserRoutes(mux, options)
-	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(publicAssets))))
+	mux.Handle("GET /assets/", cache5min(http.StripPrefix("/assets/", http.FileServer(http.FS(publicAssets)))))
 	mux.Handle("GET /admin/", noStore(http.StripPrefix("/admin/", http.FileServer(http.FS(adminAssets)))))
 	mux.Handle("GET /", http.FileServer(http.FS(publicAssets)))
 
