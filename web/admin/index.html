@@ -63,6 +63,7 @@
         <span class="nav-section-label">会员与许愿</span>
         <a class="nav-item" href="#redeem-codes" data-tab="redeem-codes"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>兑换码</span></a>
         <a class="nav-item" href="#wishes" data-tab="wishes"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg><span>许愿池</span></a>
+        <a class="nav-item" href="#members" data-tab="members"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>会员</span></a>
         <span class="nav-section-label">维护</span>
         <a class="nav-item" href="#feedback" data-tab="feedback"><svg class="icon" aria-hidden="true"><use href="#i-message"/></svg><span>用户反馈</span></a>
         <a class="nav-item" href="#system" data-tab="system"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>系统</span></a>
@@ -222,6 +223,19 @@
             <div class="card">
               <div class="card-head"><h2>LDC 订单流水</h2><div class="card-hint"><select id="order-kind-filter" aria-label="按类型筛选订单"><option value="">全部类型</option><option value="membership">会员直充</option><option value="wish">许愿助力</option></select><button type="button" class="btn" id="order-reload">刷新</button></div></div>
               <div class="card-body flush"><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>订单号</th><th>用户</th><th>类型</th><th>内容</th><th>LDC</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="order-list"></tbody></table></div></div>
+            </div>
+          </section>
+
+          <section id="members-panel" class="panel" hidden>
+            <div class="card">
+              <div class="card-head"><h2>会员列表</h2><span class="card-hint">所有曾开通会员的用户（含已过期），按到期时间倒序</span></div>
+              <div class="card-body">
+                <table class="data-table" id="members-table">
+                  <thead><tr><th>用户</th><th>信任等级</th><th>到期时间</th><th>状态</th></tr></thead>
+                  <tbody id="members-list"></tbody>
+                </table>
+                <p id="members-empty" class="muted" hidden>暂无会员记录。</p>
+              </div>
             </div>
           </section>
 

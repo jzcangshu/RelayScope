@@ -234,7 +234,7 @@
   min-width: 0;
   padding: 20px 22px 24px;
 }
-.customize-page .customize-panel { position: static; }
+.customize-page .customize-panel { position: static; overflow-y: visible; overscroll-behavior: auto; }
 
 @media (hover: hover) and (pointer: fine) {
   .topbar .public-nav a:hover { color: var(--accent); }

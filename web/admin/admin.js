@@ -37,8 +37,8 @@ const ACQ_STATES = {
   challenge_failed: ['验证失败', 'chip-danger'],
 };
 const ACQ_ATTENTION = new Set(['collection_failed', 'login_expired', 'challenge_pending', 'challenge_failed']);
-const TAB_TITLES = { overview: '运行概览', sites: '站点管理', rules: '模型规则', runs: '采集记录', unmatched: '未匹配模型', feedback: '用户反馈', 'redeem-codes': '兑换码', wishes: '许愿池', system: '系统信息' };
-const TAB_DESCRIPTIONS = { overview: '查看采集概况，优先处理需要关注的站点。', sites: '接入数据来源，管理采集计划与登录状态。', rules: '把不同上游命名归入标准模型，预览命中并处理冲突。', runs: '按站点查看执行结果与失败原因，最新异常优先展示。', unmatched: '检查尚未归类的模型，从这里直接建立匹配规则。', feedback: '完整查看用户报告的问题与建议。', 'redeem-codes': '批量生成会员兑换码，管理核销与撤销。', wishes: '为许愿站点定价、处理状态与退款。', system: '查看当前服务的版本、构建信息与服务器时间。' };
+const TAB_TITLES = { overview: '运行概览', sites: '站点管理', rules: '模型规则', runs: '采集记录', unmatched: '未匹配模型', feedback: '用户反馈', 'redeem-codes': '兑换码', wishes: '许愿池', members: '会员', system: '系统信息' };
+const TAB_DESCRIPTIONS = { overview: '查看采集概况，优先处理需要关注的站点。', sites: '接入数据来源，管理采集计划与登录状态。', rules: '把不同上游命名归入标准模型，预览命中并处理冲突。', runs: '按站点查看执行结果与失败原因，最新异常优先展示。', unmatched: '检查尚未归类的模型，从这里直接建立匹配规则。', feedback: '完整查看用户报告的问题与建议。', 'redeem-codes': '批量生成会员兑换码，管理核销与撤销。', wishes: '为许愿站点定价、处理状态与退款。', members: '查看已开通会员的用户及其状态。', system: '查看当前服务的版本、构建信息与服务器时间。' };
 const THEME_ICONS = { auto: 'i-monitor', light: 'i-sun', dark: 'i-moon' };
 const THEME_LABELS = { auto: '主题：跟随系统', light: '主题：浅色', dark: '主题：深色' };
 const needsSession = (site) => site.enabled && site.sessionRequired && !site.sessionConfigured;
@@ -255,7 +255,7 @@ async function loadAll() {
   $('#refresh').setAttribute('aria-busy', 'true');
   $('#last-refresh').textContent = '正在更新…';
   Object.keys(collectionViews).forEach(renderCollectionState);
-  const sections = [['系统信息', loadMeta], ['来源类型', loadAdapters], ['站点', loadSites], ['模型规则', loadRules], ['采集记录', loadRuns], ['匹配冲突', loadConflicts], ['反馈', loadFeedback], ['未匹配模型', loadUnmatched], ['兑换码', loadRedeemCodes], ['许愿池', loadWishesAdmin], ['运营设置', loadOperationSettings]];
+  const sections = [['系统信息', loadMeta], ['来源类型', loadAdapters], ['站点', loadSites], ['模型规则', loadRules], ['采集记录', loadRuns], ['匹配冲突', loadConflicts], ['反馈', loadFeedback], ['未匹配模型', loadUnmatched], ['兑换码', loadRedeemCodes], ['许愿池', loadWishesAdmin], ['运营设置', loadOperationSettings], ['会员', loadMembers]];
   const results = await Promise.allSettled(sections.map(([, load]) => load()));
   const failed = results.flatMap((result, index) => result.status === 'rejected' ? [sections[index][0]] : []);
   $('#dashboard-message').hidden = !failed.length;
@@ -756,6 +756,41 @@ async function loadOperationSettings() {
   $('#setting-wish-target').value = operationSettings.wishDefaultTargetLdc;
   $('#setting-site-notice').value = operationSettings.siteNotice || '';
   $('#notice-updated-at').textContent = operationSettings.siteNoticeUpdatedAt ? `最近更新：${operationSettings.siteNoticeUpdatedAt}` : '当前没有公告';
+}
+
+const TRUST_LEVEL_LABELS = { 0: 'L0 未知', 1: 'L1 新用户', 2: 'L2 成员', 3: 'L3 活跃', 4: 'L4 信任', 5: 'L5 领袖' };
+function formatExpiry(expiresAt) {
+  if (!expiresAt) return '—';
+  const d = new Date(expiresAt);
+  const now = new Date();
+  const diff = d - now;
+  const date = d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  if (diff < 0) return date + '（已过期）';
+  if (diff < 7 * 86400000) return date + `（${Math.ceil(diff / 86400000)} 天后）`;
+  return date;
+}
+async function loadMembers() {
+  const data = await readJSON('/api/v1/admin/members');
+  const members = data.members || [];
+  const list = $('#members-list');
+  const empty = $('#members-empty');
+  if (!members.length) {
+    list.innerHTML = '';
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+  list.innerHTML = members.map((m) => {
+    const status = m.active
+      ? '<span class="chip status-paid">有效</span>'
+      : '<span class="chip status-refunded">已过期</span>';
+    return `<tr>
+      <td><strong>${escapeHTML(m.name || m.username)}</strong>${m.name ? `<small class="muted"> @${escapeHTML(m.username)}</small>` : ''}</td>
+      <td>${TRUST_LEVEL_LABELS[m.trustLevel] || 'L' + m.trustLevel}</td>
+      <td>${formatExpiry(m.membershipExpiresAt)}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderRedeemCodes() {

@@ -61,3 +61,39 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO app_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
 }
+
+// MemberUser 描述一个有过会员记录的用户（含过期）。
+type MemberUser struct {
+	ID                  int64      `json:"id"`
+	Username            string     `json:"username"`
+	Name                string     `json:"name"`
+	TrustLevel          int        `json:"trustLevel"`
+	MembershipExpiresAt *time.Time `json:"membershipExpiresAt"`
+	Active              bool       `json:"active"`
+	CreatedAt           time.Time  `json:"createdAt"`
+}
+
+// ListMembers 列出所有曾开通会员的用户（含已过期），按到期时间倒序。
+func (s *Store) ListMembers(ctx context.Context) ([]MemberUser, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, username, name, trust_level, membership_expires_at, created_at FROM users WHERE membership_expires_at IS NOT NULL AND membership_expires_at > 0 ORDER BY membership_expires_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	now := time.Now().UTC()
+	var members []MemberUser
+	for rows.Next() {
+		var m MemberUser
+		var expires *int64
+		if err := rows.Scan(&m.ID, &m.Username, &m.Name, &m.TrustLevel, &expires, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expires != nil && *expires > 0 {
+			expiry := time.UnixMilli(*expires).UTC()
+			m.MembershipExpiresAt = &expiry
+			m.Active = expiry.After(now)
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}

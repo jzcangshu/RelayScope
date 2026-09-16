@@ -79,6 +79,16 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]string{"status": "ok"})
 	}))))
 
+	// 会员列表：列出所有曾开通会员的用户（含已过期），按到期时间倒序
+	mux.Handle("GET /api/v1/admin/members", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		members, err := options.Store.ListMembers(request.Context())
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "查询会员列表失败")
+			return
+		}
+		writeJSON(writer, map[string]any{"members": members})
+	})))
+
 	// 兑换码：批量生成
 	mux.Handle("POST /api/v1/admin/redeem-codes", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload struct {
