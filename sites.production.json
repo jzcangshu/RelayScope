@@ -413,5 +413,13 @@
     "adapter": "newapi-pricing",
     "adapter_config": {},
     "session_required": false
+  },
+  {
+    "name": "Wyatt Happy",
+    "base_url": "https://wyatt-happy.cc.cd",
+    "source_url": "https://wyatt-happy.cc.cd/pricing",
+    "adapter": "newapi-pricing",
+    "adapter_config": {},
+    "session_required": false
   }
 ]
