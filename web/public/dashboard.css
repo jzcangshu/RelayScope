@@ -2328,3 +2328,12 @@
 
 /* 短内容页面（许愿池/定制空态）在暗色下不再露出 html 默认白底 */
 html { background-color: var(--page); }
+
+/* 短内容时页面仍占满视口：页脚贴底，暗色背景自然铺满整屏 */
+body.public-dashboard {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+body.public-dashboard > main { flex: 1 1 auto; }
+.public-footer { margin-top: auto; }
