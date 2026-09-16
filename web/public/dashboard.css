@@ -418,77 +418,216 @@
   font-weight: 650;
 }
 
-/* 排序选择器 */
+/* ===== 排序自定义下拉 ===== */
 .sort-field {
   position: relative;
+}
+
+/* 触发按钮 */
+.sort-trigger {
   display: inline-flex;
-  min-height: 38px;
   align-items: center;
   gap: 6px;
-  padding: 0 28px 0 10px;
+  min-height: 38px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface-subtle);
-  white-space: nowrap;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-}
-
-.sort-field-label {
-  color: var(--muted);
-  font-size: var(--font-small);
-}
-
-.sort-field select {
-  appearance: none;
-  border: 0;
-  background: transparent;
   color: var(--text);
   font: inherit;
   font-size: var(--font-small);
+  white-space: nowrap;
   cursor: pointer;
-  outline: none;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 100ms cubic-bezier(.23, 1, .32, 1);
 }
 
-.sort-field::after {
-  content: "";
-  position: absolute;
-  right: 10px;
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid var(--faint);
-  border-bottom: 1.5px solid var(--faint);
-  transform: rotate(45deg) translateY(-1px);
-  pointer-events: none;
+.sort-trigger:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
 }
 
-.sort-field.gold-active {
+.sort-trigger:active {
+  transform: scale(0.97);
+}
+
+.sort-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.sort-trigger-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sort-trigger-label {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.sort-trigger-chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: var(--faint);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 200ms cubic-bezier(.23, 1, .32, 1);
+}
+
+.sort-trigger.open .sort-trigger-chevron {
+  transform: rotate(180deg);
+}
+
+/* 黑金状态（智能排序已选中 + 会员） */
+.sort-trigger.gold-active {
   border-color: var(--gold-line);
   background: var(--gold-ink);
   color: var(--gold);
   box-shadow: 0 0 0 2px var(--gold-glow);
 }
 
-.sort-field.gold-active .sort-field-label {
+.sort-trigger.gold-active .sort-trigger-icon {
+  stroke: var(--gold);
+}
+
+.sort-trigger.gold-active .sort-trigger-label {
   color: var(--gold);
 }
 
-.sort-field.gold-active select {
-  color: var(--gold);
+.sort-trigger.gold-active .sort-trigger-chevron {
+  stroke: var(--gold);
 }
 
-.sort-field.gold-active::after {
-  border-color: var(--gold);
+/* 下拉面板 */
+.sort-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  transform: translateY(-6px);
+  animation: sort-dropdown-in 180ms cubic-bezier(.23, 1, .32, 1) forwards;
 }
 
-.sort-field select option.smart-option {
+.sort-dropdown[hidden] {
+  display: none;
+}
+
+@keyframes sort-dropdown-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 下拉选项 */
+.sort-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-small);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.sort-option:hover,
+.sort-option:focus-visible {
+  background: var(--surface-subtle);
+  outline: none;
+}
+
+.sort-option:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+.sort-option.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sort-option.selected:hover {
+  background: color-mix(in srgb, var(--accent-soft) 80%, var(--accent));
+}
+
+.sort-mark {
+  color: var(--gold-mark);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.sort-option-label {
+  flex: 1;
+}
+
+.sort-check {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 智能排序选项：金色左侧描边 + hover 金色高亮 */
+.sort-option.smart {
+  position: relative;
+  border-left: 2.5px solid var(--gold-line);
+  margin-left: 0;
+  padding-left: 10px;
+}
+
+.sort-option.smart:hover,
+.sort-option.smart:focus-visible {
+  background: color-mix(in srgb, var(--gold-ink) 8%, var(--surface-subtle));
+}
+
+.sort-option.smart .sort-option-label {
+  color: var(--gold-deep);
+  font-weight: 600;
+}
+
+.sort-option.smart.selected {
+  background: color-mix(in srgb, var(--gold-ink) 12%, var(--surface));
+}
+
+.sort-option.smart.selected .sort-option-label {
+  color: var(--gold-deep);
+}
+
+.sort-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
   background: var(--gold-ink);
   color: var(--gold);
-  font-weight: 650;
-}
-
-.sort-field:has(select:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
 }
 
 /* 定制页排序设置 */

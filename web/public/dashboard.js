@@ -40,7 +40,8 @@ const rechargeClose = document.querySelector('#recharge-close');
 const rechargePrice = document.querySelector('#recharge-price');
 const pledgeCredit = document.querySelector('#pledge-credit');
 const rechargeMessage = document.querySelector('#recharge-message');
-const sortSelect = document.querySelector('#sort-mode');
+const sortTrigger = document.querySelector('#sort-mode');
+const sortDropdown = document.querySelector('#sort-dropdown');
 const wishPage = document.querySelector('#wish-page');
 const wishList = document.querySelector('#wish-list');
 const wishNewButton = document.querySelector('#wish-new');
@@ -1072,22 +1073,71 @@ siteViewButton.addEventListener('click', () => {
   renderSortSelect();
   render();
 });
-if (sortSelect) {
-  sortSelect.addEventListener('change', () => {
-    const value = sortSelect.value;
-    if (value === 'smart' && membershipIs() !== 'active') {
-      sortSelect.value = sortMode[view];
-      showToast('✦ 智能排序为会员专属功能');
-      openRecharge();
-      return;
+function closeSortDropdown() {
+  if (!sortDropdown) return;
+  sortDropdown.hidden = true;
+  sortTrigger.setAttribute('aria-expanded', 'false');
+  sortTrigger.classList.remove('open');
+}
+
+function selectSortOption(value) {
+  if (value === 'smart' && membershipIs() !== 'active') {
+    closeSortDropdown();
+    showToast('✦ 智能排序为会员专属功能');
+    openRecharge();
+    return;
+  }
+  sortMode[view] = value;
+  closeSortDropdown();
+  currentPage = 1;
+  render();
+  renderSortSelect();
+  if (membershipIs() === 'active') saveSorting();
+}
+
+if (sortTrigger) {
+  sortTrigger.addEventListener('click', () => {
+    const isOpen = !sortDropdown.hidden;
+    if (isOpen) { closeSortDropdown(); return; }
+    sortDropdown.hidden = false;
+    sortTrigger.setAttribute('aria-expanded', 'true');
+    sortTrigger.classList.add('open');
+    // 选中当前项获得焦点
+    const current = sortDropdown.querySelector('.sort-option.selected');
+    if (current) current.focus();
+  });
+  sortTrigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeSortDropdown();
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      sortDropdown.hidden = false;
+      sortTrigger.setAttribute('aria-expanded', 'true');
+      sortTrigger.classList.add('open');
+      const current = sortDropdown.querySelector('.sort-option.selected');
+      if (current) current.focus();
     }
-    sortMode[view] = value;
-    currentPage = 1;
-    render();
-    sortSelect.classList.toggle('gold-active', value === 'smart');
-    if (membershipIs() === 'active') saveSorting();
   });
 }
+if (sortDropdown) {
+  sortDropdown.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sort-option');
+    if (btn) selectSortOption(btn.dataset.value);
+  });
+  sortDropdown.addEventListener('keydown', (e) => {
+    const options = [...sortDropdown.querySelectorAll('.sort-option')];
+    const idx = options.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); options[Math.min(idx + 1, options.length - 1)]?.focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); options[Math.max(idx - 1, 0)]?.focus(); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (idx >= 0) selectSortOption(options[idx].dataset.value); }
+    if (e.key === 'Escape') { closeSortDropdown(); sortTrigger.focus(); }
+    if (e.key === 'Tab') closeSortDropdown();
+  });
+}
+// 点击外部关闭
+document.addEventListener('click', (e) => {
+  if (!sortDropdown || sortDropdown.hidden) return;
+  if (!e.target.closest('.sort-field')) closeSortDropdown();
+});
 themeToggle.addEventListener('click', () => {
   const modes = ['auto', 'light', 'dark'];
   const preference = modes[(modes.indexOf(themeToggle.dataset.mode) + 1) % modes.length];
@@ -1144,14 +1194,23 @@ function dimensionCounts(definition) {
 }
 
 function renderSortSelect() {
-  if (!sortSelect) return;
+  if (!sortTrigger || !sortDropdown) return;
   const options = SORT_OPTIONS[view] || SORT_OPTIONS.model;
   const isMember = membershipIs() === 'active';
-  sortSelect.innerHTML = options.map((o) => {
-    const label = o.gold && !isMember ? `${o.label} · 会员` : o.label;
-    return `<option value="${o.value}"${sortMode[view] === o.value ? ' selected' : ''}${o.gold ? ' class="smart-option"' : ''}>${label}</option>`;
+  const current = options.find((o) => o.value === sortMode[view]) || options[0];
+  // 更新触发按钮
+  const label = current.gold && !isMember ? '✦ 智能排序' : current.label;
+  sortTrigger.querySelector('.sort-trigger-label').textContent = label;
+  sortTrigger.classList.toggle('gold-active', current.gold && isMember);
+  // 构建下拉选项
+  sortDropdown.innerHTML = options.map((o) => {
+    const isSelected = sortMode[view] === o.value;
+    const isSmart = o.gold;
+    const displayLabel = isSmart && !isMember ? '智能排序' : o.label.replace('✦ ', '');
+    const badge = isSmart && !isMember ? '<span class="sort-badge">会员</span>' : '';
+    const mark = isSmart ? '<span class="sort-mark" aria-hidden="true">✦</span>' : '';
+    return `<button class="sort-option${isSelected ? ' selected' : ''}${isSmart ? ' smart' : ''}" role="option" data-value="${o.value}"${isSelected ? ' aria-selected="true"' : ''} tabindex="${isSelected ? '0' : '-1'}">${mark}<span class="sort-option-label">${displayLabel}</span>${badge}${isSelected ? '<svg class="sort-check" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m5 13 4 4L19 7" /></svg>' : ''}</button>`;
   }).join('');
-  sortSelect.classList.toggle('gold-active', sortMode[view] === 'smart');
 }
 
 function renderCustomizeDisplay() {

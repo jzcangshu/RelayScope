@@ -46,8 +46,12 @@
         <button id="site-view" type="button" aria-pressed="false">按站点分类</button>
       </div>
       <div class="sort-field" id="sort-field">
-        <span class="sort-field-label">排序</span>
-        <select id="sort-mode" aria-label="排序方式"></select>
+        <button class="sort-trigger" id="sort-mode" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="排序方式">
+          <svg class="sort-trigger-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 6h18M3 12h12M3 18h6" /></svg>
+          <span class="sort-trigger-label"></span>
+          <svg class="sort-trigger-chevron" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+        <div class="sort-dropdown" id="sort-dropdown" role="listbox" aria-label="排序方式" hidden></div>
       </div>
     </section>
     <section class="summary" id="summary" aria-live="polite"></section>
