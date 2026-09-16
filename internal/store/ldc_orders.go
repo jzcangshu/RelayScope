@@ -14,6 +14,9 @@ const (
 	OrderStatusPaid      = "paid"
 	OrderStatusRefunded  = "refunded"
 	OrderStatusCancelled = "cancelled"
+
+	OrderFundingLDC    = "ldc"
+	OrderFundingCredit = "credit"
 )
 
 type LDCOrder struct {
@@ -24,6 +27,7 @@ type LDCOrder struct {
 	WishSiteID      *int64     `json:"wishSiteId"`
 	Days            *int64     `json:"days"`
 	AmountLDC       int64      `json:"amountLdc"`
+	Funding         string     `json:"funding"`
 	Status          string     `json:"status"`
 	PlatformTradeNo string     `json:"platformTradeNo"`
 	Username        string     `json:"username,omitempty"`
@@ -48,8 +52,13 @@ func (s *Store) CreateOrder(ctx context.Context, order LDCOrder) (LDCOrder, erro
 		return LDCOrder{}, errors.New("invalid order kind")
 	}
 	now := time.Now().UTC()
-	result, err := s.db.ExecContext(ctx, `INSERT INTO ldc_orders(order_no, user_id, kind, wish_site_id, days, amount_ldc, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		order.OrderNo, order.UserID, order.Kind, order.WishSiteID, order.Days, order.AmountLDC, OrderStatusPending, unixMilli(now))
+	funding := order.Funding
+	if funding != OrderFundingCredit {
+		funding = OrderFundingLDC
+	}
+	order.Funding = funding
+	result, err := s.db.ExecContext(ctx, `INSERT INTO ldc_orders(order_no, user_id, kind, wish_site_id, days, amount_ldc, funding, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		order.OrderNo, order.UserID, order.Kind, order.WishSiteID, order.Days, order.AmountLDC, funding, OrderStatusPending, unixMilli(now))
 	if err != nil {
 		return LDCOrder{}, err
 	}
@@ -68,8 +77,8 @@ func (s *Store) GetOrder(ctx context.Context, id int64) (LDCOrder, error) {
 	var wishID, days *int64
 	var created int64
 	var paidAt *int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, status, platform_trade_no, created_at, paid_at FROM ldc_orders WHERE id = ?`, id).
-		Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Status, &o.PlatformTradeNo, &created, &paidAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, funding, status, platform_trade_no, created_at, paid_at FROM ldc_orders WHERE id = ?`, id).
+		Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Funding, &o.Status, &o.PlatformTradeNo, &created, &paidAt)
 	if err != nil {
 		return LDCOrder{}, err
 	}
@@ -88,8 +97,8 @@ func (s *Store) GetOrderByNo(ctx context.Context, orderNo string) (LDCOrder, err
 	var wishID, days *int64
 	var created int64
 	var paidAt *int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, status, platform_trade_no, created_at, paid_at FROM ldc_orders WHERE order_no = ?`, orderNo).
-		Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Status, &o.PlatformTradeNo, &created, &paidAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, funding, status, platform_trade_no, created_at, paid_at FROM ldc_orders WHERE order_no = ?`, orderNo).
+		Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Funding, &o.Status, &o.PlatformTradeNo, &created, &paidAt)
 	if err != nil {
 		return LDCOrder{}, err
 	}
@@ -122,8 +131,8 @@ func (s *Store) MarkOrderPaid(ctx context.Context, orderNo, platformTradeNo stri
 	}
 	var order LDCOrder
 	var wishID, days *int64
-	if err := tx.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, status FROM ldc_orders WHERE order_no = ?`, orderNo).
-		Scan(&order.ID, &order.OrderNo, &order.UserID, &order.Kind, &wishID, &days, &order.AmountLDC, &order.Status); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, funding, status FROM ldc_orders WHERE order_no = ?`, orderNo).
+		Scan(&order.ID, &order.OrderNo, &order.UserID, &order.Kind, &wishID, &days, &order.AmountLDC, &order.Funding, &order.Status); err != nil {
 		return LDCOrder{}, false, err
 	}
 	order.WishSiteID = wishID
@@ -168,8 +177,8 @@ func (s *Store) MarkOrderRefunded(ctx context.Context, orderID int64) (LDCOrder,
 	}
 	var order LDCOrder
 	var wishID, days *int64
-	if err := tx.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, status FROM ldc_orders WHERE id = ?`, orderID).
-		Scan(&order.ID, &order.OrderNo, &order.UserID, &order.Kind, &wishID, &days, &order.AmountLDC, &order.Status); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, funding, status FROM ldc_orders WHERE id = ?`, orderID).
+		Scan(&order.ID, &order.OrderNo, &order.UserID, &order.Kind, &wishID, &days, &order.AmountLDC, &order.Funding, &order.Status); err != nil {
 		return LDCOrder{}, err
 	}
 	if wishID != nil {
@@ -208,7 +217,7 @@ func (s *Store) ListOrders(ctx context.Context, userID int64, kind, status strin
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := `SELECT o.id, o.order_no, o.user_id, o.kind, o.wish_site_id, o.days, o.amount_ldc, o.status, o.platform_trade_no, o.created_at, o.paid_at, u.username
+	query := `SELECT o.id, o.order_no, o.user_id, o.kind, o.wish_site_id, o.days, o.amount_ldc, o.funding, o.status, o.platform_trade_no, o.created_at, o.paid_at, u.username
 		FROM ldc_orders o JOIN users u ON u.id = o.user_id WHERE 1 = 1`
 	args := []any{}
 	if userID > 0 {
@@ -236,7 +245,7 @@ func (s *Store) ListOrders(ctx context.Context, userID int64, kind, status strin
 		var wishID, days *int64
 		var created int64
 		var paidAt *int64
-		if err := rows.Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Status, &o.PlatformTradeNo, &created, &paidAt, &o.Username); err != nil {
+		if err := rows.Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Kind, &wishID, &days, &o.AmountLDC, &o.Funding, &o.Status, &o.PlatformTradeNo, &created, &paidAt, &o.Username); err != nil {
 			return nil, err
 		}
 		o.WishSiteID = wishID

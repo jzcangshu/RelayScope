@@ -18,12 +18,16 @@ import (
 )
 
 const (
-	settingMembershipLdcPerDay = "membership_ldc_per_day"
-	settingWishDefaultTarget   = "wish_default_target_ldc"
+	settingMembershipMonthlyPrice = "membership_monthly_price_ldc"
+	settingWishDefaultTarget      = "wish_default_target_ldc"
+	settingWishFreeCredit         = "wish_free_credit_ldc"
 
-	defaultMembershipLdcPerDay = "1"
-	defaultWishDefaultTarget   = "30"
+	defaultMembershipMonthlyPrice = "15"
+	defaultWishDefaultTarget      = "30"
+	defaultWishFreeCredit         = "10"
 )
+
+const membershipDaysPerMonth = int64(30)
 
 // registerUserRoutes 注册面向登录用户的会员/偏好/许愿/支付路由。
 func registerUserRoutes(mux *http.ServeMux, options Options) {
@@ -97,7 +101,7 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]any{"status": "ok", "membership": membership})
 	})
 
-	// POST /api/v1/membership/recharge —— LDC 直充会员
+	// POST /api/v1/membership/recharge —— LDC 直充会员（只能按月起充）
 	mux.HandleFunc("POST /api/v1/membership/recharge", func(writer http.ResponseWriter, request *http.Request) {
 		user, ok := requireUser(options, writer, request)
 		if !ok {
@@ -107,21 +111,11 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 			writeError(writer, http.StatusTooManyRequests, "操作过于频繁，请稍后再试")
 			return
 		}
-		var payload struct {
-			Days int64 `json:"days"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 4<<10)).Decode(&payload); err != nil {
-			writeError(writer, http.StatusBadRequest, "参数格式错误")
-			return
-		}
-		if payload.Days < 1 || payload.Days > 3650 {
-			writeError(writer, http.StatusBadRequest, "会员天数需在 1-3650 之间")
-			return
-		}
+		days := membershipDaysPerMonth
 		chargeOrder, err := createChargeOrder(options, request.Context(), user.ID, store.LDCOrder{
-			UserID: user.ID, Kind: store.OrderKindMembership, Days: &payload.Days,
-			AmountLDC: payload.Days * membershipLdcPerDay(request.Context(), options.Store),
-		}, "会员 "+strconv.FormatInt(payload.Days, 10)+" 天")
+			UserID: user.ID, Kind: store.OrderKindMembership, Days: &days,
+			AmountLDC: membershipMonthlyPrice(request.Context(), options.Store),
+		}, "会员 1 个月")
 		if err != nil {
 			emitOrderError(writer, err)
 			return
@@ -175,7 +169,30 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]any{"wish": wish})
 	})
 
-	// POST /api/v1/wishes/{id}/pledge —— 为许愿站点助力（LDC 支付）
+	// GET /api/v1/me/wish-credit —— 本人当月免费许愿额度（会员惰性发放）
+	mux.HandleFunc("GET /api/v1/me/wish-credit", func(writer http.ResponseWriter, request *http.Request) {
+		user, ok := requireUser(options, writer, request)
+		if !ok {
+			return
+		}
+		membership, err := options.Store.GetMembership(request.Context(), user.ID)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "读取会员状态失败")
+			return
+		}
+		if !membership.Active {
+			writeJSON(writer, map[string]any{"eligible": false, "available": 0})
+			return
+		}
+		available, err := options.Store.EnsureMonthlyCredit(request.Context(), user.ID, wishFreeCreditLdc(request.Context(), options.Store), options.Now())
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "读取许愿额度失败")
+			return
+		}
+		writeJSON(writer, map[string]any{"eligible": true, "available": available})
+	})
+
+	// POST /api/v1/wishes/{id}/pledge —— 为许愿站点助力（免费额度优先抵扣，差额 LDC 支付）
 	mux.HandleFunc("POST /api/v1/wishes/{id}/pledge", func(writer http.ResponseWriter, request *http.Request) {
 		user, ok := requireUser(options, writer, request)
 		if !ok {
@@ -210,13 +227,49 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 			writeError(writer, http.StatusBadRequest, "助力金额需在 1-10000 LDC 之间")
 			return
 		}
+		now := options.Now()
+		// 会员免费额度优先抵扣：额度部分立即落为已支付订单（进度即时计入）
+		creditUsed := int64(0)
+		if membership, err := options.Store.GetMembership(request.Context(), user.ID); err == nil && membership.Active {
+			if available, err := options.Store.EnsureMonthlyCredit(request.Context(), user.ID, wishFreeCreditLdc(request.Context(), options.Store), now); err == nil && available > 0 {
+				if consumed, err := options.Store.ConsumeMonthlyCredit(request.Context(), user.ID, payload.AmountLDC, now); err == nil && consumed > 0 {
+					creditUsed = consumed
+				}
+			}
+		}
+		if creditUsed > 0 {
+			creditOrderNo, err := newOrderNo()
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "创建订单失败")
+				return
+			}
+			creditOrder, err := options.Store.CreateOrder(request.Context(), store.LDCOrder{
+				OrderNo: creditOrderNo, UserID: user.ID, Kind: store.OrderKindWish, WishSiteID: &site.ID,
+				AmountLDC: creditUsed, Funding: store.OrderFundingCredit,
+			})
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "创建订单失败")
+				return
+			}
+			if _, _, err := options.Store.MarkOrderPaid(request.Context(), creditOrder.OrderNo, "CREDIT"); err != nil {
+				writeError(writer, http.StatusInternalServerError, "订单状态更新失败")
+				return
+			}
+		}
+		remaining := payload.AmountLDC - creditUsed
+		if remaining <= 0 {
+			writeJSON(writer, map[string]any{"creditUsed": creditUsed, "amountLdc": payload.AmountLDC})
+			return
+		}
 		chargeOrder, err := createChargeOrder(options, request.Context(), user.ID, store.LDCOrder{
-			UserID: user.ID, Kind: store.OrderKindWish, WishSiteID: &site.ID, AmountLDC: payload.AmountLDC,
+			UserID: user.ID, Kind: store.OrderKindWish, WishSiteID: &site.ID, AmountLDC: remaining,
 		}, "许愿助力 · "+site.Name)
 		if err != nil {
 			emitOrderError(writer, err)
 			return
 		}
+		chargeOrder["creditUsed"] = creditUsed
+		chargeOrder["amountLdc"] = payload.AmountLDC
 		writeJSON(writer, chargeOrder)
 	})
 
@@ -343,8 +396,12 @@ func moneyToLDC(raw string) int64 {
 	return int64(value + 0.5)
 }
 
-func membershipLdcPerDay(ctx context.Context, db *store.Store) int64 {
-	return settingInt64(ctx, db, settingMembershipLdcPerDay, defaultMembershipLdcPerDay)
+func membershipMonthlyPrice(ctx context.Context, db *store.Store) int64 {
+	return settingInt64(ctx, db, settingMembershipMonthlyPrice, defaultMembershipMonthlyPrice)
+}
+
+func wishFreeCreditLdc(ctx context.Context, db *store.Store) int64 {
+	return settingInt64(ctx, db, settingWishFreeCredit, defaultWishFreeCredit)
 }
 
 func wishDefaultTarget(ctx context.Context, db *store.Store) int64 {
@@ -362,10 +419,10 @@ func settingInt64(ctx context.Context, db *store.Store, key, fallback string) in
 func parseClampedInt(raw string) int64 {
 	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 	if err != nil || value < 1 {
-		return 1
+		value = 1
 	}
 	if value > 10000 {
-		return 10000
+		value = 10000
 	}
 	return value
 }

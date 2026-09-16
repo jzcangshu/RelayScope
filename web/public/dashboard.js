@@ -37,8 +37,8 @@ const redeemCodeInput = document.querySelector('#redeem-code');
 const redeemMessage = document.querySelector('#redeem-message');
 const rechargeDialog = document.querySelector('#recharge-dialog');
 const rechargeClose = document.querySelector('#recharge-close');
-const rechargeDaysInput = document.querySelector('#recharge-days');
 const rechargePrice = document.querySelector('#recharge-price');
+const pledgeCredit = document.querySelector('#pledge-credit');
 const rechargeMessage = document.querySelector('#recharge-message');
 const wishPage = document.querySelector('#wish-page');
 const wishList = document.querySelector('#wish-list');
@@ -1210,7 +1210,8 @@ let currentUser = null;
 let membership = null;
 let cloudSynced = false;
 let cloudSaveTimer = null;
-let siteSettings = { membershipLdcPerDay: 1, wishDefaultTargetLdc: 30 };
+let siteSettings = { membershipMonthlyPriceLdc: 15, wishDefaultTargetLdc: 30 };
+let pledgeCreditAvailable = 0;
 let wishItems = [];
 let pledgeTargetId = null;
 
@@ -1442,12 +1443,10 @@ document.querySelector('#redeem-form').addEventListener('submit', async (event) 
 
 // ---- LDC 直充会员 ----
 function updateRechargePrice() {
-  const days = Math.max(1, Math.min(3650, parseInt(rechargeDaysInput.value, 10) || 0));
-  const rate = siteSettings.membershipLdcPerDay || 1;
-  rechargePrice.textContent = `需支付 ${days * rate} LDC（${days} 天 × ${rate} LDC/天）`;
+  const price = siteSettings.membershipMonthlyPriceLdc || 15;
+  rechargePrice.textContent = `需支付 ${price} LDC（1 个月）`;
 }
 function openRecharge() {
-  rechargeDaysInput.value = 30;
   updateRechargePrice();
   rechargeMessage.textContent = '';
   rechargeMessage.dataset.state = '';
@@ -1460,21 +1459,15 @@ rechargeDialog.addEventListener('click', (event) => {
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) rechargeDialog.close();
   }
 });
-rechargeDaysInput.addEventListener('input', updateRechargePrice);
-document.querySelectorAll('[data-recharge-days]').forEach((chip) => chip.addEventListener('click', () => {
-  rechargeDaysInput.value = chip.dataset.rechargeDays;
-  updateRechargePrice();
-}));
 document.querySelector('#recharge-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = event.currentTarget.querySelector('button[type="submit"]');
   if (button.disabled) return;
-  const days = Math.max(1, Math.min(3650, parseInt(rechargeDaysInput.value, 10) || 0));
   button.disabled = true;
   button.textContent = '创建订单…';
   rechargeMessage.dataset.state = '';
   try {
-    const response = await fetch('/api/v1/membership/recharge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }), signal: AbortSignal.timeout(20000) });
+    const response = await fetch('/api/v1/membership/recharge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(20000) });
     const payload = await response.json().catch(() => ({}));
     if (response.ok && payload.payUrl) {
       rechargeDialog.close();
@@ -1630,7 +1623,23 @@ wishList.addEventListener('click', (event) => {
   pledgeAmountInput.value = 10;
   pledgeMessage.textContent = '';
   pledgeMessage.dataset.state = '';
+  pledgeCreditAvailable = 0;
+  pledgeCredit.hidden = true;
   pledgeDialog.showModal();
+  fetch('/api/v1/me/wish-credit', { cache: 'no-store' })
+    .then((response) => response.ok ? response.json() : null)
+    .then((payload) => {
+      if (!payload || !pledgeDialog.open) return;
+      if (payload.eligible && payload.available > 0) {
+        pledgeCreditAvailable = payload.available;
+        pledgeCredit.hidden = false;
+        pledgeCredit.textContent = `本月免费许愿额度：可用 ${payload.available} LDC，助力时优先抵扣`;
+      } else if (payload.eligible) {
+        pledgeCredit.hidden = false;
+        pledgeCredit.textContent = '本月免费许愿额度已用完';
+      }
+    })
+    .catch(() => {});
 });
 pledgeClose.addEventListener('click', () => pledgeDialog.close());
 document.querySelectorAll('[data-pledge-amount]').forEach((chip) => chip.addEventListener('click', () => {
@@ -1649,7 +1658,12 @@ document.querySelector('#pledge-form').addEventListener('submit', async (event) 
     const payload = await response.json().catch(() => ({}));
     if (response.ok && payload.payUrl) {
       pledgeDialog.close();
+      if (payload.creditUsed > 0) showToast(`已使用 ${payload.creditUsed} LDC 免费额度，剩余 ${payload.amountLdc - payload.creditUsed} LDC 请完成支付`, 'success');
       window.location.assign(payload.payUrl);
+    } else if (response.ok && payload.creditUsed > 0) {
+      pledgeDialog.close();
+      showToast(`已用免费额度助力 ${payload.creditUsed} LDC，感谢支持！`, 'success');
+      await loadWishes();
     } else {
       pledgeMessage.dataset.state = 'error';
       pledgeMessage.textContent = payload.error || '下单失败，请稍后再试。';
@@ -1704,7 +1718,7 @@ async function loadSiteSettings() {
     const response = await fetch('/api/v1/meta', { cache: 'no-store' });
     if (!response.ok) return;
     const meta = await response.json();
-    siteSettings.membershipLdcPerDay = parseInt(meta.membershipLdcPerDay, 10) || 1;
+    siteSettings.membershipMonthlyPriceLdc = parseInt(meta.membershipMonthlyPriceLdc, 10) || 15;
     siteSettings.wishDefaultTargetLdc = parseInt(meta.wishDefaultTargetLdc, 10) || 30;
   } catch { /* 用默认值 */ }
 }

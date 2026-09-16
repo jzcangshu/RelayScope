@@ -2122,3 +2122,17 @@
 
 /* hash 路由切换：display 规则会覆盖 [hidden] 默认值，这里显式压制 */
 .toolbar[hidden], .summary[hidden], .filter-layout[hidden], #wish-page[hidden] { display: none; }
+
+/* ===== 按月直充与免费许愿额度 ===== */
+.recharge-summary { margin: 0; font-size: var(--font-body); }
+.recharge-summary .muted { font-size: var(--font-small); }
+.pledge-credit {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in oklab, var(--healthy) 35%, var(--border));
+  border-radius: 8px;
+  background: var(--healthy-soft);
+  color: var(--healthy);
+  font-size: var(--font-small);
+  font-weight: 600;
+}

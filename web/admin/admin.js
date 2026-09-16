@@ -728,7 +728,7 @@ $('#session-dialog').addEventListener('close', () => { $('#session-payload').val
 let redeemCodes = [];
 let adminWishes = [];
 let adminOrders = [];
-let operationSettings = { membershipLdcPerDay: 1, wishDefaultTargetLdc: 30 };
+let operationSettings = { membershipMonthlyPriceLdc: 15, wishDefaultTargetLdc: 30, wishFreeCreditLdc: 10 };
 let lastGeneratedCodes = [];
 
 const REDEEM_STATUS_LABELS = { unused: '未使用', used: '已使用', revoked: '已撤销' };
@@ -751,7 +751,8 @@ async function loadOrders() {
 }
 async function loadOperationSettings() {
   operationSettings = await readJSON('/api/v1/admin/settings');
-  $('#setting-membership-price').value = operationSettings.membershipLdcPerDay;
+  $('#setting-membership-price').value = operationSettings.membershipMonthlyPriceLdc;
+  $('#setting-wish-credit').value = operationSettings.wishFreeCreditLdc;
   $('#setting-wish-target').value = operationSettings.wishDefaultTargetLdc;
 }
 
@@ -791,7 +792,7 @@ function renderOrders() {
     return '<tr>' +
       '<td class="mono">' + escapeHTML(order.orderNo) + '</td>' +
       '<td>@' + escapeHTML(order.username || String(order.userId)) + '</td>' +
-      '<td>' + (order.kind === 'membership' ? '会员直充' : '许愿助力') + '</td>' +
+      '<td>' + (order.kind === 'membership' ? '会员直充' : '许愿助力' + (order.funding === 'credit' ? '（免费额度）' : '')) + '</td>' +
       '<td>' + escapeHTML(content) + '</td>' +
       '<td>' + order.amountLdc + '</td>' +
       '<td><span class="chip status-order-' + order.status + '">' + (ORDER_STATUS_LABELS[order.status] || order.status) + '</span></td>' +
@@ -848,7 +849,8 @@ $('#settings-form').addEventListener('submit', (event) => {
   event.preventDefault();
   runAction(event.submitter, async () => {
     await saveRequest('/api/v1/admin/settings', 'PATCH', {
-      membershipLdcPerDay: Number($('#setting-membership-price').value),
+      membershipMonthlyPriceLdc: Number($('#setting-membership-price').value),
+      wishFreeCreditLdc: Number($('#setting-wish-credit').value),
       wishDefaultTargetLdc: Number($('#setting-wish-target').value)
     });
     toast('运营设置已保存', 'success');

@@ -222,7 +222,7 @@ func TestPaymentFlowWithFakeProvider(t *testing.T) {
 	wish, _ := db.CreateWishSite(context.Background(), user.ID, "目标站", "https://target.example.com", false, 30)
 
 	// 会员直充
-	recharge := httptest.NewRequest(http.MethodPost, "/api/v1/membership/recharge", strings.NewReader(`{"days":30}`))
+	recharge := httptest.NewRequest(http.MethodPost, "/api/v1/membership/recharge", strings.NewReader(`{}`))
 	recharge.AddCookie(cookie)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, recharge)
@@ -237,7 +237,7 @@ func TestPaymentFlowWithFakeProvider(t *testing.T) {
 	}
 
 	// 平台异步通知 → 落账 → 会员生效
-	notifyQuery := url.Values{"out_trade_no": {orderNo}, "money": {"30.00"}}
+	notifyQuery := url.Values{"out_trade_no": {orderNo}, "money": {"15.00"}}
 	notify := httptest.NewRequest(http.MethodGet, "/api/v1/payment/notify?"+notifyQuery.Encode(), nil)
 	notifyRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(notifyRecorder, notify)
@@ -255,7 +255,7 @@ func TestPaymentFlowWithFakeProvider(t *testing.T) {
 		t.Fatalf("replayed notify should still answer success, got %d", replay.Code)
 	}
 
-	// 许愿助力 → 支付 → 达标自动 reached
+	// 许愿助力：会员已激活，10 免费额度优先抵扣，剩余 20 走支付 → 30/30 自动 reached
 	pledge := httptest.NewRequest(http.MethodPost, "/api/v1/wishes/"+strconv.FormatInt(wish.ID, 10)+"/pledge", strings.NewReader(`{"amountLdc":30}`))
 	pledge.AddCookie(cookie)
 	pledgeRecorder := httptest.NewRecorder()
@@ -263,10 +263,17 @@ func TestPaymentFlowWithFakeProvider(t *testing.T) {
 	if pledgeRecorder.Code != http.StatusOK {
 		t.Fatalf("pledge status = %d body=%s", pledgeRecorder.Code, pledgeRecorder.Body.String())
 	}
-	var pledgeCharge map[string]any
+	var pledgeCharge struct {
+		OrderNo    string `json:"orderNo"`
+		CreditUsed int64  `json:"creditUsed"`
+		AmountLDC  int64  `json:"amountLdc"`
+	}
 	_ = json.Unmarshal(pledgeRecorder.Body.Bytes(), &pledgeCharge)
-	pledgeOrderNo, _ := pledgeCharge["orderNo"].(string)
-	notifyQuery = url.Values{"out_trade_no": {pledgeOrderNo}, "money": {"30.00"}}
+	if pledgeCharge.CreditUsed != 10 || pledgeCharge.AmountLDC != 30 {
+		t.Fatalf("pledge should consume 10 credit of 30: %+v", pledgeCharge)
+	}
+	pledgeOrderNo := pledgeCharge.OrderNo
+	notifyQuery = url.Values{"out_trade_no": {pledgeOrderNo}, "money": {"20.00"}}
 	notify2 := httptest.NewRecorder()
 	handler.ServeHTTP(notify2, httptest.NewRequest(http.MethodGet, "/api/v1/payment/notify?"+notifyQuery.Encode(), nil))
 	if notify2.Code != http.StatusOK {
@@ -353,7 +360,7 @@ func TestAdminMembershipEndpoints(t *testing.T) {
 		t.Fatalf("list status = %d", listed.StatusCode)
 	}
 	// 设置
-	if patched := adminWrite(http.MethodPatch, "/api/v1/admin/settings", `{"membershipLdcPerDay":2,"wishDefaultTargetLdc":50}`); patched.StatusCode != http.StatusOK {
+	if patched := adminWrite(http.MethodPatch, "/api/v1/admin/settings", `{"membershipMonthlyPriceLdc":15,"wishDefaultTargetLdc":50,"wishFreeCreditLdc":10}`); patched.StatusCode != http.StatusOK {
 		t.Fatalf("settings patch = %d", patched.StatusCode)
 	}
 	if value, _ := db.GetSetting(context.Background(), "wish_default_target_ldc", "30"); value != "50" {
@@ -383,5 +390,82 @@ func TestAdminMembershipEndpoints(t *testing.T) {
 	}
 	if site, _ := db.GetWishSite(context.Background(), wish.ID); site.Status != store.WishStatusOpen {
 		t.Fatalf("wish should reopen after refund, got %s", site.Status)
+	}
+}
+
+func TestWishCreditPledge(t *testing.T) {
+	provider := &fakeProvider{}
+	db, _ := store.Open(context.Background(), t.TempDir()+"/state.db")
+	defer db.Close()
+	handler := newMembershipTestHandler(t, db, provider, nil, "https://watchbot.cfd")
+	user, _ := db.UpsertUser(context.Background(), "linuxdo", "42", "tester", "Tester", "", 2)
+	service := newLinuxDOService(db)
+	token, _, _ := service.StartSession(user)
+	cookie := &http.Cookie{Name: "relayscope_user", Value: token}
+	wish, _ := db.CreateWishSite(context.Background(), user.ID, "目标站", "https://credit.example.com", false, 30)
+
+	// 非会员：额度端点不合格，助力走全额支付
+	creditReq := httptest.NewRequest(http.MethodGet, "/api/v1/me/wish-credit", nil)
+	creditReq.AddCookie(cookie)
+	creditRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(creditRecorder, creditReq)
+	if !strings.Contains(creditRecorder.Body.String(), `"eligible":false`) {
+		t.Fatalf("non-member should be ineligible: %s", creditRecorder.Body.String())
+	}
+	pledge := httptest.NewRequest(http.MethodPost, "/api/v1/wishes/"+strconv.FormatInt(wish.ID, 10)+"/pledge", strings.NewReader(`{"amountLdc":30}`))
+	pledge.AddCookie(cookie)
+	pledgeRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(pledgeRecorder, pledge)
+	if pledgeRecorder.Code != http.StatusOK || strings.Contains(pledgeRecorder.Body.String(), `"creditUsed":`) && !strings.Contains(pledgeRecorder.Body.String(), `"creditUsed":0`) {
+		t.Fatalf("non-member pledge should use no credit: %s", pledgeRecorder.Body.String())
+	}
+
+	// 会员：10 额度优先抵扣，剩余 20 走支付
+	if _, err := db.ExtendMembership(context.Background(), user.ID, 30); err != nil {
+		t.Fatal(err)
+	}
+	creditReq = httptest.NewRequest(http.MethodGet, "/api/v1/me/wish-credit", nil)
+	creditReq.AddCookie(cookie)
+	creditRecorder = httptest.NewRecorder()
+	handler.ServeHTTP(creditRecorder, creditReq)
+	if !strings.Contains(creditRecorder.Body.String(), `"available":10`) {
+		t.Fatalf("member should have 10 credit: %s", creditRecorder.Body.String())
+	}
+	pledge = httptest.NewRequest(http.MethodPost, "/api/v1/wishes/"+strconv.FormatInt(wish.ID, 10)+"/pledge", strings.NewReader(`{"amountLdc":30}`))
+	pledge.AddCookie(cookie)
+	pledgeRecorder = httptest.NewRecorder()
+	handler.ServeHTTP(pledgeRecorder, pledge)
+	if pledgeRecorder.Code != http.StatusOK {
+		t.Fatalf("member pledge status = %d body=%s", pledgeRecorder.Code, pledgeRecorder.Body.String())
+	}
+	var charge struct {
+		CreditUsed int64  `json:"creditUsed"`
+		AmountLDC  int64  `json:"amountLdc"`
+		PayURL     string `json:"payUrl"`
+	}
+	_ = json.Unmarshal(pledgeRecorder.Body.Bytes(), &charge)
+	if charge.CreditUsed != 10 || charge.AmountLDC != 30 || charge.PayURL == "" {
+		t.Fatalf("mixed pledge mismatch: %+v", charge)
+	}
+	orders, _ := db.ListOrders(context.Background(), user.ID, store.OrderKindWish, "", 10)
+	creditOrders := 0
+	paidSum := int64(0)
+	for _, order := range orders {
+		if order.Funding == store.OrderFundingCredit && order.Status == store.OrderStatusPaid {
+			creditOrders++
+			paidSum += order.AmountLDC
+		}
+	}
+	if creditOrders != 1 || paidSum != 10 {
+		t.Fatalf("credit order should be paid immediately: %d orders sum=%d", creditOrders, paidSum)
+	}
+	// 助力 8 LDC：全额由剩余 2 额度 + 6 支付？剩余额度只有 0（30-10 已耗尽后剩 0）→ 全额支付
+	// 先验证额度已耗尽
+	creditReq = httptest.NewRequest(http.MethodGet, "/api/v1/me/wish-credit", nil)
+	creditReq.AddCookie(cookie)
+	creditRecorder = httptest.NewRecorder()
+	handler.ServeHTTP(creditRecorder, creditReq)
+	if !strings.Contains(creditRecorder.Body.String(), `"available":0`) {
+		t.Fatalf("credit should be exhausted: %s", creditRecorder.Body.String())
 	}
 }

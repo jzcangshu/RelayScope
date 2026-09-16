@@ -88,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/api/v1/meta":
-            return self._json({"revision": "mock-1", "serverTime": NOW, "membershipLdcPerDay": "1", "wishDefaultTargetLdc": "30", "authProviders": ["linuxdo"]})
+            return self._json({"revision": "mock-1", "serverTime": NOW, "membershipMonthlyPriceLdc": "15", "wishDefaultTargetLdc": "30", "authProviders": ["linuxdo"]})
         if path == "/api/v1/public/dashboard":
             return self._json({"revision": "mock-1", "rows": ROWS, "buckets": BUCKETS, "hours": 24})
         if path == "/api/v1/public/announcements":
@@ -101,6 +101,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"authenticated": False})
         if path == "/api/v1/me/preferences":
             return self._json(MOCK_PREFERENCES)
+        if path == "/api/v1/me/wish-credit":
+            if LOGGED_IN:
+                return self._json({"eligible": True, "available": 10})
+            return self._json({"eligible": False, "available": 0})
         if path == "/api/v1/wishes":
             return self._json({"wishes": MOCK_WISHES})
         if path.startswith("/api/v1/payment/orders/"):

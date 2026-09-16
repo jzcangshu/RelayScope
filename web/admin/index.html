@@ -193,11 +193,12 @@
                 </div>
               </div>
               <div class="card">
-                <div class="card-head"><h2>会员直充定价</h2><span class="card-hint">影响公开页 LDC 直充价格</span></div>
+                <div class="card-head"><h2>运营设置</h2><span class="card-hint">会员月费、免费额度与许愿默认目标</span></div>
                 <div class="card-body">
                   <form id="settings-form" class="stack-form">
-                    <label class="field"><span>会员单价（LDC/天）</span><input id="setting-membership-price" type="number" min="1" max="10000" required></label>
-                    <label class="field"><span>许愿默认目标（LDC）</span><input id="setting-wish-target" type="number" min="1" max="10000" required></label>
+                    <label class="field"><span>会员月费（LDC/月，只能按月起充）</span><input id="setting-membership-price" type="number" min="1" max="10000" required></label>
+                    <label class="field"><span>会员每月免费许愿额度（LDC）</span><input id="setting-wish-credit" type="number" min="1" max="10000" required></label>
+                    <label class="field"><span>许愿默认目标（LDC，无需邀请码站点）</span><input id="setting-wish-target" type="number" min="1" max="10000" required></label>
                     <button class="btn btn-primary" type="submit">保存设置</button>
                   </form>
                 </div>

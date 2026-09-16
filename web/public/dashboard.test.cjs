@@ -329,6 +329,9 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(source, /\/api\/v1\/me\/preferences/);
   assert.match(source, /\/api\/v1\/redeem/);
   assert.match(source, /\/api\/v1\/membership\/recharge/);
+  assert.match(source, /\/api\/v1\/me\/wish-credit/);
+  assert.match(source, /membershipMonthlyPriceLdc/);
+  assert.match(source, /pledgeCreditAvailable/);
   assert.match(source, /\/api\/v1\/wishes/);
   assert.match(source, /\/api\/v1\/payment\/orders\//);
   assert.match(source, /membershipIs\(\) !== 'active'/);

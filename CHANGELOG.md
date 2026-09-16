@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refunds). Payment endpoints answer 501 until credentials are configured.
 
 ### Changed
+- Membership recharge is monthly-only (admin-configured price, default 15
+  LDC per 30-day month). Active members receive a monthly free wish credit
+  (default 10 LDC, granted lazily once per calendar month via a unique
+  (user, period) row — no cron) that is consumed first when pledging; the
+  remainder, if any, goes through LDC payment. Credit-funded pledges count
+  toward wish progress immediately.
 - Public dashboard header restores the account entry (login button /
   user menu with redeem, recharge, feedback and logout) and adds a hash-routed
   wish pool page. The feedback dialog returns (its four regression tests pass

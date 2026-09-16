@@ -451,3 +451,69 @@ func TestSettingsRoundTrip(t *testing.T) {
 }
 
 func int64Ptr(v int64) *int64 { return &v }
+
+func TestMonthlyWishCredit(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	// 首次发放 10，重复发放不叠加（每人每月一次）
+	if available, err := db.EnsureMonthlyCredit(ctx, user.ID, 10, now); err != nil || available != 10 {
+		t.Fatalf("first grant: available=%d err=%v", available, err)
+	}
+	if available, _ := db.EnsureMonthlyCredit(ctx, user.ID, 10, now); available != 10 {
+		t.Fatalf("second grant must not stack, available=%d", available)
+	}
+	// 部分消耗
+	consumed, err := db.ConsumeMonthlyCredit(ctx, user.ID, 4, now)
+	if err != nil || consumed != 4 {
+		t.Fatalf("consume 4: consumed=%d err=%v", consumed, err)
+	}
+	if available, _ := db.EnsureMonthlyCredit(ctx, user.ID, 10, now); available != 6 {
+		t.Fatalf("available after consume = %d, want 6", available)
+	}
+	// 超额消耗自动截断
+	consumed, err = db.ConsumeMonthlyCredit(ctx, user.ID, 100, now)
+	if err != nil || consumed != 6 {
+		t.Fatalf("over-consume clamps: consumed=%d err=%v", consumed, err)
+	}
+	if consumed, _ := db.ConsumeMonthlyCredit(ctx, user.ID, 1, now); consumed != 0 {
+		t.Fatalf("exhausted credit must return 0, got %d", consumed)
+	}
+	// 并发消耗不超发：先重置到 10 可用，再 8 个并发各抢 2
+	future := now.AddDate(0, 1, 0)
+	if _, err := db.EnsureMonthlyCredit(ctx, user.ID, 10, future); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	granted := make(chan int, 16)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if used, err := db.ConsumeMonthlyCredit(ctx, user.ID, 2, future); err == nil {
+				granted <- int(used)
+			}
+		}()
+	}
+	wg.Wait()
+	close(granted)
+	total := 0
+	for used := range granted {
+		total += used
+	}
+	if total != 10 {
+		t.Fatalf("concurrent consumption must clamp to granted 10, got %d", total)
+	}
+	// 只读查询不发放
+	other, err := db.UpsertUser(ctx, "linuxdo", "43", "other", "Other", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists, _ := db.GetMonthlyCredit(ctx, other.ID, now); exists {
+		t.Fatal("GetMonthlyCredit must not grant")
+	}
+}

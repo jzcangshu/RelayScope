@@ -17,36 +17,39 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 	}
 	adminJSON := options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(writer, map[string]any{
-			"membershipLdcPerDay":  settingInt64(request.Context(), options.Store, settingMembershipLdcPerDay, defaultMembershipLdcPerDay),
-			"wishDefaultTargetLdc": settingInt64(request.Context(), options.Store, settingWishDefaultTarget, defaultWishDefaultTarget),
+			"membershipMonthlyPriceLdc": settingInt64(request.Context(), options.Store, settingMembershipMonthlyPrice, defaultMembershipMonthlyPrice),
+			"wishDefaultTargetLdc":      settingInt64(request.Context(), options.Store, settingWishDefaultTarget, defaultWishDefaultTarget),
+			"wishFreeCreditLdc":         settingInt64(request.Context(), options.Store, settingWishFreeCredit, defaultWishFreeCredit),
 		})
 	}))
 	mux.Handle("GET /api/v1/admin/settings", adminJSON)
 	mux.Handle("PATCH /api/v1/admin/settings", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload struct {
-			MembershipLdcPerDay  *int64 `json:"membershipLdcPerDay"`
-			WishDefaultTargetLdc *int64 `json:"wishDefaultTargetLdc"`
+			MembershipMonthlyPriceLdc *int64 `json:"membershipMonthlyPriceLdc"`
+			WishDefaultTargetLdc      *int64 `json:"wishDefaultTargetLdc"`
+			WishFreeCreditLdc         *int64 `json:"wishFreeCreditLdc"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8<<10)).Decode(&payload); err != nil {
 			writeError(writer, http.StatusBadRequest, "参数格式错误")
 			return
 		}
-		if payload.MembershipLdcPerDay != nil {
-			if *payload.MembershipLdcPerDay < 1 || *payload.MembershipLdcPerDay > 10000 {
-				writeError(writer, http.StatusBadRequest, "会员单价需在 1-10000 LDC 之间")
+		for _, field := range []struct {
+			name  string
+			value *int64
+			key   string
+		}{
+			{"会员月费", payload.MembershipMonthlyPriceLdc, settingMembershipMonthlyPrice},
+			{"默认许愿目标", payload.WishDefaultTargetLdc, settingWishDefaultTarget},
+			{"每月免费许愿额度", payload.WishFreeCreditLdc, settingWishFreeCredit},
+		} {
+			if field.value == nil {
+				continue
+			}
+			if *field.value < 1 || *field.value > 10000 {
+				writeError(writer, http.StatusBadRequest, field.name+"需在 1-10000 LDC 之间")
 				return
 			}
-			if err := options.Store.SetSetting(request.Context(), settingMembershipLdcPerDay, strconv.FormatInt(*payload.MembershipLdcPerDay, 10)); err != nil {
-				writeError(writer, http.StatusInternalServerError, "设置保存失败")
-				return
-			}
-		}
-		if payload.WishDefaultTargetLdc != nil {
-			if *payload.WishDefaultTargetLdc < 1 || *payload.WishDefaultTargetLdc > 10000 {
-				writeError(writer, http.StatusBadRequest, "默认许愿目标需在 1-10000 LDC 之间")
-				return
-			}
-			if err := options.Store.SetSetting(request.Context(), settingWishDefaultTarget, strconv.FormatInt(*payload.WishDefaultTargetLdc, 10)); err != nil {
+			if err := options.Store.SetSetting(request.Context(), field.key, strconv.FormatInt(*field.value, 10)); err != nil {
 				writeError(writer, http.StatusInternalServerError, "设置保存失败")
 				return
 			}

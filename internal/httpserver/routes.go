@@ -76,8 +76,8 @@ func NewHandler(options Options) (http.Handler, error) {
 				meta["revision"] = revision
 			}
 			// 运营设置公开给前端展示价格用
-			if value, err := options.Store.GetSetting(context.Background(), settingMembershipLdcPerDay, defaultMembershipLdcPerDay); err == nil {
-				meta["membershipLdcPerDay"] = value
+			if value, err := options.Store.GetSetting(context.Background(), settingMembershipMonthlyPrice, defaultMembershipMonthlyPrice); err == nil {
+				meta["membershipMonthlyPriceLdc"] = value
 			}
 			if value, err := options.Store.GetSetting(context.Background(), settingWishDefaultTarget, defaultWishDefaultTarget); err == nil {
 				meta["wishDefaultTargetLdc"] = value
