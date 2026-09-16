@@ -2325,3 +2325,6 @@
 .wish-banner b { color: var(--accent); font-variant-numeric: tabular-nums; }
 .wish-banner-arrow { margin-left: 6px; color: var(--accent); font-weight: 700; }
 .wish-banner[hidden] { display: none; }
+
+/* 短内容页面（许愿池/定制空态）在暗色下不再露出 html 默认白底 */
+html { background-color: var(--page); }
