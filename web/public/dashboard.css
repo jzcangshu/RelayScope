@@ -1212,11 +1212,12 @@
   gap: 4px;
   margin: 2px 0 0;
 }
-/* 卡片内标签与筛选器里的标签胶囊尺寸一致 */
+/* 卡片内标签与筛选器里的标签胶囊样式完全一致 */
 .public-dashboard .card-tags .tag-chip {
   min-height: 28px;
-  padding: 3px 8px;
+  padding: 3px 7px;
   gap: 6px;
+  border-radius: 6px;
   font-size: var(--font-small);
 }
 
