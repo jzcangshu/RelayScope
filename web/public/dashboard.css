@@ -1212,14 +1212,18 @@
   gap: 4px;
   margin: 2px 0 0;
 }
-/* 卡片内标签与筛选器里的标签胶囊样式完全一致 */
+/* 卡片内标签与筛选器里的标签胶囊样式一致，高度略压缩 */
 .public-dashboard .card-tags .tag-chip {
-  min-height: 28px;
-  padding: 3px 7px;
+  min-height: 24px;
+  padding: 2px 7px;
   gap: 6px;
   border-radius: 6px;
   font-size: var(--font-small);
 }
+/* 详情弹窗：subtitle 和按钮同一行 */
+.public-dashboard .detail-head div { display: flex; flex-wrap: wrap; gap: 6px; }
+.public-dashboard .detail-head div h2 { flex: 0 0 100%; }
+.public-dashboard .detail-site-filter { margin-left: 8px; }
 
 /* 标签 chip（卡片、标签管理器、站点行通用） */
 .public-dashboard .tag-chip {
