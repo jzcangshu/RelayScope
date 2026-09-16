@@ -1201,7 +1201,7 @@ function renderSortSelect() {
   // 更新触发按钮
   const label = current.gold && !isMember ? '✦ 智能排序' : current.label;
   sortTrigger.querySelector('.sort-trigger-label').textContent = label;
-  sortTrigger.classList.toggle('gold-active', current.gold && isMember);
+  sortTrigger.classList.toggle('gold-active', !!(current.gold && isMember));
   // 构建下拉选项（智能与普通之间插入分隔线）
   const parts = [];
   options.forEach((o) => {
