@@ -37,8 +37,8 @@ const ACQ_STATES = {
   challenge_failed: ['验证失败', 'chip-danger'],
 };
 const ACQ_ATTENTION = new Set(['collection_failed', 'login_expired', 'challenge_pending', 'challenge_failed']);
-const TAB_TITLES = { overview: '运行概览', sites: '站点管理', rules: '模型规则', runs: '采集记录', unmatched: '未匹配模型', feedback: '用户反馈', redeemCodes: '兑换码', wishes: '许愿池', system: '系统信息' };
-const TAB_DESCRIPTIONS = { overview: '查看采集概况，优先处理需要关注的站点。', sites: '接入数据来源，管理采集计划与登录状态。', rules: '把不同上游命名归入标准模型，预览命中并处理冲突。', runs: '按站点查看执行结果与失败原因，最新异常优先展示。', unmatched: '检查尚未归类的模型，从这里直接建立匹配规则。', feedback: '完整查看用户报告的问题与建议。', redeemCodes: '批量生成会员兑换码，管理核销与撤销。', wishes: '为许愿站点定价、处理状态与退款。', system: '查看当前服务的版本、构建信息与服务器时间。' };
+const TAB_TITLES = { overview: '运行概览', sites: '站点管理', rules: '模型规则', runs: '采集记录', unmatched: '未匹配模型', feedback: '用户反馈', 'redeem-codes': '兑换码', wishes: '许愿池', system: '系统信息' };
+const TAB_DESCRIPTIONS = { overview: '查看采集概况，优先处理需要关注的站点。', sites: '接入数据来源，管理采集计划与登录状态。', rules: '把不同上游命名归入标准模型，预览命中并处理冲突。', runs: '按站点查看执行结果与失败原因，最新异常优先展示。', unmatched: '检查尚未归类的模型，从这里直接建立匹配规则。', feedback: '完整查看用户报告的问题与建议。', 'redeem-codes': '批量生成会员兑换码，管理核销与撤销。', wishes: '为许愿站点定价、处理状态与退款。', system: '查看当前服务的版本、构建信息与服务器时间。' };
 const THEME_ICONS = { auto: 'i-monitor', light: 'i-sun', dark: 'i-moon' };
 const THEME_LABELS = { auto: '主题：跟随系统', light: '主题：浅色', dark: '主题：深色' };
 const needsSession = (site) => site.enabled && site.sessionRequired && !site.sessionConfigured;
