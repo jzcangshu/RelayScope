@@ -85,9 +85,11 @@ func (s *Store) ListMembers(ctx context.Context) ([]MemberUser, error) {
 	for rows.Next() {
 		var m MemberUser
 		var expires *int64
-		if err := rows.Scan(&m.ID, &m.Username, &m.Name, &m.TrustLevel, &expires, &m.CreatedAt); err != nil {
+		var created int64
+		if err := rows.Scan(&m.ID, &m.Username, &m.Name, &m.TrustLevel, &expires, &created); err != nil {
 			return nil, err
 		}
+		m.CreatedAt = time.UnixMilli(created).UTC()
 		if expires != nil && *expires > 0 {
 			expiry := time.UnixMilli(*expires).UTC()
 			m.MembershipExpiresAt = &expiry
