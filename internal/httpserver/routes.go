@@ -408,7 +408,8 @@ func NewHandler(options Options) (http.Handler, error) {
 		registerAdminMembershipRoutes(mux, options)
 	}
 	registerUserRoutes(mux, options)
-	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(publicAssets))))
+	// no-cache：资源变更后浏览器与 Cloudflare 均重新验证（配合 ETag 304），部署即时生效
+	mux.Handle("GET /assets/", noCache(http.StripPrefix("/assets/", http.FileServer(http.FS(publicAssets)))))
 	mux.Handle("GET /admin/", noStore(http.StripPrefix("/admin/", http.FileServer(http.FS(adminAssets)))))
 	mux.Handle("GET /", http.FileServer(http.FS(publicAssets)))
 

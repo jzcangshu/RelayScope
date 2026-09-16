@@ -15,6 +15,15 @@ func noStore(next http.Handler) http.Handler {
 	})
 }
 
+// noCache 允许缓存但每次使用前必须重新验证：静态资源变更后部署即时生效，
+// 未变更的资源通过 ETag 返回 304，不浪费流量。
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(writer, request)
+	})
+}
+
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'")
