@@ -20,8 +20,8 @@ test('public dashboard uses a compact bell control and single announcement title
   assert.match(html, /id="announcement-action" class="theme-toggle announcement-action"/);
   assert.match(html, /运行状态通知/);
   assert.doesNotMatch(html, /service-status|announcement-count|运行公告/);
-  assert.equal((html.match(/class="icon-button"/g) || []).length, 8);
-  assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 8);
+  assert.equal((html.match(/class="icon-button"/g) || []).length, 7);
+  assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 7);
   assert.match(css, /detail-head\.announcement-head h2/);
   assert.match(css, /font-size: 23px/);
   assert.match(css, /color: #000/);
@@ -314,6 +314,10 @@ test('wishProgress handles undecided targets and caps the ratio', () => {
 test('public page wires account, redeem, recharge, wish pool and payment return', () => {
   const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
   assert.match(html, /href="#wishes" data-nav-wishes/);
+  assert.match(html, /href="#customize" data-nav-customize/);
+  assert.match(html, /id="customize-page"/);
+  assert.match(html, /class="public-footer"/);
+  assert.doesNotMatch(html, /customize-dialog/);
   assert.match(html, /id="user-action"/);
   assert.match(html, /id="user-menu"/);
   assert.match(html, /id="wish-page"/);

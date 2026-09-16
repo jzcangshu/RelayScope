@@ -12,9 +12,7 @@ const healthyOnly = document.querySelector('#healthy-only');
 const filterPanel = document.querySelector('#filter-panel');
 const clearFilters = document.querySelector('#clear-filters');
 const themeToggle = document.querySelector('#theme-toggle');
-const customizeDialog = document.querySelector('#customize-dialog');
-const customizeAction = document.querySelector('#customize-action');
-const customizeClose = document.querySelector('#customize-close');
+const customizePage = document.querySelector('#customize-page');
 const customizeTabDisplay = document.querySelector('#customize-tab-display');
 const customizeTabTags = document.querySelector('#customize-tab-tags');
 const customizeDisplayPanel = document.querySelector('#customize-display');
@@ -973,7 +971,7 @@ function handleCustomizeClick(event) {
       renderCustomize();
     } else {
       resetArmed = true;
-      resetTimer = window.setTimeout(() => { resetArmed = false; if (customizeDialog.open) renderCustomize(); }, 2200);
+      resetTimer = window.setTimeout(() => { resetArmed = false; if (!customizePage.hidden) renderCustomize(); }, 2200);
       renderCustomize();
     }
     return;
@@ -1165,26 +1163,11 @@ function handleCustomizeSubmit(event) {
   renderCustomize();
 }
 
-customizeAction.addEventListener('click', () => {
-  openCustomize();
-});
-customizeClose.addEventListener('click', () => customizeDialog.close());
-customizeDialog.addEventListener('close', () => {
-  tagEditor = null;
-  openSiteMenu = null;
-  openColorMenu = null;
-});
-customizeDialog.addEventListener('click', (event) => {
-  if (event.target === customizeDialog) {
-    const bounds = customizeDialog.getBoundingClientRect();
-    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) customizeDialog.close();
-  }
-  handleCustomizeClick(event);
-});
-customizeDialog.addEventListener('change', handleCustomizeChange);
-customizeDialog.addEventListener('input', handleCustomizeInput);
-customizeDialog.addEventListener('submit', handleCustomizeSubmit);
-customizeDialog.addEventListener('focusin', (event) => {
+customizePage.addEventListener('click', handleCustomizeClick);
+customizePage.addEventListener('change', handleCustomizeChange);
+customizePage.addEventListener('input', handleCustomizeInput);
+customizePage.addEventListener('submit', handleCustomizeSubmit);
+customizePage.addEventListener('focusin', (event) => {
   const search = event.target.closest('[data-pref-search]');
   if (search) searchFocusKey = search.dataset.prefSearch;
 });
@@ -1199,7 +1182,7 @@ customizeTabTags.addEventListener('keydown', (event) => {
 document.addEventListener('click', (event) => {
   const hint = event.target.closest('[data-open-customize]');
   if (hint) {
-    openCustomize();
+    window.location.hash = '#customize';
     return;
   }
   if ((openSiteMenu || openColorMenu) && !event.target.closest('.tag-popover')) closeTagMenus();
@@ -1316,7 +1299,7 @@ async function syncPreferencesFromCloud() {
       storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0');
       storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))));
       render();
-      if (customizeDialog.open) renderCustomize();
+      if (!customizePage.hidden) renderCustomize();
       showToast('已同步你的定制设置');
     }
     cloudSynced = true;
@@ -1325,15 +1308,18 @@ async function syncPreferencesFromCloud() {
   } catch { /* 离线：保持本地 */ }
 }
 
-// ---- 定制弹窗门禁 ----
+// ---- 定制页门禁 ----
 function updateCustomizeSubtitle() {
   if (!customizeSubtitle) return;
   if (membershipIs() === 'active') customizeSubtitle.textContent = cloudSynced ? '设置已自动同步到你的账号，换设备也不丢。' : '设置将自动同步到你的账号。';
   else customizeSubtitle.textContent = '个性化设置仅保存在当前浏览器。';
 }
 
-function openCustomize() {
+function enterCustomize() {
   const state = membershipIs();
+  tagEditor = null;
+  openSiteMenu = null;
+  openColorMenu = null;
   if (customizeNav) customizeNav.hidden = state !== 'active';
   customizeTagsPanel.hidden = state !== 'active';
   if (state === 'active') {
@@ -1342,7 +1328,6 @@ function openCustomize() {
     renderCustomizeGate(!currentUser);
   }
   updateCustomizeSubtitle();
-  customizeDialog.showModal();
 }
 
 function renderCustomizeGate(loggedOut) {
@@ -1486,44 +1471,42 @@ document.querySelector('#recharge-form').addEventListener('submit', async (event
 });
 
 // ---- 定制门禁里的入口按钮 ----
-customizeDialog.addEventListener('click', (event) => {
+customizePage.addEventListener('click', (event) => {
   if (event.target.closest('[data-gate-login]')) {
-    customizeDialog.close();
     window.location.assign('/api/v1/auth/linuxdo');
     return;
   }
   if (event.target.closest('[data-gate-redeem]')) {
-    customizeDialog.close();
     redeemCodeInput.value = '';
     redeemMessage.textContent = '';
     redeemDialog.showModal();
     return;
   }
   if (event.target.closest('[data-gate-recharge]')) {
-    customizeDialog.close();
     openRecharge();
   }
 });
 
 // ---- 许愿池页面 ----
 function applyRoute() {
-  const wishView = window.location.hash === '#wishes';
+  const hash = window.location.hash;
+  const wishView = hash === '#wishes';
+  const customizeView = hash === '#customize';
+  const boardView = !wishView && !customizeView;
   wishPage.hidden = !wishView;
-  document.querySelector('.toolbar').hidden = wishView;
-  summaryElement.hidden = wishView;
-  document.querySelector('.filter-layout').hidden = wishView;
-  const navWishes = document.querySelector('[data-nav-wishes]');
-  const navBoard = document.querySelector('[data-nav-board]');
-  if (navWishes && navBoard) {
-    if (wishView) {
-      navWishes.setAttribute('aria-current', 'page');
-      navBoard.removeAttribute('aria-current');
-    } else {
-      navBoard.setAttribute('aria-current', 'page');
-      navWishes.removeAttribute('aria-current');
-    }
+  customizePage.hidden = !customizeView;
+  document.querySelector('.toolbar').hidden = !boardView;
+  summaryElement.hidden = !boardView;
+  document.querySelector('.filter-layout').hidden = !boardView;
+  const navTargets = { board: document.querySelector('[data-nav-board]'), wishes: document.querySelector('[data-nav-wishes]'), customize: document.querySelector('[data-nav-customize]') };
+  const active = customizeView ? 'customize' : wishView ? 'wishes' : 'board';
+  for (const [name, link] of Object.entries(navTargets)) {
+    if (!link) continue;
+    if (name === active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
   }
   if (wishView) loadWishes();
+  if (customizeView) enterCustomize();
 }
 window.addEventListener('hashchange', applyRoute);
 
@@ -1539,26 +1522,43 @@ async function loadWishes() {
   }
 }
 
+function wishStats(items) {
+  const open = items.filter((wish) => wish.status === 'open').length;
+  const reached = items.filter((wish) => wish.status === 'reached' || wish.status === 'connected').length;
+  const totalLdc = items.reduce((sum, wish) => sum + (wish.pledgedLdc || 0), 0);
+  const pledgers = items.reduce((sum, wish) => sum + (wish.pledgers || 0), 0);
+  return { open, reached, totalLdc, pledgers };
+}
+
 function renderWishes() {
+  const stats = wishStats(wishItems);
+  const statsHTML = `<div class="wish-stats" role="group" aria-label="许愿池统计">
+      <div class="wish-stat"><strong>${stats.open}</strong><span>正在许愿</span></div>
+      <div class="wish-stat"><strong>${stats.totalLdc}</strong><span>累计 LDC</span></div>
+      <div class="wish-stat"><strong>${stats.pledgers}</strong><span>人次参与</span></div>
+      <div class="wish-stat accent"><strong>${stats.reached}</strong><span>已达成</span></div>
+    </div>`;
   if (!wishItems.length) {
-    wishList.innerHTML = '<div class="empty"><h1>还没有人许愿</h1><p>第一个被许愿的站点最有可能被接入——点右上角「许愿新站点」开个头。</p></div>';
+    wishList.innerHTML = statsHTML + '<div class="empty wish-empty"><span class="wish-empty-mark" aria-hidden="true">✦</span><h1>许愿池还是空的</h1><p>第一个被许愿的站点最有可能被接入。许下你在用的中转站，攒够 LDC 站长就会安排接入。</p></div>';
     return;
   }
-  wishList.innerHTML = wishItems.map((wish) => {
+  wishList.innerHTML = statsHTML + wishItems.map((wish, index) => {
     const progress = wishProgress(wish.pledgedLdc, wish.targetLdc);
     const statusBadge = wishStatusBadge(wish.status);
     const canPledge = wish.status === 'open' && currentUser;
-    return `<article class="wish-card" data-wish-id="${wish.id}">
+    const remaining = wish.targetLdc != null && wish.status === 'open' ? Math.max(0, wish.targetLdc - wish.pledgedLdc) : null;
+    const remainingNote = remaining === null ? '' : remaining > 0 ? `<span class="wish-remaining">还差 <b>${remaining}</b> LDC 达成</span>` : '<span class="wish-remaining done">目标已达成</span>';
+    return `<article class="wish-card" data-wish-id="${wish.id}" style="--stagger-index:${Math.min(index, 8)}">
       <div class="wish-card-head">
         <div class="wish-card-title"><strong class="wish-name">${escapeHTML(wish.name)}</strong><a class="wish-domain" href="${escapeHTML(wish.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(wish.domain)}<span aria-hidden="true"> ↗</span></a></div>
         <div class="wish-badges">${wish.inviteRequired ? '<span class="wish-badge invite">需邀请码</span>' : ''}${statusBadge ? `<span class="wish-badge ${statusBadge.tone}">${statusBadge.text}</span>` : ''}</div>
       </div>
       <div class="wish-progress-row">
         <div class="wish-progress${progress.undecided ? ' undecided' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="100"${progress.undecided ? '' : ` aria-valuenow="${progress.percent}"`} aria-label="${escapeHTML(wish.name)} 许愿进度"><i style="transform: scaleX(${progress.percent / 100})"></i></div>
-        <span class="wish-progress-label${progress.undecided ? ' undecided' : ''}">${escapeHTML(progress.label)}</span>
+        <span class="wish-progress-label${progress.undecided ? ' undecided' : ''}">${progress.undecided ? escapeHTML(progress.label) : `${progress.percent}%`}</span>
       </div>
       <div class="wish-card-foot">
-        <span class="muted">${wish.pledgers} 人许愿${wish.myPledgedLdc ? ` · 我出了 ${wish.myPledgedLdc} LDC` : ''}</span>
+        <span class="muted">${wish.pledgers} 人许愿${wish.myPledgedLdc ? ` · 我出了 ${wish.myPledgedLdc} LDC` : ''}${remainingNote ? ` · ${remainingNote}` : ''}</span>
         ${canPledge ? `<button type="button" class="ghost wish-pledge" data-wish-pledge="${wish.id}">我来许愿</button>` : (wish.status === 'open' && !currentUser ? '<span class="muted">登录后可助力</span>' : '')}
       </div>
     </article>`;

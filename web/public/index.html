@@ -17,7 +17,7 @@
       <span class="brand-mark" aria-hidden="true"><i></i></span>
       <span><strong class="brand">RelayScope</strong><span class="brand-caption">中转站健康监测</span></span>
     </a>
-    <nav class="public-nav" aria-label="主导航"><a href="/" aria-current="page" data-nav-board>模型看板</a><a href="#wishes" data-nav-wishes>许愿池</a><a href="/admin/">管理控制台 <span aria-hidden="true">↗</span></a></nav>
+    <nav class="public-nav" aria-label="主导航"><a href="/" aria-current="page" data-nav-board>模型看板</a><a href="#wishes" data-nav-wishes>许愿池</a><a href="#customize" data-nav-customize>定制</a></nav>
     <div class="header-actions">
       <button id="user-action" class="user-action" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
         <span class="user-action-label">登录</span>
@@ -29,10 +29,6 @@
         <button type="button" role="menuitem" data-user-menu="feedback">意见反馈</button>
         <button type="button" role="menuitem" data-user-menu="logout">退出登录</button>
       </div>
-      <button id="customize-action" type="button" aria-haspopup="dialog" aria-controls="customize-dialog" title="定制">
-        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 6h10m3 0h3M4 12h3m4 0h9M4 18h10m3 0h3" /><circle cx="17" cy="6" r="2.2" /><circle cx="10" cy="12" r="2.2" /><circle cx="17" cy="18" r="2.2" /></svg>
-        <span class="customize-label">定制</span>
-      </button>
       <div class="header-tools" role="group" aria-label="页面工具">
         <button id="announcement-action" class="theme-toggle announcement-action" type="button" aria-label="查看运行通知" title="查看运行通知" aria-haspopup="dialog" aria-controls="announcement-dialog">
           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8.5 13h5" /></svg>
@@ -75,8 +71,10 @@
       <div class="detail-head announcement-head"><h2>运行状态通知</h2><button id="announcement-close" class="icon-button" type="button" aria-label="关闭公告" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <div id="announcement-content" class="announcement-content" aria-live="polite"></div>
     </dialog>
-    <dialog id="customize-dialog" class="customize-dialog" aria-labelledby="customize-title">
-      <div class="detail-head customize-head"><div><h2 id="customize-title">定制</h2><p class="muted" id="customize-subtitle">个性化设置仅保存在当前浏览器。</p></div><button id="customize-close" class="icon-button" type="button" aria-label="关闭定制" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+    <section id="customize-page" class="customize-page" hidden aria-label="定制">
+      <div class="customize-head">
+        <div><h1>定制</h1><p class="muted" id="customize-subtitle">个性化设置仅保存在当前浏览器。</p></div>
+      </div>
       <div class="customize-body">
         <nav class="customize-nav" aria-label="定制分类">
           <button id="customize-tab-display" type="button" aria-selected="true" aria-controls="customize-display">
@@ -93,7 +91,7 @@
           <div id="customize-tags" class="customize-panel" role="tabpanel" aria-labelledby="customize-tab-tags" hidden></div>
         </div>
       </div>
-    </dialog>
+    </section>
     <dialog id="feedback-dialog" class="form-dialog">
       <div class="detail-head form-head"><div><h2>意见反馈</h2><p class="muted">发现数据问题或功能建议，直接告诉站长。</p></div><button id="feedback-close" class="icon-button" type="button" aria-label="关闭反馈" title="关闭"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
       <form id="feedback-form">
@@ -145,6 +143,10 @@
     </dialog>
     <div id="toast-region" class="toast-region" aria-live="polite"></div>
   </main>
+  <footer class="public-footer">
+    <span>RelayScope · 中转站健康监测</span>
+    <a href="/admin/">管理控制台</a>
+  </footer>
   <script src="/assets/dashboard.js" defer></script>
 </body>
 </html>

@@ -1270,16 +1270,6 @@
 }
 .customize-panel[hidden] { display: none; }
 
-/* 定制页整体放大字号与配套图标 */
-#customize-dialog {
-  --font-caption: 13px;
-  --font-small: 14px;
-  --font-body: 15px;
-  --font-title: 16px;
-  --font-heading: 18px;
-  --font-metric: 22px;
-}
-
 /* 偏好分组 */
 .pref-section {
   display: grid;
@@ -2135,4 +2125,123 @@
   color: var(--healthy);
   font-size: var(--font-small);
   font-weight: 600;
+}
+
+/* ===== 定制整页 ===== */
+.customize-page[hidden] { display: none; }
+.customize-page .pref-section + .pref-section { padding-top: 20px; }
+
+/* ===== 页脚 ===== */
+.public-footer {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px 16px 28px;
+  color: var(--faint);
+  font-size: var(--font-caption);
+}
+.public-footer a { color: var(--faint); text-decoration: none; }
+.public-footer a:hover { color: var(--accent); text-decoration: underline; }
+
+/* ===== 许愿池视觉精进 ===== */
+.wish-page[hidden] { display: none; }
+.wish-head { align-items: center; margin: 14px 0 20px; }
+.wish-head h1 { font-size: 24px; letter-spacing: -0.2px; }
+.wish-head .primary-button {
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 62%, #7cc4b4));
+  box-shadow: 0 4px 14px color-mix(in oklab, var(--accent) 28%, transparent);
+  padding: 11px 20px;
+}
+.wish-head .primary-button:hover {
+  background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 92%, #000), color-mix(in oklab, var(--accent) 56%, #7cc4b4));
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--accent) 34%, transparent);
+}
+
+/* 统计条：一眼看到池子的热度 */
+.wish-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.wish-stat {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.wish-stat strong { font-size: var(--font-metric); font-weight: 700; font-variant-numeric: tabular-nums; }
+.wish-stat span { color: var(--muted); font-size: var(--font-caption); }
+.wish-stat.accent { border-color: color-mix(in oklab, var(--healthy) 40%, var(--border)); }
+.wish-stat.accent strong { color: var(--healthy); }
+
+/* 卡片：错落入场 + 悬停轻抬 */
+.wish-card {
+  position: relative;
+  animation: wish-card-in 320ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
+  animation-delay: calc(var(--stagger-index, 0) * 45ms);
+  transition: transform 160ms ease-out, border-color 140ms ease;
+}
+@keyframes wish-card-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+@media (hover: hover) and (pointer: fine) {
+  .wish-card:hover { transform: translateY(-1px); border-color: var(--border-strong); }
+}
+
+/* 进度条：目标刻度线 + 已满时的流光（reduced-motion 全关） */
+.wish-progress { position: relative; }
+.wish-progress::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  right: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.wish-progress.undecided::after { display: none; }
+.wish-progress i { position: relative; overflow: hidden; }
+.wish-progress i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 38%) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: wish-sheen 2.6s ease-in-out infinite;
+}
+.wish-progress.undecided i { display: none; }
+@keyframes wish-sheen {
+  0%, 55% { transform: translateX(-100%); }
+  85%, 100% { transform: translateX(100%); }
+}
+
+/* 文案层：还差 N LDC 的行动召唤 */
+.wish-remaining { color: var(--muted); }
+.wish-remaining b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.wish-remaining.done { color: var(--healthy); font-weight: 600; }
+
+/* 空状态：一个 inviting 的许愿仪式感 */
+.wish-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 56px 24px;
+  text-align: center;
+}
+.wish-empty .wish-empty-mark { font-size: 34px; color: var(--accent); }
+.wish-empty h1 { margin: 0; font-size: var(--font-heading); }
+.wish-empty p { margin: 0; max-width: 420px; line-height: 1.7; }
+
+@media (max-width: 640px) {
+  .wish-stats { grid-template-columns: repeat(2, 1fr); }
+  .wish-progress-row { grid-template-columns: 1fr; gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wish-card { animation: none; }
+  .wish-progress i::after { animation: none; display: none; }
 }
