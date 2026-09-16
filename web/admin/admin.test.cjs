@@ -212,6 +212,8 @@ test('admin console exposes membership and wish management tabs', () => {
   assert.match(html, /id="redeem-result-card"/);
   assert.match(html, /id="settings-form"/);
   assert.match(html, /id="setting-wish-credit"/);
+  assert.match(html, /id="setting-site-notice"/);
+  assert.match(html, /站点公告/);
   assert.match(html, /会员月费/);
   assert.match(html, /id="wish-admin-list"/);
   assert.match(html, /id="order-list"/);
@@ -222,6 +224,7 @@ test('admin console exposes membership and wish management tabs', () => {
   assert.match(script, /\/api\/v1\/admin\/settings/);
   assert.match(script, /membershipMonthlyPriceLdc/);
   assert.match(script, /wishFreeCreditLdc/);
+  assert.match(script, /siteNotice/);
   assert.match(script, /\/refund/);
   assert.match(script, /URL\.createObjectURL/);
   assert.doesNotMatch(script, /window\.prompt/);

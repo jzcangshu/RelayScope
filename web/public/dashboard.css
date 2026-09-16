@@ -2245,3 +2245,61 @@
   .wish-card { animation: none; }
   .wish-progress i::after { animation: none; display: none; }
 }
+
+/* ===== 站点公告：上半 Markdown 通知 + 下半监测状态 ===== */
+.announcement-dialog .announcement-content { margin-top: 0; }
+.notice-content {
+  padding: 0 20px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-body);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.notice-content h3, .notice-content h4, .notice-content h5 {
+  margin: 14px 0 6px;
+  line-height: 1.4;
+}
+.notice-content h3:first-child, .notice-content h4:first-child, .notice-content h5:first-child { margin-top: 0; }
+.notice-content p { margin: 8px 0; }
+.notice-content ul, .notice-content ol { margin: 8px 0; padding-left: 22px; }
+.notice-content li { margin: 4px 0; }
+.notice-content code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.92em;
+}
+.notice-content blockquote {
+  margin: 10px 0;
+  padding: 6px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-subtle);
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+}
+.notice-content a { color: var(--accent); font-weight: 600; }
+.notice-content hr { margin: 14px 0; border: 0; border-top: 1px solid var(--border); }
+.announcement-section { padding: 12px 20px 0; }
+.announcement-section-label {
+  font-size: var(--font-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+/* ===== 定制门禁：会员介绍行 ===== */
+.gate-pitch {
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--border));
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--font-small);
+  line-height: 1.7;
+}
+.gate-pitch b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.gate-wish-link { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }

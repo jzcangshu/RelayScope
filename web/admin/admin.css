@@ -417,3 +417,16 @@ dialog.compact-dialog { width: min(520px, calc(100vw - 40px)); }
 .chip.status-order-paid { background: var(--healthy-soft, #e1f3ed); color: var(--healthy, #15936f); }
 .chip.status-order-refunded { background: var(--failed-soft, #f9e5e3); color: var(--failed, #c34b46); }
 .chip.status-order-cancelled { background: var(--surface-subtle); color: var(--faint); }
+
+.stack-form textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg, var(--text));
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+.stack-form textarea:focus-visible { outline: none; border-color: var(--accent); }
+.form-actions-inline { display: flex; gap: 10px; }

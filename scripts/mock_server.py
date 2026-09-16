@@ -92,7 +92,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/public/dashboard":
             return self._json({"revision": "mock-1", "rows": ROWS, "buckets": BUCKETS, "hours": 24})
         if path == "/api/v1/public/announcements":
-            return self._json({"announcements": []})
+            if LOGGED_IN:
+                notice = {"markdown": "# 欢迎使用 RelayScope\n\n- 数据每 **5 分钟** 自动刷新\n\n- 问题请通过反馈提交", "updatedAt": NOW}
+                return self._json({"announcements": [], "revision": "mock-1", "notice": notice})
+            return self._json({"announcements": [], "revision": "mock-1"})
         if path == "/api/v1/public/details":
             return self._json({"buckets": BUCKETS, "groups": [g for g in ROWS if g["siteName"] == "星云中转" or g["groupName"] == "官方"]})
         if path == "/api/v1/auth/me":
@@ -118,7 +121,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/admin/orders":
             return self._json({"orders": MOCK_ORDERS})
         if path == "/api/v1/admin/settings":
-            return self._json({"membershipLdcPerDay": 1, "wishDefaultTargetLdc": 30})
+            return self._json({"membershipMonthlyPriceLdc": 15, "wishDefaultTargetLdc": 30, "wishFreeCreditLdc": 10, "siteNotice": "", "siteNoticeUpdatedAt": ""})
         requested = path.lstrip("/")
         if requested.startswith("assets/"):
             requested = requested[len("assets/"):]

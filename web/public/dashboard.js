@@ -21,6 +21,7 @@ const announcementDialog = document.querySelector('#announcement-dialog');
 const announcementAction = document.querySelector('#announcement-action');
 const announcementClose = document.querySelector('#announcement-close');
 const announcementContent = document.querySelector('#announcement-content');
+const noticeContent = document.querySelector('#notice-content');
 const userAction = document.querySelector('#user-action');
 const userMenu = document.querySelector('#user-menu');
 const userMenuName = document.querySelector('#user-menu-name');
@@ -220,6 +221,46 @@ function wishStatusBadge(status) {
   if (status === 'reached') return { text: '已达成，等待接入', tone: 'healthy' };
   if (status === 'connected') return { text: '已接入', tone: 'accent' };
   return null;
+}
+function escapeMarkdownHTML(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+// 极简 Markdown：标题/加粗/斜体/行内代码/链接(http s)/列表/引用/分隔线/段落。
+// 输入先整体 HTML 转义，再生成白名单标签，天然防注入。
+function renderMarkdown(source) {
+  const lines = escapeMarkdownHTML(String(source || '')).split(/\r?\n/);
+  const inline = (text) => text
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const blocks = [];
+  let list = null;
+  let paragraph = [];
+  const flushParagraph = () => {
+    if (paragraph.length) { blocks.push(`<p>${inline(paragraph.join('<br>'))}</p>`); paragraph = []; }
+  };
+  const flushList = () => {
+    if (list) { blocks.push(`<${list.tag}>${list.items.map((item) => `<li>${inline(item)}</li>`).join('')}</${list.tag}>`); list = null; }
+  };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { flushParagraph(); flushList(); continue; }
+    const heading = line.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) { flushParagraph(); flushList(); blocks.push(`<h${heading[1].length + 2}>${inline(heading[2])}</h${heading[1].length + 2}>`); continue; }
+    if (/^(-{3,}|\*{3,})$/.test(line)) { flushParagraph(); flushList(); blocks.push('<hr>'); continue; }
+    const unordered = line.match(/^[-*]\s+(.*)$/);
+    if (unordered) { flushParagraph(); if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; } list.items.push(unordered[1]); continue; }
+    const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ordered) { flushParagraph(); if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; } list.items.push(ordered[1]); continue; }
+    const quote = line.match(/^(?:>|&gt;)\s?(.*)$/);
+    if (quote) { flushParagraph(); flushList(); blocks.push(`<blockquote>${inline(quote[1])}</blockquote>`); continue; }
+    flushList();
+    paragraph.push(line);
+  }
+  flushParagraph();
+  flushList();
+  return blocks.join('');
 }
 // ---- 会员与同步纯函数结束 ----
 
@@ -586,9 +627,23 @@ async function loadRows() {
 }
 
 function renderAnnouncements() {
+  const sectionLabel = document.querySelector('.announcement-section');
+  if (sectionLabel) sectionLabel.hidden = !(siteNotice && siteNotice.markdown);
   announcementContent.innerHTML = announcements.length
     ? `<ul class="announcement-list">${announcements.map((item) => `<li><span class="announcement-indicator" aria-hidden="true"></span><div class="announcement-item-body"><div class="announcement-item-heading"><strong>${escapeHTML(item.siteName)}</strong><code>${escapeHTML(item.failureCode)}</code></div><p class="announcement-reason">${escapeHTML(item.reason || '当前采集暂时失败，恢复成功后会自动撤下。')}</p></div></li>`).join('')}</ul>`
     : '<p class="muted announcement-empty">当前所有已启用站点均已恢复采集。</p>';
+}
+
+let siteNotice = null;
+
+function renderNotice() {
+  if (!noticeContent) return;
+  if (siteNotice && siteNotice.markdown) {
+    noticeContent.innerHTML = renderMarkdown(siteNotice.markdown);
+    noticeContent.hidden = false;
+  } else {
+    noticeContent.hidden = true;
+  }
 }
 
 async function loadAnnouncements() {
@@ -596,6 +651,8 @@ async function loadAnnouncements() {
     const response = await fetch('/api/v1/public/announcements', { cache: 'no-store' });
     if (!response.ok) return;
     const payload = await response.json();
+    siteNotice = payload.notice || null;
+    renderNotice();
     const next = payload.announcements || [];
     const nextSignature = next.map((item) => `${item.siteId}:${item.failureCode}:${item.reason}`).join('|');
     const changed = nextSignature !== announcementSignature;
@@ -1331,7 +1388,7 @@ function enterCustomize() {
 }
 
 function renderCustomizeGate(loggedOut) {
-  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后已保存的设置仍然生效，续期后即可继续编辑。'}</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
+  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后已保存的设置仍然生效，续期后即可继续编辑。'}</p><p class="gate-pitch">成为会员：<b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC / 月</b> 丨 每月额外获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> <a class="gate-wish-link" href="#wishes">许愿</a>额度</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
 }
 
 // ---- 账号菜单 ----

@@ -18,8 +18,9 @@ test('public dashboard uses a compact bell control and single announcement title
   const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
   const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
   assert.match(html, /id="announcement-action" class="theme-toggle announcement-action"/);
-  assert.match(html, /运行状态通知/);
-  assert.doesNotMatch(html, /service-status|announcement-count|运行公告/);
+  assert.match(html, /站点公告/);
+  assert.doesNotMatch(html, /service-status|announcement-count|运行公告|运行状态通知/);
+  assert.match(html, /id="notice-content"/);
   assert.equal((html.match(/class="icon-button"/g) || []).length, 7);
   assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 7);
   assert.match(css, /detail-head\.announcement-head h2/);
@@ -275,10 +276,10 @@ function loadMembershipHelpers() {
   const end = source.indexOf('// ---- 会员与同步纯函数结束 ----');
   assert.notEqual(start, -1, 'membership helper block is missing');
   assert.notEqual(end, -1, 'membership helper end marker is missing');
-  return Function(`${source.slice(start, end)}; return { membershipState, membershipBadge, preferencesIsEmpty, mergePreferences, wishProgress, wishStatusBadge };`)();
+  return Function(`${source.slice(start, end)}; return { membershipState, membershipBadge, preferencesIsEmpty, mergePreferences, wishProgress, wishStatusBadge, renderMarkdown };`)();
 }
 
-const { membershipState, membershipBadge, preferencesIsEmpty, mergePreferences, wishProgress, wishStatusBadge } = loadMembershipHelpers();
+const { membershipState, membershipBadge, preferencesIsEmpty, mergePreferences, wishProgress, wishStatusBadge, renderMarkdown } = loadMembershipHelpers();
 
 test('membershipState classifies none, active and expired', () => {
   const now = 1_800_000_000_000;
@@ -311,6 +312,20 @@ test('wishProgress handles undecided targets and caps the ratio', () => {
   assert.equal(wishStatusBadge('connected').tone, 'accent');
 });
 
+test('renderMarkdown escapes HTML and renders the supported subset', () => {
+  assert.equal(renderMarkdown('<script>alert(1)</script>'), '<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>');
+  assert.equal(renderMarkdown('## 标题'), '<h4>标题</h4>');
+  assert.equal(renderMarkdown('**加粗** 与 *斜体*'), '<p><strong>加粗</strong> 与 <em>斜体</em></p>');
+  assert.equal(renderMarkdown('`code`'), '<p><code>code</code></p>');
+  assert.equal(renderMarkdown('[官网](https://example.com)'), '<p><a href="https://example.com" target="_blank" rel="noopener noreferrer">官网</a></p>');
+  assert.equal(renderMarkdown('[坏](javascript:alert(1))'), '<p>[坏](javascript:alert(1))</p>');
+  assert.equal(renderMarkdown('- 一\n- 二'), '<ul><li>一</li><li>二</li></ul>');
+  assert.equal(renderMarkdown('1. 甲\n2. 乙'), '<ol><li>甲</li><li>乙</li></ol>');
+  assert.equal(renderMarkdown('> 引用'), '<blockquote>引用</blockquote>');
+  assert.equal(renderMarkdown('---'), '<hr>');
+  assert.equal(renderMarkdown('第一行\n第二行'), '<p>第一行<br>第二行</p>');
+});
+
 test('public page wires account, redeem, recharge, wish pool and payment return', () => {
   const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
   assert.match(html, /href="#wishes" data-nav-wishes/);
@@ -327,6 +342,9 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(html, /注册此站点需要邀请码/);
   assert.match(html, /id="pledge-dialog"/);
   const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  assert.match(source, /renderMarkdown/);
+  assert.match(source, /gate-pitch/);
+  assert.match(source, /gate-wish-link/);
   assert.match(source, /userAction\.addEventListener\('click'/);
   assert.match(source, /window\.addEventListener\('hashchange', applyRoute\)/);
   assert.match(source, /scheduleCloudSave/);

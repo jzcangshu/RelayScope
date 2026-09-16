@@ -21,6 +21,8 @@ const (
 	settingMembershipMonthlyPrice = "membership_monthly_price_ldc"
 	settingWishDefaultTarget      = "wish_default_target_ldc"
 	settingWishFreeCredit         = "wish_free_credit_ldc"
+	settingSiteNotice             = "site_notice_markdown"
+	settingSiteNoticeUpdatedAt    = "site_notice_updated_at"
 
 	defaultMembershipMonthlyPrice = "15"
 	defaultWishDefaultTarget      = "30"

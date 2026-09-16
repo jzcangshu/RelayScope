@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"relayscope/internal/payment"
 	"relayscope/internal/store"
@@ -16,18 +18,23 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 		return
 	}
 	adminJSON := options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		notice, _ := options.Store.GetSetting(request.Context(), settingSiteNotice, "")
+		updatedAt, _ := options.Store.GetSetting(request.Context(), settingSiteNoticeUpdatedAt, "")
 		writeJSON(writer, map[string]any{
 			"membershipMonthlyPriceLdc": settingInt64(request.Context(), options.Store, settingMembershipMonthlyPrice, defaultMembershipMonthlyPrice),
 			"wishDefaultTargetLdc":      settingInt64(request.Context(), options.Store, settingWishDefaultTarget, defaultWishDefaultTarget),
 			"wishFreeCreditLdc":         settingInt64(request.Context(), options.Store, settingWishFreeCredit, defaultWishFreeCredit),
+			"siteNotice":                notice,
+			"siteNoticeUpdatedAt":       updatedAt,
 		})
 	}))
 	mux.Handle("GET /api/v1/admin/settings", adminJSON)
 	mux.Handle("PATCH /api/v1/admin/settings", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload struct {
-			MembershipMonthlyPriceLdc *int64 `json:"membershipMonthlyPriceLdc"`
-			WishDefaultTargetLdc      *int64 `json:"wishDefaultTargetLdc"`
-			WishFreeCreditLdc         *int64 `json:"wishFreeCreditLdc"`
+			MembershipMonthlyPriceLdc *int64  `json:"membershipMonthlyPriceLdc"`
+			WishDefaultTargetLdc      *int64  `json:"wishDefaultTargetLdc"`
+			WishFreeCreditLdc         *int64  `json:"wishFreeCreditLdc"`
+			SiteNotice                *string `json:"siteNotice"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8<<10)).Decode(&payload); err != nil {
 			writeError(writer, http.StatusBadRequest, "参数格式错误")
@@ -50,6 +57,21 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 				return
 			}
 			if err := options.Store.SetSetting(request.Context(), field.key, strconv.FormatInt(*field.value, 10)); err != nil {
+				writeError(writer, http.StatusInternalServerError, "设置保存失败")
+				return
+			}
+		}
+		if payload.SiteNotice != nil {
+			notice := strings.TrimSpace(*payload.SiteNotice)
+			if len(notice) > 20000 {
+				writeError(writer, http.StatusBadRequest, "公告内容过长（上限 20000 字符）")
+				return
+			}
+			if err := options.Store.SetSetting(request.Context(), settingSiteNotice, notice); err != nil {
+				writeError(writer, http.StatusInternalServerError, "设置保存失败")
+				return
+			}
+			if err := options.Store.SetSetting(request.Context(), settingSiteNoticeUpdatedAt, time.Now().UTC().Format(time.RFC3339)); err != nil {
 				writeError(writer, http.StatusInternalServerError, "设置保存失败")
 				return
 			}

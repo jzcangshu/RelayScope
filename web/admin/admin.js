@@ -754,6 +754,8 @@ async function loadOperationSettings() {
   $('#setting-membership-price').value = operationSettings.membershipMonthlyPriceLdc;
   $('#setting-wish-credit').value = operationSettings.wishFreeCreditLdc;
   $('#setting-wish-target').value = operationSettings.wishDefaultTargetLdc;
+  $('#setting-site-notice').value = operationSettings.siteNotice || '';
+  $('#notice-updated-at').textContent = operationSettings.siteNoticeUpdatedAt ? `最近更新：${operationSettings.siteNoticeUpdatedAt}` : '当前没有公告';
 }
 
 function renderRedeemCodes() {
@@ -801,6 +803,23 @@ function renderOrders() {
       '</tr>';
   }).join('') : '<tr><td colspan="8"><div class="empty-state"><p>还没有 LDC 订单。</p></div></td></tr>';
 }
+
+$('#notice-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  runAction(event.submitter, async () => {
+    await saveRequest('/api/v1/admin/settings', 'PATCH', { siteNotice: $('#setting-site-notice').value });
+    toast($('#setting-site-notice').value.trim() ? '公告已发布' : '公告已撤下', 'success');
+    await loadOperationSettings();
+  });
+});
+$('#notice-clear').addEventListener('click', (event) => {
+  runAction(event.currentTarget, async () => {
+    await saveRequest('/api/v1/admin/settings', 'PATCH', { siteNotice: '' });
+    $('#setting-site-notice').value = '';
+    toast('公告已撤下', 'success');
+    await loadOperationSettings();
+  });
+});
 
 $('#redeem-status-filter').addEventListener('change', () => runAction($('#redeem-reload'), loadRedeemCodes));
 $('#redeem-reload').addEventListener('click', () => runAction($('#redeem-reload'), loadRedeemCodes));

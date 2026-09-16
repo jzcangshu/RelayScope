@@ -227,6 +227,16 @@
 
           <section id="system-panel" class="panel" hidden>
             <div class="card">
+              <div class="card-head"><h2>站点公告</h2><span class="card-hint">支持 Markdown，展示在公开页“站点公告”弹窗顶部</span></div>
+              <div class="card-body">
+                <form id="notice-form" class="stack-form">
+                  <label class="field"><span>公告内容（留空即撤下公告）</span><textarea id="setting-site-notice" rows="8" maxlength="20000" placeholder="# 维护通知&#10;- 预计 **今晚 22:00** 维护…"></textarea></label>
+                  <p class="muted" id="notice-updated-at"></p>
+                  <div class="form-actions-inline"><button class="btn btn-primary" type="submit">发布公告</button><button class="btn btn-ghost" type="button" id="notice-clear">撤下公告</button></div>
+                </form>
+              </div>
+            </div>
+            <div class="card">
               <div class="card-head"><h2>系统状态</h2></div>
               <div class="card-body"><div class="stat-grid" id="system-content"></div></div>
             </div>

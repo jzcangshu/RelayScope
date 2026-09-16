@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -343,7 +344,13 @@ func NewHandler(options Options) (http.Handler, error) {
 				return
 			}
 			revision, _ := options.Store.Revision(request.Context())
-			writeJSON(writer, map[string]any{"revision": revision, "announcements": items})
+			response := map[string]any{"revision": revision, "announcements": items}
+			// 站长在后台编辑的全站公告（Markdown 原文，渲染在"站点公告"上半部分）
+			if markdown, err := options.Store.GetSetting(request.Context(), settingSiteNotice, ""); err == nil && strings.TrimSpace(markdown) != "" {
+				updatedAt, _ := options.Store.GetSetting(request.Context(), settingSiteNoticeUpdatedAt, "")
+				response["notice"] = map[string]any{"markdown": markdown, "updatedAt": updatedAt}
+			}
+			writeJSON(writer, response)
 		})
 		mux.HandleFunc("GET /api/v1/public/rows", func(writer http.ResponseWriter, request *http.Request) {
 			rows, err := options.Store.QueryPublicRows(request.Context(), request.URL.Query().Get("model"), request.URL.Query().Get("site"))
