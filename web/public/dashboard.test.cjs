@@ -326,6 +326,186 @@ test('renderMarkdown escapes HTML and renders the supported subset', () => {
   assert.equal(renderMarkdown('第一行\n第二行'), '<p>第一行<br>第二行</p>');
 });
 
+function loadSortHelpers() {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  // Extract priceValue
+  const pvStart = source.indexOf('function priceValue(price)');
+  const pvEnd = source.indexOf('\nfunction lowestPrice');
+  assert.notEqual(pvStart, -1, 'priceValue is missing');
+  const { priceValue } = Function(`${source.slice(pvStart, pvEnd)}; return { priceValue };`)();
+  // Extract compareCards (depends on compareRows)
+  const crStart = source.indexOf('function compareRows(a, b)');
+  const ccEnd = source.indexOf('\nfunction buildTimeline');
+  assert.notEqual(crStart, -1, 'compareRows is missing');
+  const { compareCards } = Function(`${source.slice(crStart, ccEnd)}; return { compareCards };`)();
+  // Extract sort block
+  const sbStart = source.indexOf('// ---- 排序纯函数（供面板与测试共用');
+  const sbEnd = source.indexOf('// ---- 排序纯函数结束 ----');
+  assert.notEqual(sbStart, -1, 'sort block start marker is missing');
+  assert.notEqual(sbEnd, -1, 'sort block end marker is missing');
+  return Function('priceValue', 'compareCards',
+    `${source.slice(sbStart, sbEnd)}\n; return { sortMedian, timelineStability, priceValueForSort, smartBordaScores, sortGroupCards, smartSiteScore, SORT_OPTIONS, SMART_MODEL_WEIGHTS, SITE_Q_WEIGHTS, FX_RATES };`
+  )(priceValue, compareCards);
+}
+
+const { sortMedian, timelineStability, priceValueForSort, smartBordaScores, sortGroupCards, smartSiteScore, SORT_OPTIONS, SMART_MODEL_WEIGHTS, SITE_Q_WEIGHTS } = loadSortHelpers();
+
+test('sortMedian computes correct medians for odd, even, and empty arrays', () => {
+  assert.equal(sortMedian([3, 1, 2]), 2);
+  assert.equal(sortMedian([4, 1, 3, 2]), 2.5);
+  assert.equal(sortMedian([42]), 42);
+  assert.equal(sortMedian([]), null);
+});
+
+test('timelineStability returns null for sparse coverage and penalizes switching', () => {
+  const fullHealthy = Array.from({ length: 48 }, () => ({ state: 'healthy', start: 0, end: 0 }));
+  assert.equal(timelineStability(fullHealthy), 1.0);
+  // Sparse: only 2 covered slots → null
+  const sparse = Array.from({ length: 48 }, (_, i) => ({ state: i < 2 ? 'healthy' : 'no_samples', start: 0, end: 0 }));
+  assert.equal(timelineStability(sparse), null);
+  // Flapping: healthy ↔ failed alternating every 4 slots
+  const flapping = Array.from({ length: 48 }, (_, i) => ({
+    state: Math.floor(i / 4) % 2 === 0 ? 'healthy' : 'failed', start: 0, end: 0,
+  }));
+  const stab = timelineStability(flapping);
+  assert.ok(stab > 0 && stab < 1, `stability ${stab} should be between 0 and 1`);
+  // All failed
+  const allFailed = Array.from({ length: 48 }, () => ({ state: 'failed', start: 0, end: 0 }));
+  assert.equal(timelineStability(allFailed), 0);
+});
+
+test('smartBordaScores ranks low-latency above high-latency when availability is equal', () => {
+  const fast = { serviceState: 'healthy', successRatio: 0.98, averageLatencyMs: 200, requestCount: 100, lowestPrice: { available: true, inputPerMillion: 2 } };
+  const slow = { serviceState: 'healthy', successRatio: 0.98, averageLatencyMs: 5000, requestCount: 100, lowestPrice: { available: true, inputPerMillion: 2 } };
+  const scores = smartBordaScores([fast, slow]);
+  assert.ok(scores.get(fast) > scores.get(slow), 'fast should outrank slow when availability is equal');
+});
+
+test('sortGroupCards smart mode keeps failed cards below healthy even when cheap', () => {
+  const cards = [
+    { serviceState: 'healthy', successRatio: 0.90, averageLatencyMs: 1000, requestCount: 50, siteName: 'A', rawModelName: 'm', lowestPrice: { available: true, inputPerMillion: 10 } },
+    { serviceState: 'failed', successRatio: 0.05, averageLatencyMs: 300, requestCount: 50, siteName: 'B', rawModelName: 'm', lowestPrice: { available: true, inputPerMillion: 0.1 } },
+  ];
+  const sorted = sortGroupCards(cards, 'smart');
+  assert.equal(sorted[0].siteName, 'A', 'healthy must outrank failed regardless of price');
+});
+
+test('smartBordaScores penalizes low requestCount', () => {
+  const highCount = { serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 500, requestCount: 100, lowestPrice: { available: true, inputPerMillion: 2 } };
+  const lowCount = { serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 500, requestCount: 5, lowestPrice: { available: true, inputPerMillion: 2 } };
+  const scores = smartBordaScores([highCount, lowCount]);
+  assert.ok(scores.get(highCount) > scores.get(lowCount), 'higher requestCount should score higher');
+});
+
+test('smartBordaScores returns empty map for all-unsampled cards', () => {
+  const noSample = { serviceState: 'no_samples', successRatio: null };
+  const scores = smartBordaScores([noSample]);
+  assert.equal(scores.size, 0);
+});
+
+test('sortGroupCards respects all sort modes', () => {
+  const cards = [
+    { serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 300, requestCount: 100, siteName: 'A', rawModelName: 'm', lowestPrice: { available: true, inputPerMillion: 5 } },
+    { serviceState: 'healthy', successRatio: 0.99, averageLatencyMs: 800, requestCount: 100, siteName: 'B', rawModelName: 'm', lowestPrice: { available: true, inputPerMillion: 1 } },
+    { serviceState: 'healthy', successRatio: 0.90, averageLatencyMs: 100, requestCount: 100, siteName: 'C', rawModelName: 'm', lowestPrice: { available: true, inputPerMillion: 10 } },
+  ];
+  // By price: cheapest first
+  const byPrice = sortGroupCards(cards, 'price');
+  assert.equal(byPrice[0].siteName, 'B'); // 1 perM
+  assert.equal(byPrice[2].siteName, 'C'); // 10 perM
+  // By availability: highest first
+  const byAvail = sortGroupCards(cards, 'availability');
+  assert.equal(byAvail[0].siteName, 'B'); // 0.99
+  assert.equal(byAvail[2].siteName, 'C'); // 0.90
+  // By latency: lowest first
+  const byLat = sortGroupCards(cards, 'latency');
+  assert.equal(byLat[0].siteName, 'C'); // 100ms
+  assert.equal(byLat[2].siteName, 'B'); // 800ms
+  // Smart: should have __smartScore attached
+  const bySmart = sortGroupCards(cards, 'smart');
+  assert.ok(bySmart[0].__smartScore != null, 'smart sort should attach __smartScore');
+  assert.ok(bySmart[0].__smartScore >= bySmart[1].__smartScore, 'scores should be descending');
+});
+
+test('sortGroupCards puts no-samples at the bottom in all modes', () => {
+  const cards = [
+    { serviceState: 'no_samples', successRatio: null, averageLatencyMs: null, siteName: 'X', rawModelName: 'm', lowestPrice: null },
+    { serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 300, requestCount: 50, siteName: 'Y', rawModelName: 'm', lowestPrice: { available: true, inputPerMillion: 2 } },
+  ];
+  for (const mode of ['price', 'availability', 'latency', 'smart']) {
+    const sorted = sortGroupCards(cards, mode);
+    assert.equal(sorted[sorted.length - 1].siteName, 'X', `no-samples last in ${mode} mode`);
+  }
+});
+
+test('smartSiteScore returns null for zero participating cards', () => {
+  assert.equal(smartSiteScore([{ serviceState: 'no_samples', successRatio: null }]), null);
+  assert.equal(smartSiteScore([]), null);
+});
+
+test('smartSiteScore: specialist site outranks mediocre generalist', () => {
+  // Specialist: 3 excellent models
+  const specialist = Array.from({ length: 3 }, (_, i) => ({
+    serviceState: 'healthy', successRatio: 0.98, averageLatencyMs: 300, requestCount: 100,
+    timeline: Array.from({ length: 48 }, () => ({ state: 'healthy' })),
+    siteName: 'Specialist', rawModelName: `m${i}`,
+    lowestPrice: { available: true, inputPerMillion: 2 },
+  }));
+  // Mediocre generalist: 15 mediocre models
+  const generalist = Array.from({ length: 15 }, (_, i) => ({
+    serviceState: 'healthy', successRatio: 0.70, averageLatencyMs: 1500, requestCount: 50,
+    timeline: Array.from({ length: 48 }, (_, j) => ({ state: j < 30 ? 'healthy' : 'failed' })),
+    siteName: 'Generalist', rawModelName: `m${i}`,
+    lowestPrice: { available: true, inputPerMillion: 3 },
+  }));
+  const sScore = smartSiteScore(specialist);
+  const gScore = smartSiteScore(generalist);
+  assert.ok(sScore.score > gScore.score, `specialist (${sScore.score.toFixed(3)}) should beat generalist (${gScore.score.toFixed(3)})`);
+});
+
+test('smartSiteScore: strong generalist outranks specialist of equal quality', () => {
+  // 3 excellent models
+  const specialist = Array.from({ length: 3 }, (_, i) => ({
+    serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 400, requestCount: 100,
+    timeline: Array.from({ length: 48 }, () => ({ state: 'healthy' })),
+    siteName: 'Spec', rawModelName: `m${i}`, lowestPrice: { available: true, inputPerMillion: 2 },
+  }));
+  // 12 equally excellent models
+  const bigStrong = Array.from({ length: 12 }, (_, i) => ({
+    serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 400, requestCount: 100,
+    timeline: Array.from({ length: 48 }, () => ({ state: 'healthy' })),
+    siteName: 'BigStrong', rawModelName: `m${i}`, lowestPrice: { available: true, inputPerMillion: 2 },
+  }));
+  const sScore = smartSiteScore(specialist);
+  const bScore = smartSiteScore(bigStrong);
+  assert.ok(bScore.score > sScore.score, `big-strong (${bScore.score.toFixed(3)}) should beat specialist (${sScore.score.toFixed(3)})`);
+});
+
+test('smartSiteScore: single perfect model ranks below three-good specialist', () => {
+  const single = [{
+    serviceState: 'healthy', successRatio: 1.0, averageLatencyMs: 100, requestCount: 200,
+    timeline: Array.from({ length: 48 }, () => ({ state: 'healthy' })),
+    siteName: 'Solo', rawModelName: 'm0', lowestPrice: { available: true, inputPerMillion: 1 },
+  }];
+  const triple = Array.from({ length: 3 }, (_, i) => ({
+    serviceState: 'healthy', successRatio: 0.95, averageLatencyMs: 300, requestCount: 100,
+    timeline: Array.from({ length: 48 }, () => ({ state: 'healthy' })),
+    siteName: 'Triple', rawModelName: `m${i}`, lowestPrice: { available: true, inputPerMillion: 2 },
+  }));
+  const sScore = smartSiteScore(single);
+  const tScore = smartSiteScore(triple);
+  assert.ok(tScore.score > sScore.score, `triple (${tScore.score.toFixed(3)}) should beat single (${sScore.score.toFixed(3)})`);
+});
+
+test('mergePreferences handles sorting field in emptiness check', () => {
+  const defaultSorting = { hidden: { sites: [], providers: [], models: [] }, defaultHealthy: false, tags: {}, sorting: { model: 'default', site: 'default' } };
+  assert.equal(preferencesIsEmpty(defaultSorting), true);
+  const smartSorting = { hidden: { sites: [], providers: [], models: [] }, defaultHealthy: false, tags: {}, sorting: { model: 'smart', site: 'smart' } };
+  assert.equal(preferencesIsEmpty(smartSorting), false);
+  assert.deepEqual(mergePreferences(defaultSorting, smartSorting), { source: 'cloud', upload: false });
+  assert.deepEqual(mergePreferences(smartSorting, defaultSorting), { source: 'local', upload: true });
+});
+
 test('public page wires account, redeem, recharge, wish pool and payment return', () => {
   const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
   assert.match(html, /href="#wishes" data-nav-wishes/);
@@ -359,4 +539,10 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(source, /\/api\/v1\/payment\/orders\//);
   assert.match(source, /membershipIs\(\) !== 'active'/);
   assert.match(source, /renderCustomizeGate/);
+  // 排序功能接线
+  assert.match(html, /id="sort-mode"/);
+  assert.match(source, /data-pref-sort/);
+  assert.match(source, /智能排序为会员专属/);
+  assert.match(source, /saveSorting/);
+  assert.match(source, /relayscope-sorting/);
 });

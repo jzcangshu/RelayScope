@@ -266,6 +266,118 @@ func TestPreferencesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSortingPreferencesRoundTrip(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put with sorting
+	prefs := Preferences{
+		Hidden:         PreferencesHidden{Sites: []string{}, Providers: []string{}, Models: []string{}},
+		DefaultHealthy: false,
+		Tags:           map[string]PreferencesTag{},
+		Sorting:        &SortingPrefs{Model: "smart", Site: "latency"},
+	}
+	if _, err := db.PutUserPreferences(ctx, user.ID, prefs); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.GetUserPreferences(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Sorting == nil || loaded.Sorting.Model != "smart" || loaded.Sorting.Site != "latency" {
+		t.Fatalf("sorting round trip mismatch: %+v", loaded.Sorting)
+	}
+}
+
+func TestSortingNilPreservesExisting(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First put with sorting set
+	_, err = db.PutUserPreferences(ctx, user.ID, Preferences{
+		Hidden:  PreferencesHidden{Sites: []string{}, Providers: []string{}, Models: []string{}},
+		Tags:    map[string]PreferencesTag{},
+		Sorting: &SortingPrefs{Model: "price", Site: "healthy-count"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Second put with nil Sorting → should preserve existing
+	_, err = db.PutUserPreferences(ctx, user.ID, Preferences{
+		Hidden: PreferencesHidden{Sites: []string{"a"}, Providers: []string{}, Models: []string{}},
+		Tags:   map[string]PreferencesTag{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.GetUserPreferences(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Sorting == nil || loaded.Sorting.Model != "price" || loaded.Sorting.Site != "healthy-count" {
+		t.Fatalf("nil sorting should preserve existing: %+v", loaded.Sorting)
+	}
+	if len(loaded.Hidden.Sites) != 1 {
+		t.Fatalf("other fields should update: %+v", loaded.Hidden)
+	}
+}
+
+func TestSortingInvalidNormalizesToDefault(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.PutUserPreferences(ctx, user.ID, Preferences{
+		Hidden:  PreferencesHidden{Sites: []string{}, Providers: []string{}, Models: []string{}},
+		Tags:    map[string]PreferencesTag{},
+		Sorting: &SortingPrefs{Model: "bogus", Site: "invalid"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.GetUserPreferences(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Sorting == nil || loaded.Sorting.Model != "default" || loaded.Sorting.Site != "default" {
+		t.Fatalf("invalid sorting should normalize to default: %+v", loaded.Sorting)
+	}
+}
+
+func TestSortingDefaultValuesForOldRows(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put without Sorting (simulates old row)
+	_, err = db.PutUserPreferences(ctx, user.ID, Preferences{
+		Hidden:         PreferencesHidden{Sites: []string{}, Providers: []string{}, Models: []string{}},
+		DefaultHealthy: true,
+		Tags:           map[string]PreferencesTag{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.GetUserPreferences(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should get default sorting, not nil
+	if loaded.Sorting == nil || loaded.Sorting.Model != "default" || loaded.Sorting.Site != "default" {
+		t.Fatalf("old row should return default sorting: %+v", loaded.Sorting)
+	}
+}
+
 func TestNormalizeWishDomain(t *testing.T) {
 	cases := []struct {
 		raw    string

@@ -279,7 +279,7 @@
 
 .public-dashboard .toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto minmax(252px, auto);
+  grid-template-columns: minmax(260px, 1fr) auto auto minmax(252px, auto);
   gap: 10px;
   align-items: center;
   padding: 10px;
@@ -416,6 +416,110 @@
   box-shadow: 0 1px 4px rgb(21 34 29 / 10%);
   color: var(--text);
   font-weight: 650;
+}
+
+/* 排序选择器 */
+.sort-field {
+  position: relative;
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  white-space: nowrap;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.sort-field-label {
+  color: var(--muted);
+  font-size: var(--font-small);
+}
+
+.sort-field select {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-small);
+  cursor: pointer;
+  outline: none;
+}
+
+.sort-field::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--faint);
+  border-bottom: 1.5px solid var(--faint);
+  transform: rotate(45deg) translateY(-1px);
+  pointer-events: none;
+}
+
+.sort-field.gold-active {
+  border-color: var(--gold-line);
+  background: var(--gold-ink);
+  color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-glow);
+}
+
+.sort-field.gold-active .sort-field-label {
+  color: var(--gold);
+}
+
+.sort-field.gold-active select {
+  color: var(--gold);
+}
+
+.sort-field.gold-active::after {
+  border-color: var(--gold);
+}
+
+.sort-field select option.smart-option {
+  background: var(--gold-ink);
+  color: var(--gold);
+  font-weight: 650;
+}
+
+.sort-field:has(select:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 定制页排序设置 */
+.pref-select {
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-small);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+}
+
+.pref-select option.smart-option {
+  background: var(--gold-ink);
+  color: var(--gold);
+  font-weight: 650;
+}
+
+.pref-sort-hint {
+  margin-top: 6px;
+  font-size: var(--font-caption);
+}
+
+.sort-row {
+  min-height: 46px;
 }
 
 .public-dashboard .summary {
@@ -1093,6 +1197,11 @@
   .view-switch {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  .sort-field {
+    grid-column: 1 / -1;
+    justify-self: stretch;
   }
 
   .public-dashboard .filter-layout {

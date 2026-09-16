@@ -40,6 +40,7 @@ const rechargeClose = document.querySelector('#recharge-close');
 const rechargePrice = document.querySelector('#recharge-price');
 const pledgeCredit = document.querySelector('#pledge-credit');
 const rechargeMessage = document.querySelector('#recharge-message');
+const sortSelect = document.querySelector('#sort-mode');
 const wishPage = document.querySelector('#wish-page');
 const wishList = document.querySelector('#wish-list');
 const wishNewButton = document.querySelector('#wish-new');
@@ -94,6 +95,7 @@ let tagStatus = { text: '', undo: null };
 let tagFocusAfterRender = null;
 let customizeSearches = { sites: '', providers: '', models: '', tagSites: '' };
 let searchFocusKey = null;
+let sortMode = { model: 'default', site: 'default' };
 
 const selectedFilters = { provider: new Set(), model: new Set(), site: new Set(), tag: new Set() };
 const stateLabels = { healthy: '健康', degraded: '降级', failed: '故障', no_samples: '暂无样本', unknown: '未知' };
@@ -133,6 +135,15 @@ function loadPreferences() {
     tags = new Map();
   }
   healthyOnly.checked = defaultHealthy;
+  try {
+    const raw = JSON.parse(storageGet('relayscope-sorting') || '{}');
+    const validModels = new Set(SORT_OPTIONS.model.map((o) => o.value));
+    const validSites = new Set(SORT_OPTIONS.site.map((o) => o.value));
+    sortMode = {
+      model: validModels.has(raw.model) ? raw.model : 'default',
+      site: validSites.has(raw.site) ? raw.site : 'default',
+    };
+  } catch { sortMode = { model: 'default', site: 'default' }; }
 }
 
 // 非会员/已过期：定制暂停生效，看板恢复默认展示；本地与服务端数据都保留，续期后自动恢复
@@ -141,6 +152,8 @@ function clearAppliedPreferences() {
   defaultHealthy = false;
   tags = new Map();
   healthyOnly.checked = false;
+  sortMode = { model: 'default', site: 'default' };
+  renderSortSelect();
   render();
 }
 
@@ -152,6 +165,7 @@ function applyPreferencesForMembership() {
 const saveHidden = () => { storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] })); scheduleCloudSave(); };
 const saveDefaultHealthy = () => { storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0'); scheduleCloudSave(); };
 const saveTags = () => { storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }])))); scheduleCloudSave(); };
+const saveSorting = () => { storageSet('relayscope-sorting', JSON.stringify(sortMode)); scheduleCloudSave(); };
 
 function isHiddenCard(card) {
   return hidden.sites.has(card.siteName)
@@ -218,7 +232,9 @@ function preferencesIsEmpty(prefs) {
   const hidden = prefs.hidden || {};
   const hasHidden = (hidden.sites || []).length || (hidden.providers || []).length || (hidden.models || []).length;
   const tagCount = Object.keys(prefs.tags || {}).length;
-  return !hasHidden && !tagCount && !prefs.defaultHealthy;
+  const sorting = prefs.sorting;
+  const hasSorting = sorting && (sorting.model !== 'default' || sorting.site !== 'default');
+  return !hasHidden && !tagCount && !prefs.defaultHealthy && !hasSorting;
 }
 // 首次同步合并决策：云端有数据以云端为准；云端为空且本地有数据则把本地上传。
 function mergePreferences(local, cloud) {
@@ -279,6 +295,224 @@ function renderMarkdown(source) {
   return blocks.join('');
 }
 // ---- 会员与同步纯函数结束 ----
+
+// ---- 排序纯函数（供面板与测试共用，此块到 formatMetric 为止） ----
+
+const SORT_OPTIONS = {
+  model: [
+    { value: 'smart', label: '✦ 智能排序', gold: true },
+    { value: 'default', label: '默认排序' },
+    { value: 'price', label: '按价格' },
+    { value: 'availability', label: '按可用率' },
+    { value: 'latency', label: '按延迟' },
+  ],
+  site: [
+    { value: 'smart', label: '✦ 智能排序', gold: true },
+    { value: 'default', label: '默认排序' },
+    { value: 'availability-median', label: '按可用率中位数' },
+    { value: 'latency', label: '按延迟' },
+    { value: 'healthy-count', label: '按可用模型数量' },
+  ],
+};
+
+const SMART_MODEL_WEIGHTS = { a: 0.45, l: 0.30, p: 0.25 };
+const SMART_CONFIDENCE_MIN = 30;
+const SMART_CONFIDENCE_PENALTY = 0.05;
+const SITE_Q_WEIGHTS = { a: 0.50, l: 0.30, s: 0.20 };
+const SITE_LATENCY_PIVOT = 8000;
+const SITE_STABILITY_PENALTY = 0.5;
+const SITE_TOP_K = 6;
+const SITE_DISCOUNT = 0.75;
+const SITE_GOOD_THRESHOLD = 0.80;
+const SITE_GOOD_CAP = 10;
+const SITE_PEAK_WEIGHT = 0.7;
+const SITE_BREADTH_WEIGHT = 0.3;
+const FX_RATES = { CNY: 1, USD: 7.25, $: 7.25, '¥': 1, '￥': 1 };
+
+function sortMedian(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function timelineStability(timeline) {
+  if (!timeline || timeline.length === 0) return null;
+  const isUp = (s) => s === 'healthy' || s === 'degraded';
+  let covered = 0;
+  let upSlots = 0;
+  let switches = 0;
+  let prevWasUp = null;
+  for (const slot of timeline) {
+    if (slot.state === 'no_samples') continue;
+    covered++;
+    const wasUp = isUp(slot.state);
+    if (wasUp) upSlots++;
+    if (prevWasUp !== null && wasUp !== prevWasUp) switches++;
+    prevWasUp = wasUp;
+  }
+  if (covered < 4) return null;
+  return Math.max(0, upSlots / covered - SITE_STABILITY_PENALTY * switches / covered);
+}
+
+function priceValueForSort(price) {
+  const raw = priceValue(price);
+  if (!isFinite(raw)) return Infinity;
+  const rate = FX_RATES[price?.currency] ?? FX_RATES[price?.currencySymbol] ?? 1;
+  return raw * rate;
+}
+
+// Borda 排名融合：对一组卡片在可用率/延迟/价格三维度上排名并加权融合
+function smartBordaScores(cards) {
+  const hasSample = (c) => c.successRatio != null;
+  const sampled = cards.filter(hasSample);
+  const unsampled = cards.filter((c) => !hasSample(c));
+  if (!sampled.length) return new Map();
+
+  // 分档：{healthy, degraded} 前档，failed 后档（故障端点不因便宜跃升）
+  const isT1 = (c) => c.serviceState === 'healthy' || c.serviceState === 'degraded';
+  const tier1 = sampled.filter(isT1);
+  const tier2 = sampled.filter((c) => !isT1(c));
+  const tiers = [tier1, tier2];
+  const scoreMap = new Map();
+
+  for (const tier of tiers) {
+    if (!tier.length) continue;
+    const n = tier.length;
+    if (n === 1) {
+      scoreMap.set(tier[0], 1.0 - SMART_CONFIDENCE_PENALTY);
+      continue;
+    }
+    // 计算三维度排名（标准竞争排名：同值取平均）
+    const dims = [
+      { key: 'a', getter: (c) => c.successRatio ?? 0, asc: false },
+      { key: 'l', getter: (c) => c.averageLatencyMs ?? Infinity, asc: true },
+      { key: 'p', getter: (c) => priceValueForSort(c.lowestPrice), asc: true },
+    ];
+    const ranks = new Map();
+    for (const card of tier) ranks.set(card, { a: 0, l: 0, p: 0 });
+
+    for (const dim of dims) {
+      const sorted = [...tier].sort((x, y) => {
+        const vx = dim.getter(x), vy = dim.getter(y);
+        return dim.asc ? vx - vy : vy - vx;
+      });
+      // 标准竞争排名：同值取平均排名
+      let i = 0;
+      while (i < sorted.length) {
+        const val = dim.getter(sorted[i]);
+        let j = i;
+        while (j < sorted.length && dim.getter(sorted[j]) === val) j++;
+        const avgRank = (i + j - 1) / 2;
+        for (let k = i; k < j; k++) ranks.get(sorted[k])[dim.key] = avgRank;
+        i = j;
+      }
+    }
+
+    // 排名→分数→加权融合
+    for (const card of tier) {
+      const r = ranks.get(card);
+      const rankScore = (rank) => 1 - rank / (n - 1);
+      const base = SMART_MODEL_WEIGHTS.a * rankScore(r.a)
+        + SMART_MODEL_WEIGHTS.l * rankScore(r.l)
+        + SMART_MODEL_WEIGHTS.p * rankScore(r.p);
+      const count = card.requestCount ?? 0;
+      const confidence = Math.min(1, count / SMART_CONFIDENCE_MIN);
+      scoreMap.set(card, base - SMART_CONFIDENCE_PENALTY * (1 - confidence));
+    }
+  }
+  return scoreMap;
+}
+
+// 模型视图：对组内卡片按指定 mode 排序，返回排序后的新数组
+function sortGroupCards(cards, mode) {
+  const arr = [...cards];
+  if (mode === 'default') {
+    arr.sort(compareCards);
+    return arr;
+  }
+  if (mode === 'price') {
+    arr.sort((a, b) => {
+      const pa = priceValueForSort(a.lowestPrice);
+      const pb = priceValueForSort(b.lowestPrice);
+      if (pa !== pb) return pa - pb;
+      return compareCards(a, b);
+    });
+    return arr;
+  }
+  if (mode === 'availability') {
+    arr.sort((a, b) => {
+      const ra = a.successRatio ?? -1;
+      const rb = b.successRatio ?? -1;
+      if (ra !== rb) return rb - ra;
+      return compareCards(a, b);
+    });
+    return arr;
+  }
+  if (mode === 'latency') {
+    arr.sort((a, b) => {
+      const la = a.averageLatencyMs ?? Infinity;
+      const lb = b.averageLatencyMs ?? Infinity;
+      if (la !== lb) return la - lb;
+      return compareCards(a, b);
+    });
+    return arr;
+  }
+  if (mode === 'smart') {
+    const scores = smartBordaScores(arr);
+    // 按档位和分数排序
+    const tierOf = (c) => c.successRatio == null ? 2
+      : (c.serviceState === 'healthy' || c.serviceState === 'degraded') ? 0 : 1;
+    arr.sort((a, b) => {
+      const ta = tierOf(a), tb = tierOf(b);
+      if (ta !== tb) return ta - tb;
+      const sa = scores.get(a) ?? 0;
+      const sb = scores.get(b) ?? 0;
+      if (Math.abs(sa - sb) > 1e-9) return sb - sa;
+      return compareCards(a, b);
+    });
+    // 附加分数供 render 重用
+    for (const card of arr) card.__smartScore = scores.get(card) ?? 0;
+    return arr;
+  }
+  arr.sort(compareCards);
+  return arr;
+}
+
+// 站点智能分数：专精识别算法
+// 返回 { score, peak, breadth, goodCount, participating } 或 null（零参与）
+function smartSiteScore(siteCards) {
+  const participating = siteCards.filter((c) => c.successRatio != null);
+  if (!participating.length) return null;
+
+  const qs = participating.map((card) => {
+    const a = card.successRatio;
+    const latency = card.averageLatencyMs;
+    const l = latency != null ? 1 / (1 + latency / SITE_LATENCY_PIVOT) : 0.25;
+    const stability = timelineStability(card.timeline);
+    const s = stability != null ? stability : a;
+    return { card, q: SITE_Q_WEIGHTS.a * a + SITE_Q_WEIGHTS.l * l + SITE_Q_WEIGHTS.s * s };
+  });
+
+  // 按 Q 降序，取 top-k 折扣峰值
+  qs.sort((x, y) => y.q - x.q);
+  const k = Math.min(qs.length, SITE_TOP_K);
+  let num = 0, den = 0;
+  for (let i = 0; i < k; i++) {
+    const w = Math.pow(SITE_DISCOUNT, i);
+    num += qs[i].q * w;
+    den += w;
+  }
+  const peak = den > 0 ? num / den : 0;
+
+  const goodCount = qs.filter((x) => x.q >= SITE_GOOD_THRESHOLD).length;
+  const breadth = Math.min(1, Math.log(1 + goodCount) / Math.log(1 + SITE_GOOD_CAP));
+  const score = SITE_PEAK_WEIGHT * peak + SITE_BREADTH_WEIGHT * breadth;
+
+  return { score, peak, breadth, goodCount, participating: participating.length };
+}
+
+// ---- 排序纯函数结束 ----
 
 const formatMetric = (value, suffix = '') => value == null ? '—' : `${Number(value).toFixed(Math.abs(value) < 10 ? 2 : 0)}${suffix}`;
 const formatRatio = (value) => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%`;
@@ -521,9 +755,44 @@ function orderedCards(items) {
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(card);
   }
-  return [...grouped.entries()]
-    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
-    .flatMap(([, groupCards]) => groupCards.sort(compareCards));
+  const entries = [...grouped.entries()];
+  if (view === 'model') {
+    const mode = sortMode.model;
+    entries.sort(([left], [right]) => left.localeCompare(right, 'zh-CN'));
+    return entries.flatMap(([, groupCards]) => sortGroupCards(groupCards, mode));
+  }
+  // 站点视图：按站点聚合排序
+  const mode = sortMode.site;
+  if (mode === 'default') {
+    entries.sort(([left], [right]) => left.localeCompare(right, 'zh-CN'));
+    return entries.flatMap(([, groupCards]) => groupCards.sort(compareCards));
+  }
+  // 计算站点聚合值
+  const aggMap = new Map();
+  for (const [name, cards] of entries) {
+    if (mode === 'availability-median') {
+      const ratios = cards.filter((c) => c.successRatio != null).map((c) => c.successRatio);
+      aggMap.set(name, ratios.length ? sortMedian(ratios) : null);
+    } else if (mode === 'latency') {
+      const lats = cards.filter((c) => c.serviceState === 'healthy' && c.averageLatencyMs != null).map((c) => c.averageLatencyMs);
+      aggMap.set(name, lats.length ? sortMedian(lats) : null);
+    } else if (mode === 'healthy-count') {
+      aggMap.set(name, cards.filter((c) => c.serviceState === 'healthy').length);
+    } else if (mode === 'smart') {
+      const result = smartSiteScore(cards);
+      aggMap.set(name, result ? result.score : null);
+    }
+  }
+  entries.sort(([a], [b]) => {
+    const va = aggMap.get(a), vb = aggMap.get(b);
+    const na = va == null, nb = vb == null;
+    if (na && nb) return a.localeCompare(b, 'zh-CN');
+    if (na) return 1;
+    if (nb) return -1;
+    if (mode === 'latency') return va - vb; // ASC
+    return vb - va; // DESC for ratio, count, smart
+  });
+  return entries.flatMap(([, groupCards]) => groupCards.sort(compareCards));
 }
 
 function paginationItems(pageCount) {
@@ -597,9 +866,16 @@ function render() {
     grouped.get(key).push(card);
   }
 
-  const groupsHTML = [...grouped.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, 'zh-CN'))
-    .map(([name, items]) => `<section class="result-group"><div class="group-heading"><div><h2>${escapeHTML(name)}</h2><span class="group-count">${items.length}</span></div></div><div class="card-grid">${items.sort(compareCards).map(renderCard).join('')}</div></section>`)
+  const groupEntries = [...grouped.entries()];
+  // 站点视图非默认排序：保持 Map 插入序（orderedCards 已预排序）
+  if (view !== 'site' || sortMode.site === 'default') {
+    groupEntries.sort(([a], [b]) => a.localeCompare(b, 'zh-CN'));
+  }
+  const groupsHTML = groupEntries
+    .map(([name, items]) => {
+      const sorted = view === 'model' && sortMode.model !== 'default' ? sortGroupCards(items, sortMode.model) : items.sort(compareCards);
+      return `<section class="result-group"><div class="group-heading"><div><h2>${escapeHTML(name)}</h2><span class="group-count">${items.length}</span></div></div><div class="card-grid">${sorted.map(renderCard).join('')}</div></section>`;
+    })
     .join('');
   contentElement.innerHTML = groupsHTML + renderPagination(ordered.length, pageCount, start, end);
 
@@ -785,6 +1061,7 @@ modelViewButton.addEventListener('click', () => {
   currentPage = 1;
   modelViewButton.setAttribute('aria-pressed', 'true');
   siteViewButton.setAttribute('aria-pressed', 'false');
+  renderSortSelect();
   render();
 });
 siteViewButton.addEventListener('click', () => {
@@ -792,8 +1069,25 @@ siteViewButton.addEventListener('click', () => {
   currentPage = 1;
   modelViewButton.setAttribute('aria-pressed', 'false');
   siteViewButton.setAttribute('aria-pressed', 'true');
+  renderSortSelect();
   render();
 });
+if (sortSelect) {
+  sortSelect.addEventListener('change', () => {
+    const value = sortSelect.value;
+    if (value === 'smart' && membershipIs() !== 'active') {
+      sortSelect.value = sortMode[view];
+      showToast('✦ 智能排序为会员专属功能');
+      openRecharge();
+      return;
+    }
+    sortMode[view] = value;
+    currentPage = 1;
+    render();
+    sortSelect.classList.toggle('gold-active', value === 'smart');
+    if (membershipIs() === 'active') saveSorting();
+  });
+}
 themeToggle.addEventListener('click', () => {
   const modes = ['auto', 'light', 'dark'];
   const preference = modes[(modes.indexOf(themeToggle.dataset.mode) + 1) % modes.length];
@@ -849,6 +1143,17 @@ function dimensionCounts(definition) {
   return [...counts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'zh-CN'));
 }
 
+function renderSortSelect() {
+  if (!sortSelect) return;
+  const options = SORT_OPTIONS[view] || SORT_OPTIONS.model;
+  const isMember = membershipIs() === 'active';
+  sortSelect.innerHTML = options.map((o) => {
+    const label = o.gold && !isMember ? `${o.label} · 会员` : o.label;
+    return `<option value="${o.value}"${sortMode[view] === o.value ? ' selected' : ''}${o.gold ? ' class="smart-option"' : ''}>${label}</option>`;
+  }).join('');
+  sortSelect.classList.toggle('gold-active', sortMode[view] === 'smart');
+}
+
 function renderCustomizeDisplay() {
   const groups = CUSTOMIZE_DIMENSIONS.map((definition) => {
     const query = customizeSearches[definition.key].trim().toLowerCase();
@@ -861,7 +1166,8 @@ function renderCustomizeDisplay() {
     const hiddenCount = hidden[definition.key].size;
     return `<section class="pref-section"><div class="pref-head"><h3>${definition.title}</h3>${hiddenCount ? `<span class="pref-count" data-pref-count="${definition.key}">已屏蔽 ${hiddenCount} 项</span><button type="button" class="pref-reset" data-pref-reset="${definition.key}">全部显示</button>` : ''}</div><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${definition.key}" value="${escapeHTML(customizeSearches[definition.key])}" placeholder="筛选${definition.title}"></label><div class="pref-list" data-pref-list="${definition.key}">${rows || '<p class="pref-empty">没有匹配的条目</p>'}</div></section>`;
   });
-  customizeDisplayPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>默认状态</h3></div><label class="pref-row toggle-row"><span class="pref-row-text"><strong>默认只看当前可用模型</strong><small>开启后每次打开页面都会自动勾选首页的“只看当前可用”，当次访问仍可手动取消</small></span><span class="toggle"><input id="pref-default-healthy" type="checkbox"${defaultHealthy ? ' checked' : ''} aria-label="默认只看当前可用模型"><i></i></span></label></section>${groups.join('')}<section class="pref-foot"><p class="muted">新出现的站点、供应商或模型默认都会展示，需要时再在这里屏蔽。</p><button type="button" class="pref-reset-all${resetArmed ? ' armed' : ''}" data-pref-reset-all>${resetArmed ? '再次点击确认恢复' : '恢复默认'}</button></section>`;
+  const sortSelects = (key) => SORT_OPTIONS[key].map((o) => `<option value=”${o.value}”${sortMode[key] === o.value ? ' selected' : ''}${o.gold ? ' class=”smart-option”' : ''}>${o.label}</option>`).join('');
+  customizeDisplayPanel.innerHTML = `<section class=”pref-section”><div class=”pref-head”><h3>默认状态</h3></div><label class=”pref-row toggle-row”><span class=”pref-row-text”><strong>默认只看当前可用模型</strong><small>开启后每次打开页面都会自动勾选首页的”只看当前可用”，当次访问仍可手动取消</small></span><span class=”toggle”><input id=”pref-default-healthy” type=”checkbox”${defaultHealthy ? ' checked' : ''} aria-label=”默认只看当前可用模型”><i></i></span></label></section><section class=”pref-section”><div class=”pref-head”><h3>自动排序</h3></div><label class=”pref-row sort-row”><span class=”pref-row-text”><strong>模型视图</strong><small>打开看板时按此方式排列同一模型下的站点</small></span><select class=”pref-select” data-pref-sort=”model” aria-label=”模型视图自动排序”>${sortSelects('model')}</select></label><label class=”pref-row sort-row”><span class=”pref-row-text”><strong>站点视图</strong><small>打开看板时按此方式排列站点</small></span><select class=”pref-select” data-pref-sort=”site” aria-label=”站点视图自动排序”>${sortSelects('site')}</select></label><p class=”muted pref-sort-hint”>智能排序综合可用率、延迟、价格自动优选；站点视图侧重识别有多个长期稳定低延迟模型的专精站点。</p></section>${groups.join('')}<section class="pref-foot"><p class="muted">新出现的站点、供应商或模型默认都会展示，需要时再在这里屏蔽。</p><button type="button" class="pref-reset-all${resetArmed ? ' armed' : ''}" data-pref-reset-all>${resetArmed ? '再次点击确认恢复' : '恢复默认'}</button></section>`;
 }
 
 function siteTagCount(site) {
@@ -1175,6 +1481,17 @@ function handleCustomizeChange(event) {
     render();
     return;
   }
+  if (input.matches('[data-pref-sort]')) {
+    const key = input.dataset.prefSort;
+    if (key === 'model' || key === 'site') {
+      sortMode[key] = input.value;
+      saveSorting();
+      currentPage = 1;
+      render();
+      renderSortSelect();
+    }
+    return;
+  }
   if (!input.matches('[data-pref-toggle]')) return;
   const key = input.dataset.prefKey;
   const value = input.dataset.prefValue;
@@ -1296,7 +1613,8 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString('zh-CN'
 const collectLocalPreferences = () => ({
   hidden: { sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] },
   defaultHealthy,
-  tags: Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))
+  tags: Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }])),
+  sorting: { ...sortMode },
 });
 
 function showToast(message, tone = '') {
@@ -1349,6 +1667,7 @@ async function loadUser() {
   renderWishBanner();
   applyPreferencesForMembership();
   if (currentUser) await syncPreferencesFromCloud();
+  renderSortSelect();
   if (!wishPage.hidden) loadWishes();
 }
 
@@ -1392,10 +1711,20 @@ async function syncPreferencesFromCloud() {
         tags.set(name, { color: TAG_COLORS.includes(tag.color) ? tag.color : 'mint', sites: new Set(Array.isArray(tag.sites) ? tag.sites : []) });
       }
       healthyOnly.checked = defaultHealthy;
+      if (cloud.sorting && typeof cloud.sorting === 'object') {
+        const validModels = new Set(SORT_OPTIONS.model.map((o) => o.value));
+        const validSites = new Set(SORT_OPTIONS.site.map((o) => o.value));
+        sortMode = {
+          model: validModels.has(cloud.sorting.model) ? cloud.sorting.model : 'default',
+          site: validSites.has(cloud.sorting.site) ? cloud.sorting.site : 'default',
+        };
+      }
       // cloudSynced 尚未置真，镜像到 localStorage 不会触发回环上传
       storageSet('relayscope-hidden', JSON.stringify({ sites: [...hidden.sites], providers: [...hidden.providers], models: [...hidden.models] }));
       storageSet('relayscope-default-healthy', defaultHealthy ? '1' : '0');
       storageSet('relayscope-tags', JSON.stringify(Object.fromEntries([...tags].map(([name, tag]) => [name, { color: tag.color, sites: [...tag.sites] }]))));
+      storageSet('relayscope-sorting', JSON.stringify(sortMode));
+      renderSortSelect();
       render();
       if (!customizePage.hidden) renderCustomize();
       showToast('已同步你的定制设置');
