@@ -1202,15 +1202,19 @@ function renderSortSelect() {
   const label = current.gold && !isMember ? '✦ 智能排序' : current.label;
   sortTrigger.querySelector('.sort-trigger-label').textContent = label;
   sortTrigger.classList.toggle('gold-active', current.gold && isMember);
-  // 构建下拉选项
-  sortDropdown.innerHTML = options.map((o) => {
+  // 构建下拉选项（智能与普通之间插入分隔线）
+  const parts = [];
+  options.forEach((o) => {
     const isSelected = sortMode[view] === o.value;
     const isSmart = o.gold;
     const displayLabel = isSmart && !isMember ? '智能排序' : o.label.replace('✦ ', '');
     const badge = isSmart && !isMember ? '<span class="sort-badge">会员</span>' : '';
     const mark = isSmart ? '<span class="sort-mark" aria-hidden="true">✦</span>' : '';
-    return `<button class="sort-option${isSelected ? ' selected' : ''}${isSmart ? ' smart' : ''}" role="option" data-value="${o.value}"${isSelected ? ' aria-selected="true"' : ''} tabindex="${isSelected ? '0' : '-1'}">${mark}<span class="sort-option-label">${displayLabel}</span>${badge}${isSelected ? '<svg class="sort-check" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m5 13 4 4L19 7" /></svg>' : ''}</button>`;
-  }).join('');
+    parts.push(`<button class="sort-option${isSelected ? ' selected' : ''}${isSmart ? ' smart' : ''}" role="option" data-value="${o.value}"${isSelected ? ' aria-selected="true"' : ''} tabindex="${isSelected ? '0' : '-1'}">${mark}<span class="sort-option-label">${displayLabel}</span>${badge}${isSelected ? '<svg class="sort-check" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m5 13 4 4L19 7" /></svg>' : ''}</button>`);
+    // 智能排序之后插入分隔线
+    if (isSmart) parts.push('<div class="sort-option-sep" role="separator" aria-hidden="true"></div>');
+  });
+  sortDropdown.innerHTML = parts.join('');
 }
 
 function renderCustomizeDisplay() {

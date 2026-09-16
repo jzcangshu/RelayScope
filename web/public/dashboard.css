@@ -418,18 +418,18 @@
   font-weight: 650;
 }
 
-/* ===== 排序自定义下拉 ===== */
+/* ===== 排序自定义下拉（质感重做） ===== */
 .sort-field {
   position: relative;
 }
 
-/* 触发按钮 */
-.sort-trigger {
+/* 触发按钮 —— 与 .check 药丸风格同族 */
+.public-dashboard .sort-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-height: 38px;
-  padding: 0 12px;
+  padding: 0 11px 0 10px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface-subtle);
@@ -438,12 +438,12 @@
   font-size: var(--font-small);
   white-space: nowrap;
   cursor: pointer;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 100ms cubic-bezier(.23, 1, .32, 1);
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 80ms cubic-bezier(.23, 1, .32, 1);
 }
 
 .sort-trigger:hover {
   border-color: var(--border-strong);
-  background: var(--surface);
+  background: var(--surface-hover);
 }
 
 .sort-trigger:active {
@@ -456,14 +456,19 @@
 }
 
 .sort-trigger-icon {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   fill: none;
   stroke: var(--muted);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: stroke 150ms ease;
+}
+
+.sort-trigger:hover .sort-trigger-icon {
+  stroke: var(--text);
 }
 
 .sort-trigger-label {
@@ -472,27 +477,32 @@
 }
 
 .sort-trigger-chevron {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
   fill: none;
   stroke: var(--faint);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: transform 200ms cubic-bezier(.23, 1, .32, 1);
+  transition: transform 220ms cubic-bezier(.23, 1, .32, 1), stroke 150ms ease;
+}
+
+.sort-trigger:hover .sort-trigger-chevron {
+  stroke: var(--muted);
 }
 
 .sort-trigger.open .sort-trigger-chevron {
   transform: rotate(180deg);
+  stroke: var(--text);
 }
 
 /* 黑金状态（智能排序已选中 + 会员） */
-.sort-trigger.gold-active {
+.public-dashboard .sort-trigger.gold-active {
   border-color: var(--gold-line);
-  background: var(--gold-ink);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 14%, var(--surface-subtle)), color-mix(in srgb, var(--gold-deep) 8%, var(--surface-subtle)));
   color: var(--gold);
-  box-shadow: 0 0 0 2px var(--gold-glow);
+  box-shadow: 0 0 0 1px var(--gold-glow), 0 1px 3px var(--gold-glow);
 }
 
 .sort-trigger.gold-active .sort-trigger-icon {
@@ -501,27 +511,39 @@
 
 .sort-trigger.gold-active .sort-trigger-label {
   color: var(--gold);
+  font-weight: 650;
 }
 
 .sort-trigger.gold-active .sort-trigger-chevron {
   stroke: var(--gold);
 }
 
-/* 下拉面板 */
+.sort-trigger.gold-active:hover {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold-glow), 0 3px 10px var(--gold-glow);
+}
+
+/* 下拉面板 —— 主题感知阴影 */
 .sort-dropdown {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 50;
-  min-width: 200px;
-  padding: 4px;
+  z-index: 60;
+  min-width: 208px;
+  padding: 5px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 11px;
   background: var(--surface);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 38px rgb(0 0 0 / 14%), 0 3px 10px rgb(0 0 0 / 8%), 0 0 0 1px color-mix(in srgb, var(--border-strong) 30%, transparent);
   opacity: 0;
-  transform: translateY(-6px);
-  animation: sort-dropdown-in 180ms cubic-bezier(.23, 1, .32, 1) forwards;
+  transform: translateY(-6px) scale(0.98);
+  transform-origin: top right;
+  animation: sort-dropdown-in 170ms cubic-bezier(.23, 1, .32, 1) forwards;
+}
+
+:root[data-theme="dark"] .sort-dropdown {
+  box-shadow: 0 10px 38px rgb(0 0 0 / 45%), 0 3px 10px rgb(0 0 0 / 30%), 0 0 0 1px color-mix(in srgb, var(--border-strong) 50%, transparent);
+  border-color: var(--border-strong);
 }
 
 .sort-dropdown[hidden] {
@@ -529,8 +551,8 @@
 }
 
 @keyframes sort-dropdown-in {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* 下拉选项 */
@@ -540,7 +562,7 @@
   gap: 8px;
   width: 100%;
   min-height: 36px;
-  padding: 6px 12px;
+  padding: 6px 11px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -569,7 +591,15 @@
 }
 
 .sort-option.selected:hover {
-  background: color-mix(in srgb, var(--accent-soft) 80%, var(--accent));
+  background: color-mix(in srgb, var(--accent-soft) 75%, var(--accent));
+}
+
+/* 智能与普通之间的分隔线 */
+.sort-option-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+  pointer-events: none;
 }
 
 .sort-mark {
@@ -583,9 +613,9 @@
 }
 
 .sort-check {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.5;
@@ -593,17 +623,20 @@
   stroke-linejoin: round;
 }
 
-/* 智能排序选项：金色左侧描边 + hover 金色高亮 */
+/* 智能排序选项：金色左侧描边 + 金色文字 + 金色 hover */
 .sort-option.smart {
   position: relative;
-  border-left: 2.5px solid var(--gold-line);
-  margin-left: 0;
-  padding-left: 10px;
+  border-left: 3px solid var(--gold-line);
+  padding-left: 9px;
+}
+
+:root[data-theme="dark"] .sort-option.smart {
+  border-left-color: var(--gold);
 }
 
 .sort-option.smart:hover,
 .sort-option.smart:focus-visible {
-  background: color-mix(in srgb, var(--gold-ink) 8%, var(--surface-subtle));
+  background: color-mix(in srgb, var(--gold) 10%, var(--surface-subtle));
 }
 
 .sort-option.smart .sort-option-label {
@@ -611,23 +644,41 @@
   font-weight: 600;
 }
 
+:root[data-theme="dark"] .sort-option.smart .sort-option-label {
+  color: var(--gold);
+}
+
 .sort-option.smart.selected {
-  background: color-mix(in srgb, var(--gold-ink) 12%, var(--surface));
+  background: color-mix(in srgb, var(--gold) 14%, var(--surface));
 }
 
 .sort-option.smart.selected .sort-option-label {
   color: var(--gold-deep);
 }
 
+:root[data-theme="dark"] .sort-option.smart.selected .sort-option-label {
+  color: var(--gold);
+}
+
+.sort-option.smart.selected .sort-mark {
+  color: var(--gold);
+}
+
 .sort-badge {
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--gold-ink);
-  color: var(--gold);
-  font-size: 10.5px;
+  background: color-mix(in srgb, var(--gold) 16%, var(--surface-subtle));
+  color: var(--gold-deep);
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.6;
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] .sort-badge {
+  background: color-mix(in srgb, var(--gold) 18%, var(--surface-subtle));
+  color: var(--gold);
 }
 
 /* 定制页排序设置 */
