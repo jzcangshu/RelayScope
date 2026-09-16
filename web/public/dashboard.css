@@ -2148,15 +2148,15 @@
 .wish-head { align-items: center; margin: 14px 0 20px; }
 .wish-head h1 { font-size: 24px; letter-spacing: -0.2px; }
 .wish-head .primary-button {
-  background: linear-gradient(135deg, #f6bd45, #e79a2b);
-  color: #3c2a04;
+  background: linear-gradient(135deg, var(--gold), var(--gold-deep));
+  color: var(--gold-ink);
   font-weight: 700;
-  box-shadow: 0 4px 14px rgba(246, 189, 69, 0.28);
+  box-shadow: 0 4px 14px var(--gold-glow);
   padding: 11px 20px;
 }
 .wish-head .primary-button:hover {
-  background: linear-gradient(135deg, #f8c85a, #d98d20);
-  box-shadow: 0 6px 18px rgba(246, 189, 69, 0.36);
+  background: linear-gradient(135deg, var(--gold-hover-a), var(--gold-hover-b));
+  box-shadow: 0 6px 18px var(--gold-glow);
 }
 
 /* 统计条：一眼看到池子的热度 */
@@ -2353,10 +2353,54 @@ body.public-dashboard > main { flex: 1 1 auto; }
 .public-footer { margin-top: auto; }
 body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
 
-/* ===== LDC 充值弹窗（金色尊贵风） ===== */
+/* ===== 金色尊贵风：充值 / 兑换 / 许愿弹窗（主题令牌化） ===== */
+:root {
+  --gold: #f6bd45;
+  --gold-deep: #e79a2b;
+  --gold-hover-a: #f8c85a;
+  --gold-hover-b: #d98d20;
+  --gold-ink: #3c2a04;
+  --gold-mark: #d98d20;
+  --gold-line: #e8a33d;
+  --gold-numeric: #b07615;
+  --gold-glow: rgb(246 189 69 / 30%);
+}
+:root[data-theme="dark"] {
+  /* 黑金：更暗更沉稳的金 */
+  --gold: #d9a03c;
+  --gold-deep: #a8721d;
+  --gold-hover-a: #e0ad4a;
+  --gold-hover-b: #8f5f16;
+  --gold-ink: #241703;
+  --gold-mark: #e0a63c;
+  --gold-line: #b9862e;
+  --gold-numeric: #e0a63c;
+  --gold-glow: rgb(201 144 47 / 22%);
+}
+.gold-mark { color: var(--gold-mark); font-size: 18px; }
+/* 特异性 (0,3,0)：必须压过 .public-dashboard button 的底色规则 */
+.public-dashboard .form-dialog .gold-cta {
+  width: 100%;
+  padding: 12px 18px;
+  border: 0;
+  font-size: 15px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--gold), var(--gold-deep));
+  color: #3c2a04;
+  box-shadow: 0 4px 16px var(--gold-glow);
+}
+:root[data-theme="dark"] .public-dashboard .form-dialog .gold-cta {
+  color: #241703;
+}
+.public-dashboard .form-dialog .gold-cta:hover {
+  background: linear-gradient(135deg, var(--gold-hover-a), var(--gold-hover-b));
+  box-shadow: 0 6px 20px var(--gold-glow);
+}
+.public-dashboard .form-dialog .gold-cta:active { transform: scale(0.98); }
+
+/* 充值弹窗 */
 .recharge-dialog { width: min(500px, calc(100vw - 32px)); }
 .recharge-head h2 { display: flex; align-items: center; gap: 8px; }
-.recharge-mark { color: #e8a33d; font-size: 18px; }
 .recharge-plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 14px; }
 .recharge-plan {
   position: relative;
@@ -2386,39 +2430,73 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
   font-size: 10.5px;
   font-weight: 700;
 }
-.plan-flag-gold { background: linear-gradient(135deg, #f6bd45, #e79a2b); color: #3c2a04; }
-.recharge-plan:hover { border-color: color-mix(in oklab, #e8a33d 55%, var(--border)); transform: translateY(-1px); }
+.plan-flag-gold { background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: var(--gold-ink); }
+.recharge-plan:hover { border-color: color-mix(in oklab, var(--gold-line) 55%, var(--border)); transform: translateY(-1px); }
 .recharge-plan:has(input:checked) {
-  border-color: #e8a33d;
-  background: linear-gradient(160deg, color-mix(in oklab, #f6bd45 14%, var(--surface)), var(--surface));
-  box-shadow: 0 2px 12px rgb(232 163 61 / 26%);
+  border-color: var(--gold-line);
+  background: linear-gradient(160deg, color-mix(in oklab, var(--gold) 14%, var(--surface)), var(--surface));
+  box-shadow: 0 2px 12px var(--gold-glow);
 }
-.recharge-plan:has(input:checked) .plan-price { color: #b07615; font-weight: 700; }
-:root[data-theme="dark"] .recharge-plan:has(input:checked) .plan-price { color: #eeb457; }
+.recharge-plan:has(input:checked) .plan-price { color: var(--gold-numeric); font-weight: 700; }
 .recharge-plan-custom { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 10px; padding: 11px 8px; }
 .plan-custom-input { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.plan-custom-input input { width: 76px; padding: 4px 8px; text-align: center; }
+.public-dashboard .plan-custom-input input { width: 76px; min-height: 30px; padding: 4px 8px; text-align: center; }
 .recharge-total {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   padding: 12px 16px;
-  border: 1px dashed color-mix(in oklab, #e8a33d 45%, var(--border));
+  border: 1px dashed color-mix(in oklab, var(--gold-line) 45%, var(--border));
   border-radius: 10px;
-  background: color-mix(in oklab, #f6bd45 7%, var(--surface));
+  background: color-mix(in oklab, var(--gold) 7%, var(--surface));
 }
 .recharge-total span { color: var(--muted); font-size: 13px; }
-.recharge-total strong { font-size: 22px; color: #e8a33d; font-variant-numeric: tabular-nums; }
-:root[data-theme="dark"] .recharge-total strong { color: #f0b95c; }
+.recharge-total strong { font-size: 22px; color: var(--gold-numeric); font-variant-numeric: tabular-nums; }
 .recharge-actions { margin-top: 14px; }
-.recharge-pay {
-  width: 100%;
-  padding: 12px 18px;
-  font-size: 15px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #f6bd45, #e79a2b);
-  color: #3c2a04;
-  box-shadow: 0 4px 16px rgb(246 189 69 / 30%);
+
+/* 兑换码弹窗 */
+.redeem-code-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in oklab, var(--gold-line) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--gold) 7%, var(--surface));
 }
-.recharge-pay:hover { background: linear-gradient(135deg, #f8c85a, #d98d20); box-shadow: 0 6px 20px rgb(246 189 69 / 40%); }
-.recharge-pay:active { transform: scale(0.98); }
+.redeem-code-label { font-size: 12px; color: var(--muted); text-align: center; letter-spacing: 1px; }
+.public-dashboard .redeem-code-box input {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-align: center;
+  color: var(--text);
+}
+.public-dashboard .redeem-code-box input:focus { outline: none; }
+.public-dashboard .redeem-code-box input::placeholder { color: var(--faint); letter-spacing: 1px; font-weight: 500; }
+
+/* 助力弹窗：免费额度提示与快捷金额金色化 */
+.pledge-credit {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px dashed color-mix(in oklab, var(--gold-line) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--gold) 7%, var(--surface));
+  color: var(--gold-numeric);
+  font-size: var(--font-small);
+  font-weight: 600;
+}
+.public-dashboard .form-dialog .preset-chip {
+  border-color: color-mix(in oklab, var(--gold-line) 55%, var(--border));
+  background: color-mix(in oklab, var(--gold) 7%, var(--surface));
+  color: var(--gold-numeric);
+}
+.public-dashboard .form-dialog .preset-chip:hover {
+  border-color: var(--gold-line);
+  background: color-mix(in oklab, var(--gold) 14%, var(--surface));
+}

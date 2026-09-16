@@ -1500,7 +1500,7 @@ document.querySelector('#redeem-form').addEventListener('submit', async (event) 
     redeemMessage.textContent = '连接失败，请重试。';
   } finally {
     button.disabled = false;
-    button.textContent = '兑换';
+    button.textContent = '✦ 立即兑换';
   }
 });
 
@@ -1714,7 +1714,7 @@ document.querySelector('#wish-form').addEventListener('submit', async (event) =>
     wishFormMessage.textContent = '连接失败，请重试。';
   } finally {
     button.disabled = false;
-    button.textContent = '提交许愿';
+    button.textContent = '✦ 提交许愿';
   }
 });
 
@@ -1725,7 +1725,7 @@ wishList.addEventListener('click', (event) => {
   const wish = wishItems.find((item) => String(item.id) === button.dataset.wishPledge);
   if (!wish) return;
   pledgeTargetId = wish.id;
-  pledgeTitle.textContent = `为「${wish.name}」许愿`;
+  pledgeTitle.innerHTML = `<span class="gold-mark" aria-hidden="true">✦</span>为「${escapeHTML(wish.name)}」许愿`;
   pledgeSubtitle.textContent = wish.targetLdc == null ? '该站点目标尚未确定，你的助力会累计到进度里。' : `当前进度 ${wish.pledgedLdc} / ${wish.targetLdc} LDC`;
   pledgeAmountInput.value = 10;
   pledgeMessage.textContent = '';
@@ -1780,7 +1780,7 @@ document.querySelector('#pledge-form').addEventListener('submit', async (event) 
     pledgeMessage.textContent = '连接失败，请重试。';
   } finally {
     button.disabled = false;
-    button.textContent = '去支付';
+    button.textContent = '✦ 立即助力';
   }
 });
 
