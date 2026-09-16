@@ -517,3 +517,34 @@ func TestMonthlyWishCredit(t *testing.T) {
 		t.Fatal("GetMonthlyCredit must not grant")
 	}
 }
+
+// TestWishCreditExpiry 锁定"当月未用完的赠额自动过期"语义：
+// 额度按 (user_id, period) 分月记账，消费只触碰当月行，跨月后上月余额既不结转也不可再消费。
+func TestWishCreditExpiry(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, "linuxdo", "44", "tester", "Tester", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	next := now.AddDate(0, 1, 0)
+	// 当月发放 10，只用 3，剩 7
+	if available, err := db.EnsureMonthlyCredit(ctx, user.ID, 10, now); err != nil || available != 10 {
+		t.Fatalf("grant: available=%d err=%v", available, err)
+	}
+	if consumed, err := db.ConsumeMonthlyCredit(ctx, user.ID, 3, now); err != nil || consumed != 3 {
+		t.Fatalf("consume 3: consumed=%d err=%v", consumed, err)
+	}
+	// 次月：剩余 7 不结转，只发放新月度的 10
+	if available, err := db.EnsureMonthlyCredit(ctx, user.ID, 10, next); err != nil || available != 10 {
+		t.Fatalf("next month available = %d, want 10 (leftover 7 must expire)", available)
+	}
+	// 次月额度用尽后，上月剩余 7 不可再消费
+	if consumed, err := db.ConsumeMonthlyCredit(ctx, user.ID, 10, next); err != nil || consumed != 10 {
+		t.Fatalf("consume 10 next month: consumed=%d err=%v", consumed, err)
+	}
+	if consumed, _ := db.ConsumeMonthlyCredit(ctx, user.ID, 1, next); consumed != 0 {
+		t.Fatalf("expired leftover must not be spendable, got %d", consumed)
+	}
+}
