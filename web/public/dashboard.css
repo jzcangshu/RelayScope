@@ -743,7 +743,7 @@
 
 .public-dashboard .card-head {
   display: flex;
-  min-height: 42px;
+  min-height: 28px;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
@@ -1210,7 +1210,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin: 6px 0 0;
+  margin: 2px 0 0;
+}
+/* 卡片内标签与筛选器里的标签胶囊尺寸一致 */
+.public-dashboard .card-tags .tag-chip {
+  min-height: 28px;
+  padding: 3px 8px;
+  gap: 6px;
+  font-size: var(--font-small);
 }
 
 /* 标签 chip（卡片、标签管理器、站点行通用） */
@@ -2500,3 +2507,42 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
   border-color: var(--gold-line);
   background: color-mix(in oklab, var(--gold) 14%, var(--surface));
 }
+
+/* ===== 标签筛选器：顶部染色 chips（颜色与定制标签一致） ===== */
+.public-dashboard .filter-chip.tag-colored.mint { --tag-color: var(--healthy); }
+.public-dashboard .filter-chip.tag-colored.blue { --tag-color: var(--tag-blue); }
+.public-dashboard .filter-chip.tag-colored.violet { --tag-color: var(--tag-violet); }
+.public-dashboard .filter-chip.tag-colored.amber { --tag-color: var(--degraded); }
+.public-dashboard .filter-chip.tag-colored.rose { --tag-color: var(--failed); }
+.public-dashboard .filter-chip.tag-colored.slate { --tag-color: var(--muted); }
+.public-dashboard .filter-chip.tag-colored { gap: 6px; }
+.public-dashboard .filter-chip.tag-colored i {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tag-color);
+}
+.public-dashboard .filter-chip.tag-colored.selected {
+  border-color: color-mix(in srgb, var(--tag-color) 50%, var(--border));
+  background: color-mix(in srgb, var(--tag-color) 14%, var(--surface-subtle));
+  color: var(--tag-color);
+}
+.public-dashboard .filter-chip.tag-colored.selected b { color: var(--tag-color); }
+
+/* ===== 详情弹窗：一键筛选本站全部模型 ===== */
+.public-dashboard .detail-site-filter {
+  margin-top: 8px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.public-dashboard .detail-site-filter:hover { border-color: var(--accent); color: var(--accent); }
+.public-dashboard .detail-site-filter:active { transform: scale(0.96); }
+.public-dashboard .detail-site-filter[hidden] { display: none; }

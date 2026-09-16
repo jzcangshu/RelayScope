@@ -24,7 +24,7 @@ HOURS_AGO = lambda h: datetime.now(timezone.utc).timestamp() * 1000 - h * 3600 *
 MOCK_USER = {"id": 1, "provider": "linuxdo", "externalId": "42", "username": "tester", "name": "Tester", "avatarUrl": "", "trustLevel": 2, "createdAt": NOW}
 MOCK_MEMBERSHIP_ACTIVE = {"expiresAt": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(), "active": True}
 MOCK_MEMBERSHIP = ({"expiresAt": (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(), "active": False} if MEMBER_EXPIRED else MOCK_MEMBERSHIP_ACTIVE)
-MOCK_PREFERENCES = {"hidden": {"sites": [], "providers": [], "models": []}, "defaultHealthy": False, "tags": {"主力": {"color": "mint", "sites": []}}, "updatedAt": NOW}
+MOCK_PREFERENCES = {"hidden": {"sites": [], "providers": [], "models": []}, "defaultHealthy": False, "tags": {"主力": {"color": "rose", "sites": ["星云中转"]}, "观望": {"color": "amber", "sites": ["紫电API"]}}, "updatedAt": NOW}
 MOCK_WISHES = [
     {"id": 1, "domain": "example.com", "name": "示例中转", "url": "https://example.com", "inviteRequired": False, "targetLdc": 30, "status": "open", "pledgedLdc": 12, "pledgers": 3, "myPledgedLdc": 5, "myPending": False},
     {"id": 2, "domain": "secret.example.org", "name": "神秘站点", "url": "https://secret.example.org", "inviteRequired": True, "targetLdc": None, "status": "open", "pledgedLdc": 45, "pledgers": 6, "myPledgedLdc": 0, "myPending": False},

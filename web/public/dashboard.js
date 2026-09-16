@@ -8,6 +8,7 @@ const detailTitle = document.querySelector('#detail-title');
 const detailSubtitle = document.querySelector('#detail-subtitle');
 const detailContent = document.querySelector('#detail-content');
 const detailClose = document.querySelector('#detail-close');
+const detailSiteFilter = document.querySelector('#detail-site-filter');
 const healthyOnly = document.querySelector('#healthy-only');
 const filterPanel = document.querySelector('#filter-panel');
 const clearFilters = document.querySelector('#clear-filters');
@@ -107,7 +108,7 @@ const slotDuration = 30 * 60 * 1000;
 const pageSizeOptions = [20, 40, 60, 100];
 
 const tagDefinition = { key: 'tag', title: '标签', allLabel: '全部标签', anyOf: true, value: (card) => card.tagNames || [] };
-const activeFilterDefinitions = () => (tags.size ? [...filterDefinitions, tagDefinition] : filterDefinitions);
+const activeFilterDefinitions = () => (tags.size ? [tagDefinition, ...filterDefinitions] : filterDefinitions);
 
 const storageGet = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
 const storageSet = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
@@ -468,6 +469,10 @@ function renderFilters() {
     const options = values.map((value) => {
       const selected = selectedFilters[definition.key].has(value);
       const selectionState = definition.single ? ` role="radio" aria-checked="${selected}"` : ` aria-pressed="${selected}"`;
+      if (definition.key === 'tag') {
+        const color = tags.get(value)?.color || 'mint';
+        return `<button type="button" class="filter-chip tag-colored ${color}${selected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-value="${escapeHTML(value)}"${selectionState}${counts.has(value) ? '' : ' disabled'}><i aria-hidden="true"></i><span>${escapeHTML(value)}</span><b>${counts.get(value) || 0}</b></button>`;
+      }
       return `<button type="button" class="filter-chip${selected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-value="${escapeHTML(value)}"${selectionState}${counts.has(value) ? '' : ' disabled'}><span>${escapeHTML(value)}</span><b>${counts.get(value) || 0}</b></button>`;
     }).join('');
     const groupRole = definition.single ? ' role="radiogroup"' : '';
@@ -559,6 +564,8 @@ function bindPagination() {
 }
 
 function render() {
+  // 标签可能在数据加载后才就绪，渲染前刷新 card.tagNames
+  for (const card of cards) card.tagNames = cardTagsOf(card.siteName);
   const query = searchElement.value.trim().toLowerCase();
   const visibleCards = cards.filter((card) => !isHiddenCard(card));
   const filtered = visibleCards.filter((card) => cardMatchesFilters(card)
@@ -692,6 +699,8 @@ announcementDialog.addEventListener('click', (event) => { if (event.target === a
 async function openDetails(rawModel, siteName) {
   detailTitle.textContent = rawModel;
   detailSubtitle.textContent = siteName ? `${siteName} · 最近 24 小时` : '最近 24 小时';
+  detailSiteFilter.hidden = !siteName;
+  detailSiteFilter.dataset.site = siteName || '';
   detailContent.innerHTML = '<p class="muted">正在读取分时健康度…</p>';
   detailDialog.showModal();
   const query = new URLSearchParams({ raw: rawModel, site: siteName, hours: '24' });
@@ -753,6 +762,17 @@ function initializeTheme() {
 }
 
 detailClose.addEventListener('click', () => detailDialog.close());
+// 一键把筛选器改为"仅筛选本站"：清空全部条件后只保留该站点
+detailSiteFilter.addEventListener('click', () => {
+  const site = detailSiteFilter.dataset.site;
+  if (!site) return;
+  for (const set of Object.values(selectedFilters)) set.clear();
+  selectedFilters.site.add(site);
+  detailDialog.close();
+  currentPage = 1;
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 searchElement.addEventListener('input', () => { currentPage = 1; render(); });
 healthyOnly.addEventListener('change', () => { currentPage = 1; render(); });
 clearFilters.addEventListener('click', () => {

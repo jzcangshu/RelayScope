@@ -188,9 +188,8 @@
   border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  overflow: hidden;
-}
-.customize-nav {
+  overflow: clip;
+}.customize-nav {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -200,8 +199,7 @@
 }
 .customize-nav[hidden] { display: none; }
 /* 门禁态（非会员/已过期）导航隐藏，网格收为单列，避免面板被挤进 184px 侧栏列 */
-.customize-body:has(> .customize-nav[hidden]) { grid-template-columns: minmax(0, 1fr); }
-.customize-nav button {
+.customize-body:has(> .customize-nav[hidden]) { grid-template-columns: minmax(0, 1fr); }.customize-nav button {
   display: flex;
   align-items: center;
   gap: 10px;
