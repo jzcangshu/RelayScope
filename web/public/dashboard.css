@@ -119,13 +119,13 @@
 .public-dashboard .detail-head.announcement-head h2 {
   margin: 0;
   flex: 1;
-  color: #000;
+  color: var(--accent);
   font-size: 23px;
   font-weight: 760;
   letter-spacing: -.015em;
   line-height: 1.2;
 }
-:root[data-theme="dark"] .public-dashboard .detail-head.announcement-head h2 { color: #fff; }
+:root[data-theme="dark"] .public-dashboard .detail-head.announcement-head h2 { color: var(--accent); }
 .announcement-content { padding: 18px 20px 20px; }
 .announcement-list {
   display: grid;
@@ -497,29 +497,31 @@
   stroke: var(--text);
 }
 
-/* 黑金状态（智能排序已选中 + 会员） */
+/* 黑金状态（智能排序已选中 + 会员）：与下拉 smart.selected 同风格 */
 .public-dashboard .sort-trigger.gold-active {
   border-color: var(--gold-line);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 14%, var(--surface-subtle)), color-mix(in srgb, var(--gold-deep) 8%, var(--surface-subtle)));
+  background: color-mix(in srgb, var(--gold) 14%, var(--surface));
   color: var(--gold);
   box-shadow: 0 0 0 1px var(--gold-glow), 0 1px 3px var(--gold-glow);
 }
 
-.sort-trigger.gold-active .sort-trigger-icon {
-  stroke: var(--gold);
-}
-
-.sort-trigger.gold-active .sort-trigger-label {
-  color: var(--gold);
-  font-weight: 650;
-}
-
+.sort-trigger.gold-active .sort-trigger-icon,
 .sort-trigger.gold-active .sort-trigger-chevron {
   stroke: var(--gold);
 }
 
+.sort-trigger.gold-active .sort-trigger-label {
+  color: var(--gold-deep);
+  font-weight: 650;
+}
+
+:root[data-theme="dark"] .sort-trigger.gold-active .sort-trigger-label {
+  color: var(--gold);
+}
+
 .sort-trigger.gold-active:hover {
   border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 20%, var(--surface));
   box-shadow: 0 0 0 1px var(--gold-glow), 0 3px 10px var(--gold-glow);
 }
 
@@ -703,9 +705,10 @@
   font-weight: 650;
 }
 
-.pref-sort-hint {
+.public-dashboard .pref-sort-hint {
   margin-top: 6px;
   font-size: var(--font-caption);
+  color: var(--accent);
 }
 
 .sort-row {
@@ -1518,6 +1521,7 @@
   gap: 6px;
   border-radius: 6px;
   font-size: var(--font-small);
+  font-weight: 400;
 }
 /* 详情弹窗：subtitle 和按钮同一行 */
 .public-dashboard .detail-head div { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1580,6 +1584,14 @@
   overscroll-behavior: contain;
 }
 .customize-panel[hidden] { display: none; }
+
+/* #customize-display 是 4 个子面板的容器：自身不贡献 padding/定位 */
+#customize-display.customize-panel {
+  position: static;
+  padding: 0;
+  overflow: visible;
+  overscroll-behavior: auto;
+}
 
 /* 偏好分组 */
 .pref-section {
@@ -1688,6 +1700,97 @@
   text-align: center;
 }
 
+/* 屏蔽胶囊网格（站点/供应商/模型 短页） */
+.chip-grid-section { gap: 14px; }
+.chip-grid-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.chip-grid-head .pref-search { flex: 1 1 auto; min-width: 0; }
+.chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: flex-start;
+}
+.chip-grid + .pref-empty,
+.chip-grid > .pref-empty { flex-basis: 100%; }
+.chip-grid-hint {
+  margin: 2px 0 0;
+  color: var(--faint);
+  font-size: var(--font-caption);
+}
+.public-dashboard .hide-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--font-small);
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease, transform 120ms cubic-bezier(.23, 1, .32, 1);
+}
+.public-dashboard .hide-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.public-dashboard .hide-chip:active { transform: scale(0.96); }
+.public-dashboard .hide-chip .hide-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.public-dashboard .hide-chip .hide-chip-count {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+.public-dashboard .hide-chip.hidden {
+  border-color: transparent;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 45%, transparent);
+  text-decoration-thickness: 1.5px;
+  opacity: .72;
+}
+.public-dashboard .hide-chip.hidden .hide-chip-count { color: var(--faint); }
+.public-dashboard .hide-chip.hidden:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+  opacity: .95;
+}
+
+/* 导航屏蔽计数徽标 */
+.public-dashboard .nav-badge {
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--failed);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.public-dashboard .customize-nav button .nav-badge[hidden] { display: none; }
+
 /* 自绘开关 */
 .toggle {
   position: relative;
@@ -1738,37 +1841,6 @@
 .toggle:has(input:focus-visible) i {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-}
-
-/* 底部操作行 */
-.pref-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 24px;
-  margin-top: 8px;
-}
-.pref-foot p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--font-small);
-}
-.pref-reset-all {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--font-small);
-}
-.pref-reset-all.armed {
-  border-color: var(--failed);
-  background: var(--failed-soft);
-  color: var(--failed);
-  font-weight: 650;
 }
 
 /* ============ 标签管理（重做：列表行 + 内联编辑 + 撤销 + 勾选菜单） ============ */
@@ -2239,7 +2311,6 @@
   .tag-add:hover { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text); }
   .tag-undo:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
   .tag-editor .primary-button:hover { border-color: var(--shell-accent-hover); background: var(--shell-accent-hover); }
-  .pref-reset-all:not(.armed):hover { border-color: var(--border-strong); background: var(--surface-hover); color: var(--text); }
 }
 
 /* ===== 会员 / 兑换 / 直充 / 反馈：通用表单弹窗 ===== */
@@ -2326,12 +2397,232 @@
 .check-hint { display: block; font-weight: 400; font-size: var(--font-caption); margin-top: 2px; }
 .wish-invite { align-items: flex-start; }
 
-/* ===== 定制弹窗门禁 ===== */
-.customize-gate { text-align: center; padding: 48px 24px; display: grid; justify-items: center; gap: 12px; }
-.customize-gate .gate-mark { font-size: 30px; color: var(--accent); }
-.customize-gate h3 { margin: 0; font-size: var(--font-heading); }
-.customize-gate p { margin: 0; max-width: 360px; line-height: 1.6; }
-.customize-gate .gate-actions { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+/* ===== 定制弹窗门禁（会员介绍卡片） ===== */
+.public-dashboard .customize-gate {
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+  padding: 40px 24px 48px;
+  text-align: center;
+}
+
+/* 中央徽章 + 标题 */
+.public-dashboard .gate-hero {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: 380px;
+}
+.public-dashboard .gate-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 18%, var(--surface)), color-mix(in srgb, var(--gold-deep) 10%, var(--surface)));
+  border: 1px solid color-mix(in srgb, var(--gold-line) 45%, transparent);
+  box-shadow: 0 4px 16px var(--gold-glow);
+  color: var(--gold-numeric);
+  font-size: 26px;
+  line-height: 1;
+}
+.public-dashboard .gate-hero h3 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 720;
+  letter-spacing: -0.2px;
+}
+.public-dashboard .gate-hero p {
+  margin: 0;
+  max-width: 340px;
+  font-size: var(--font-small);
+  line-height: 1.7;
+}
+
+/* 三项权益卡片 */
+.public-dashboard .gate-features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.public-dashboard .gate-feature {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(21 34 29 / 5%);
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms cubic-bezier(.23, 1, .32, 1);
+}
+.public-dashboard .gate-feature:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+.public-dashboard .gate-feature-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.public-dashboard .gate-feature-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.public-dashboard .gate-feature-icon svg + svg {
+  margin-left: -14px;
+  opacity: 0.55;
+}
+.public-dashboard .gate-feature-text {
+  display: grid;
+  gap: 3px;
+}
+.public-dashboard .gate-feature-text strong {
+  font-size: var(--font-small);
+  font-weight: 680;
+}
+.public-dashboard .gate-feature-text small {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+}
+
+/* 价格条 */
+.public-dashboard .gate-price {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--gold-line) 40%, var(--border));
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 7%, var(--surface)), color-mix(in srgb, var(--gold-deep) 5%, var(--surface)));
+}
+.public-dashboard .gate-price-label {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gold) 16%, var(--surface-subtle));
+  color: var(--gold-numeric);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.public-dashboard .gate-price-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.public-dashboard .gate-price-value b {
+  color: var(--gold-numeric);
+  font-size: 24px;
+  font-weight: 780;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.public-dashboard .gate-price-value small {
+  color: var(--muted);
+  font-size: var(--font-small);
+  font-weight: 600;
+}
+.public-dashboard .gate-price-perk {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--font-small);
+  line-height: 1.6;
+  text-align: right;
+}
+.public-dashboard .gate-price-perk b {
+  color: var(--gold-numeric);
+  font-variant-numeric: tabular-nums;
+}
+.public-dashboard .gate-wish-link {
+  color: var(--gold-numeric);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--gold-numeric) 45%, transparent);
+  transition: border-color 120ms ease;
+}
+.public-dashboard .gate-wish-link:hover { border-bottom-color: var(--gold-numeric); }
+
+/* 行动按钮 */
+.public-dashboard .gate-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.public-dashboard .gate-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 22px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: var(--font-body);
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(.23, 1, .32, 1), box-shadow 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+.public-dashboard .gate-cta svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms cubic-bezier(.23, 1, .32, 1);
+}
+.public-dashboard .gate-cta-primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--shell-on-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.public-dashboard .gate-cta-primary:hover {
+  background: color-mix(in oklab, var(--accent) 88%, #000);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.public-dashboard .gate-cta-primary:hover svg { transform: translateX(2px); }
+.public-dashboard .gate-cta-ghost {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+.public-dashboard .gate-cta-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface));
+}
+.public-dashboard .gate-cta:active { transform: scale(0.97); }
+
+@media (max-width: 520px) {
+  .public-dashboard .gate-features { grid-template-columns: 1fr; }
+  .public-dashboard .gate-price { flex-wrap: wrap; }
+  .public-dashboard .gate-price-perk { margin-left: 0; text-align: left; }
+}
 
 /* ===== 许愿池 ===== */
 .wish-page { max-width: 860px; margin: 0 auto; padding: 8px 20px 48px; }
@@ -2562,7 +2853,7 @@
 /* ===== 站点公告：上半 Markdown 通知 + 下半监测状态 ===== */
 .announcement-dialog .announcement-content { margin-top: 0; }
 .notice-content {
-  padding: 0 20px 18px;
+  padding: 16px 20px 18px;
   border-bottom: 1px solid var(--border);
   font-size: var(--font-body);
   line-height: 1.75;
@@ -2602,20 +2893,6 @@
   color: var(--faint);
   text-transform: uppercase;
 }
-
-/* ===== 定制门禁：会员介绍行 ===== */
-.gate-pitch {
-  margin: 0;
-  padding: 10px 16px;
-  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--border));
-  border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--text);
-  font-size: var(--font-small);
-  line-height: 1.7;
-}
-.gate-pitch b { color: var(--accent); font-variant-numeric: tabular-nums; }
-.gate-wish-link { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
 
 /* ===== 许愿页会员 banner ===== */
 .wish-banner {

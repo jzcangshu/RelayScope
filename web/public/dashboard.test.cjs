@@ -25,8 +25,8 @@ test('public dashboard uses a compact bell control and single announcement title
   assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 7);
   assert.match(css, /detail-head\.announcement-head h2/);
   assert.match(css, /font-size: 23px/);
-  assert.match(css, /color: #000/);
-  assert.match(css, /data-theme="dark"[^\n]+color: #fff/);
+  assert.match(css, /color: var\(--accent\)/);
+  assert.match(css, /data-theme="dark"[^\n]+color: var\(--accent\)/);
   assert.match(css, /\.icon-button[\s\S]*?width: 34px[\s\S]*?height: 34px/);
   assert.match(css, /\.icon-button svg[\s\S]*?width: 19px[\s\S]*?height: 19px/);
 });
@@ -511,6 +511,16 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(html, /href="#wishes" data-nav-wishes/);
   assert.match(html, /href="#customize" data-nav-customize/);
   assert.match(html, /id="customize-page"/);
+  assert.match(html, /data-customize-tab="display"/);
+  assert.match(html, /data-customize-tab="sites"/);
+  assert.match(html, /data-customize-tab="providers"/);
+  assert.match(html, /data-customize-tab="models"/);
+  assert.match(html, /data-customize-tab="tags"/);
+  assert.match(html, /data-nav-badge="sites"/);
+  assert.match(html, /id="customize-display-settings"/);
+  assert.match(html, /id="customize-sites"/);
+  assert.match(html, /id="customize-providers"/);
+  assert.match(html, /id="customize-models"/);
   assert.match(html, /class="public-footer"/);
   assert.doesNotMatch(html, /customize-dialog/);
   assert.match(html, /id="user-action"/);
@@ -524,8 +534,11 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(html, /id="pledge-dialog"/);
   const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
   assert.match(source, /renderMarkdown/);
-  assert.match(source, /gate-pitch/);
+  assert.match(source, /renderChipGrid/);
+  assert.match(source, /customize-gate/);
   assert.match(source, /gate-wish-link/);
+  assert.match(source, /CUSTOMIZE_PANEL_BY_TAB/);
+  assert.match(source, /updateNavBadges/);
   assert.match(source, /userAction\.addEventListener\('click'/);
   assert.match(source, /window\.addEventListener\('hashchange', applyRoute\)/);
   assert.match(source, /scheduleCloudSave/);
@@ -541,7 +554,7 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(source, /renderCustomizeGate/);
   // 排序功能接线
   assert.match(html, /id="sort-mode"/);
-  assert.match(source, /data-pref-sort/);
+  assert.match(source, /data-customize-sort/);
   assert.match(source, /智能排序为会员专属/);
   assert.match(source, /saveSorting/);
   assert.match(source, /relayscope-sorting/);

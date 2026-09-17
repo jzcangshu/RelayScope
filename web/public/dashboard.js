@@ -17,6 +17,10 @@ const customizePage = document.querySelector('#customize-page');
 const customizeTabDisplay = document.querySelector('#customize-tab-display');
 const customizeTabTags = document.querySelector('#customize-tab-tags');
 const customizeDisplayPanel = document.querySelector('#customize-display');
+const customizeSettingsPanel = document.querySelector('#customize-display-settings');
+const customizeSitesPanel = document.querySelector('#customize-sites');
+const customizeProvidersPanel = document.querySelector('#customize-providers');
+const customizeModelsPanel = document.querySelector('#customize-models');
 const customizeTagsPanel = document.querySelector('#customize-tags');
 const announcementDialog = document.querySelector('#announcement-dialog');
 const announcementAction = document.querySelector('#announcement-action');
@@ -88,8 +92,6 @@ let defaultHealthy = false;
 let tags = new Map();
 let customizeTab = 'display';
 let tagEditor = null;
-let resetArmed = false;
-let resetTimer = null;
 let openSiteMenu = null;
 let openColorMenu = null;
 let tagStatus = { text: '', undo: null };
@@ -1135,8 +1137,8 @@ if (sortDropdown) {
 }
 // 点击外部关闭
 document.addEventListener('click', (e) => {
-  if (!sortDropdown || sortDropdown.hidden) return;
-  if (!e.target.closest('.sort-field')) closeSortDropdown();
+  if (sortDropdown && !sortDropdown.hidden && !e.target.closest('#sort-field')) closeSortDropdown();
+  if (!e.target.closest('#customize-display-settings .sort-field')) closeCustomizeSortDropdowns();
 });
 themeToggle.addEventListener('click', () => {
   const modes = ['auto', 'light', 'dark'];
@@ -1157,9 +1159,13 @@ function focusTagInput() {
 
 function renderCustomize() {
   if (customizeTab === 'display') renderCustomizeDisplay();
+  else if (customizeTab === 'sites') renderChipGrid(CUSTOMIZE_DIMENSIONS[0], customizeSitesPanel);
+  else if (customizeTab === 'providers') renderChipGrid(CUSTOMIZE_DIMENSIONS[1], customizeProvidersPanel);
+  else if (customizeTab === 'models') renderChipGrid(CUSTOMIZE_DIMENSIONS[2], customizeModelsPanel);
   else renderCustomizeTags();
+  updateNavBadges();
   if (searchFocusKey && !tagFocusAfterRender) {
-    const panel = customizeTab === 'display' ? customizeDisplayPanel : customizeTagsPanel;
+    const panel = customizeTab === 'display' ? customizeSettingsPanel : customizeTab === 'tags' ? customizeTagsPanel : (customizeTab === 'sites' ? customizeSitesPanel : customizeTab === 'providers' ? customizeProvidersPanel : customizeModelsPanel);
     const input = panel.querySelector(`[data-pref-search="${searchFocusKey}"]`);
     if (input) {
       input.focus();
@@ -1168,16 +1174,29 @@ function renderCustomize() {
   }
 }
 
+const CUSTOMIZE_PANEL_BY_TAB = { display: customizeSettingsPanel, sites: customizeSitesPanel, providers: customizeProvidersPanel, models: customizeModelsPanel, tags: customizeTagsPanel };
+
+function updateNavBadges() {
+  for (const key of ['sites', 'providers', 'models']) {
+    const badge = customizeNav.querySelector(`[data-nav-badge="${key}"]`);
+    if (!badge) continue;
+    const n = hidden[key].size;
+    badge.textContent = String(n);
+    badge.hidden = n === 0;
+  }
+}
+
 function setCustomizeTab(tab) {
   // 非会员（含已过期）永远停留在门禁页，禁止通过切换标签渲染出定制内容
   if (membershipIs() !== 'active') { enterCustomize(); return; }
   customizeTab = tab;
-  customizeTabDisplay.setAttribute('aria-selected', String(tab === 'display'));
-  customizeTabTags.setAttribute('aria-selected', String(tab === 'tags'));
-  customizeDisplayPanel.hidden = tab !== 'display';
-  customizeTagsPanel.hidden = tab !== 'tags';
-  customizeTagsPanel.scrollTop = 0;
-  customizeDisplayPanel.scrollTop = 0;
+  customizeNav.querySelectorAll('[data-customize-tab]').forEach((button) => {
+    button.setAttribute('aria-selected', String(button.dataset.customizeTab === tab));
+  });
+  for (const [key, panel] of Object.entries(CUSTOMIZE_PANEL_BY_TAB)) {
+    panel.hidden = key !== tab;
+    panel.scrollTop = 0;
+  }
   tagEditor = null;
   openSiteMenu = null;
   openColorMenu = null;
@@ -1217,20 +1236,76 @@ function renderSortSelect() {
   sortDropdown.innerHTML = parts.join('');
 }
 
-function renderCustomizeDisplay() {
-  const groups = CUSTOMIZE_DIMENSIONS.map((definition) => {
-    const query = customizeSearches[definition.key].trim().toLowerCase();
-    const rows = dimensionCounts(definition)
-      .filter((item) => !query || item.value.toLowerCase().includes(query))
-      .map((item) => {
-        const visible = !hidden[definition.key].has(item.value);
-        return `<label class="pref-row"><span class="pref-row-text"><strong>${escapeHTML(item.value)}</strong><small>${item.count} 个模型入口</small></span><span class="toggle"><input type="checkbox" data-pref-toggle data-pref-key="${definition.key}" data-pref-value="${escapeHTML(item.value)}"${visible ? ' checked' : ''} aria-label="显示 ${escapeHTML(item.value)}"><i></i></span></label>`;
-      }).join('');
-    const hiddenCount = hidden[definition.key].size;
-    return `<section class="pref-section"><div class="pref-head"><h3>${definition.title}</h3>${hiddenCount ? `<span class="pref-count" data-pref-count="${definition.key}">已屏蔽 ${hiddenCount} 项</span><button type="button" class="pref-reset" data-pref-reset="${definition.key}">全部显示</button>` : ''}</div><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${definition.key}" value="${escapeHTML(customizeSearches[definition.key])}" placeholder="筛选${definition.title}"></label><div class="pref-list" data-pref-list="${definition.key}">${rows || '<p class="pref-empty">没有匹配的条目</p>'}</div></section>`;
+function renderCustomizeSortSelect(key) {
+  const field = customizeSettingsPanel.querySelector(`[data-customize-sort-field="${key}"]`);
+  if (!field) return;
+  const trigger = field.querySelector('[data-customize-sort]');
+  const dropdown = field.querySelector('[data-customize-sort-dropdown]');
+  const options = SORT_OPTIONS[key] || SORT_OPTIONS.model;
+  const isMember = membershipIs() === 'active';
+  const current = options.find((o) => o.value === sortMode[key]) || options[0];
+  const label = current.gold && !isMember ? '✦ 智能排序' : current.label;
+  trigger.querySelector('.sort-trigger-label').textContent = label;
+  trigger.classList.toggle('gold-active', !!(current.gold && isMember));
+  const parts = [];
+  options.forEach((o) => {
+    const isSelected = sortMode[key] === o.value;
+    const isSmart = o.gold;
+    const displayLabel = isSmart && !isMember ? '智能排序' : o.label.replace('✦ ', '');
+    const badge = isSmart && !isMember ? '<span class="sort-badge">会员</span>' : '';
+    const mark = isSmart ? '<span class="sort-mark" aria-hidden="true">✦</span>' : '';
+    parts.push(`<button class="sort-option${isSelected ? ' selected' : ''}${isSmart ? ' smart' : ''}" role="option" data-value="${o.value}"${isSelected ? ' aria-selected="true"' : ''} tabindex="${isSelected ? '0' : '-1'}">${mark}<span class="sort-option-label">${displayLabel}</span>${badge}${isSelected ? '<svg class="sort-check" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m5 13 4 4L19 7" /></svg>' : ''}</button>`);
+    if (isSmart) parts.push('<div class="sort-option-sep" role="separator" aria-hidden="true"></div>');
   });
-  const sortSelects = (key) => SORT_OPTIONS[key].map((o) => `<option value=”${o.value}”${sortMode[key] === o.value ? ' selected' : ''}${o.gold ? ' class=”smart-option”' : ''}>${o.label}</option>`).join('');
-  customizeDisplayPanel.innerHTML = `<section class=”pref-section”><div class=”pref-head”><h3>默认状态</h3></div><label class=”pref-row toggle-row”><span class=”pref-row-text”><strong>默认只看当前可用模型</strong><small>开启后每次打开页面都会自动勾选首页的”只看当前可用”，当次访问仍可手动取消</small></span><span class=”toggle”><input id=”pref-default-healthy” type=”checkbox”${defaultHealthy ? ' checked' : ''} aria-label=”默认只看当前可用模型”><i></i></span></label></section><section class=”pref-section”><div class=”pref-head”><h3>自动排序</h3></div><label class=”pref-row sort-row”><span class=”pref-row-text”><strong>模型视图</strong><small>打开看板时按此方式排列同一模型下的站点</small></span><select class=”pref-select” data-pref-sort=”model” aria-label=”模型视图自动排序”>${sortSelects('model')}</select></label><label class=”pref-row sort-row”><span class=”pref-row-text”><strong>站点视图</strong><small>打开看板时按此方式排列站点</small></span><select class=”pref-select” data-pref-sort=”site” aria-label=”站点视图自动排序”>${sortSelects('site')}</select></label><p class=”muted pref-sort-hint”>智能排序综合可用率、延迟、价格自动优选；站点视图侧重识别有多个长期稳定低延迟模型的专精站点。</p></section>${groups.join('')}<section class="pref-foot"><p class="muted">新出现的站点、供应商或模型默认都会展示，需要时再在这里屏蔽。</p><button type="button" class="pref-reset-all${resetArmed ? ' armed' : ''}" data-pref-reset-all>${resetArmed ? '再次点击确认恢复' : '恢复默认'}</button></section>`;
+  dropdown.innerHTML = parts.join('');
+}
+
+function selectCustomizeSortOption(key, value) {
+  if (value === 'smart' && membershipIs() !== 'active') {
+    closeCustomizeSortDropdowns();
+    showToast('✦ 智能排序为会员专属功能');
+    openRecharge();
+    return;
+  }
+  sortMode[key] = value;
+  closeCustomizeSortDropdowns();
+  saveSorting();
+  currentPage = 1;
+  render();
+  renderCustomizeSortSelect(key);
+  renderSortSelect();
+}
+
+function closeCustomizeSortDropdowns() {
+  if (!customizeSettingsPanel) return;
+  customizeSettingsPanel.querySelectorAll('[data-customize-sort-field]').forEach((field) => {
+    const trigger = field.querySelector('[data-customize-sort]');
+    const dropdown = field.querySelector('[data-customize-sort-dropdown]');
+    if (!dropdown || dropdown.hidden) return;
+    dropdown.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.classList.remove('open');
+  });
+}
+
+function renderCustomizeDisplay() {
+  const sortRow = (key, label) => `<div class="pref-row sort-row"><span class="pref-row-text"><strong>${label}</strong></span><div class="sort-field" data-customize-sort-field="${key}"><button type="button" class="sort-trigger" data-customize-sort="${key}" aria-haspopup="listbox" aria-expanded="false" aria-label="${label}自动排序"><svg class="sort-trigger-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 6h18M3 12h12M3 18h6" /></svg><span class="sort-trigger-label"></span><svg class="sort-trigger-chevron" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m6 9 6 6 6-6" /></svg></button><div class="sort-dropdown" role="listbox" aria-label="${label}自动排序" data-customize-sort-dropdown="${key}" hidden></div></div></div>`;
+  customizeSettingsPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>默认状态</h3></div><label class="pref-row toggle-row"><span class="pref-row-text"><strong>默认只看当前可用模型</strong><small>开启后每次访问都自动勾选"只看当前可用"</small></span><span class="toggle"><input id="pref-default-healthy" type="checkbox"${defaultHealthy ? ' checked' : ''} aria-label="默认只看当前可用模型"><i></i></span></label></section><section class="pref-section"><div class="pref-head"><h3>自动排序</h3></div>${sortRow('model', '按模型展示时')}${sortRow('site', '按站点展示时')}<p class="pref-sort-hint">* 智能排序综合可用率、延迟、价格自动优选；站点视图侧重识别有多个长期稳定低延迟模型的专精站点。</p></section>`;
+  renderCustomizeSortSelect('model');
+  renderCustomizeSortSelect('site');
+}
+
+function renderChipGrid(definition, panel) {
+  const key = definition.key;
+  const query = customizeSearches[key].trim().toLowerCase();
+  const chips = dimensionCounts(definition)
+    .filter((item) => !query || item.value.toLowerCase().includes(query))
+    .map((item) => {
+      const visible = !hidden[key].has(item.value);
+      return `<button type="button" class="hide-chip${visible ? '' : ' hidden'}" data-pref-toggle data-pref-key="${key}" data-pref-value="${escapeHTML(item.value)}" aria-pressed="${visible ? 'true' : 'false'}" title="${escapeHTML(item.value)}（${item.count} 个模型入口）"><span class="hide-chip-name">${escapeHTML(item.value)}</span><span class="hide-chip-count">${item.count}</span></button>`;
+    }).join('');
+  const hiddenCount = hidden[key].size;
+  panel.innerHTML = `<section class="pref-section chip-grid-section"><div class="chip-grid-head"><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${key}" value="${escapeHTML(customizeSearches[key])}" placeholder="筛选${definition.title}"></label>${hiddenCount ? `<button type="button" class="pref-reset" data-pref-reset="${key}">全部显示</button>` : ''}</div><div class="chip-grid" data-pref-list="${key}">${chips || '<p class="pref-empty">没有匹配的条目</p>'}</div><p class="muted chip-grid-hint">点击胶囊切换显示；已隐藏的会变暗并带删除线。</p></section>`;
 }
 
 function siteTagCount(site) {
@@ -1408,8 +1483,37 @@ function cancelTagEditor() {
 }
 
 function handleCustomizeClick(event) {
-  const target = event.target.closest('[data-pref-reset],[data-pref-reset-all],[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo]');
+  const target = event.target.closest('[data-pref-reset],[data-pref-toggle],[data-customize-sort],[data-customize-sort-dropdown] .sort-option,[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo]');
   if (!target) return;
+
+  if (target.matches('[data-customize-sort]')) {
+    const key = target.dataset.customizeSort;
+    const dropdown = customizeSettingsPanel.querySelector(`[data-customize-sort-dropdown="${key}"]`);
+    const isOpen = !dropdown.hidden;
+    closeCustomizeSortDropdowns();
+    if (!isOpen) {
+      dropdown.hidden = false;
+      target.setAttribute('aria-expanded', 'true');
+      target.classList.add('open');
+      const current = dropdown.querySelector('.sort-option.selected');
+      if (current) current.focus();
+    }
+    return;
+  }
+
+  if (target.matches('[data-customize-sort-dropdown] .sort-option')) {
+    const dropdown = target.closest('[data-customize-sort-dropdown]');
+    selectCustomizeSortOption(dropdown.dataset.customizeSortDropdown, target.dataset.value);
+    return;
+  }
+
+  if (target.matches('[data-pref-toggle]')) {
+    const key = target.dataset.prefKey;
+    const value = target.dataset.prefValue;
+    if (!CUSTOMIZE_DIMENSIONS.some((d) => d.key === key)) return;
+    toggleHiddenKey(key, value);
+    return;
+  }
 
   if (target.matches('[data-pref-reset]')) {
     hidden[target.dataset.prefReset].clear();
@@ -1417,26 +1521,6 @@ function handleCustomizeClick(event) {
     currentPage = 1;
     render();
     renderCustomize();
-    return;
-  }
-  if (target.matches('[data-pref-reset-all]')) {
-    if (resetArmed) {
-      window.clearTimeout(resetTimer);
-      resetArmed = false;
-      hidden.sites.clear();
-      hidden.providers.clear();
-      hidden.models.clear();
-      defaultHealthy = false;
-      saveHidden();
-      saveDefaultHealthy();
-      currentPage = 1;
-      render();
-      renderCustomize();
-    } else {
-      resetArmed = true;
-      resetTimer = window.setTimeout(() => { resetArmed = false; if (!customizePage.hidden) renderCustomize(); }, 2200);
-      renderCustomize();
-    }
     return;
   }
   if (target.matches('[data-tag-new]')) {
@@ -1544,35 +1628,22 @@ function handleCustomizeChange(event) {
     render();
     return;
   }
-  if (input.matches('[data-pref-sort]')) {
-    const key = input.dataset.prefSort;
-    if (key === 'model' || key === 'site') {
-      sortMode[key] = input.value;
-      saveSorting();
-      currentPage = 1;
-      render();
-      renderSortSelect();
-    }
-    return;
-  }
-  if (!input.matches('[data-pref-toggle]')) return;
-  const key = input.dataset.prefKey;
-  const value = input.dataset.prefValue;
-  if (input.checked) hidden[key].delete(value);
+}
+
+function toggleHiddenKey(key, value) {
+  if (hidden[key].has(value)) hidden[key].delete(value);
   else hidden[key].add(value);
   saveHidden();
   currentPage = 1;
   render();
-  const count = customizeDisplayPanel.querySelector(`[data-pref-count="${key}"]`);
-  const resetButton = customizeDisplayPanel.querySelector(`[data-pref-reset="${key}"]`);
+  renderCustomize();
+  updateNavBadges();
+  const panel = CUSTOMIZE_PANEL_BY_TAB[customizeTab];
+  const count = panel ? panel.querySelector(`[data-pref-count="${key}"]`) : null;
+  const resetButton = panel ? panel.querySelector(`[data-pref-reset="${key}"]`) : null;
   const n = hidden[key].size;
-  if (n) {
-    if (count) { count.textContent = `已屏蔽 ${n} 项`; count.hidden = false; }
-    if (resetButton) resetButton.hidden = false;
-  } else {
-    if (count) count.hidden = true;
-    if (resetButton) resetButton.hidden = true;
-  }
+  if (count) count.hidden = n === 0;
+  if (resetButton) resetButton.hidden = n === 0;
 }
 
 function handleCustomizeInput(event) {
@@ -1581,14 +1652,16 @@ function handleCustomizeInput(event) {
   const key = search.dataset.prefSearch;
   customizeSearches[key] = search.value;
   searchFocusKey = key;
-  const list = search.closest('.pref-section').querySelector('.pref-list');
+  const section = search.closest('.pref-section');
+  if (!section) return;
+  const list = section.querySelector('.chip-grid') || section.querySelector('.pref-list');
   if (!list) return;
   const q = search.value.trim().toLowerCase();
   let matches = 0;
-  list.querySelectorAll(':scope .pref-row').forEach((row) => {
-    const name = row.querySelector('strong')?.textContent || '';
+  list.querySelectorAll(':scope .hide-chip, :scope .pref-row').forEach((item) => {
+    const name = item.querySelector('strong, .hide-chip-name')?.textContent || item.dataset.prefValue || '';
     const visible = !q || name.toLowerCase().includes(q);
-    row.hidden = !visible;
+    item.hidden = !visible;
     if (visible) matches += 1;
   });
   let empty = list.querySelector(':scope .pref-empty');
@@ -1645,13 +1718,55 @@ customizePage.addEventListener('focusin', (event) => {
   const search = event.target.closest('[data-pref-search]');
   if (search) searchFocusKey = search.dataset.prefSearch;
 });
-customizeTabDisplay.addEventListener('click', () => setCustomizeTab('display'));
-customizeTabTags.addEventListener('click', () => setCustomizeTab('tags'));
-customizeTabDisplay.addEventListener('keydown', (event) => {
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); setCustomizeTab('tags'); customizeTabTags.focus(); }
+// 定制页排序下拉键盘导航
+customizeSettingsPanel.addEventListener('keydown', (event) => {
+  const trigger = event.target.closest('[data-customize-sort]');
+  if (trigger) {
+    if (event.key === 'Escape') { closeCustomizeSortDropdowns(); trigger.focus(); }
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const key = trigger.dataset.customizeSort;
+      const dropdown = customizeSettingsPanel.querySelector(`[data-customize-sort-dropdown="${key}"]`);
+      if (dropdown.hidden) {
+        closeCustomizeSortDropdowns();
+        dropdown.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('open');
+      }
+      const current = dropdown.querySelector('.sort-option.selected');
+      if (current) current.focus();
+    }
+    return;
+  }
+  const dropdown = event.target.closest('[data-customize-sort-dropdown]');
+  if (dropdown) {
+    const options = [...dropdown.querySelectorAll('.sort-option')];
+    const idx = options.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') { event.preventDefault(); options[Math.min(idx + 1, options.length - 1)]?.focus(); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); options[Math.max(idx - 1, 0)]?.focus(); }
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (idx >= 0) selectCustomizeSortOption(dropdown.dataset.customizeSortDropdown, options[idx].dataset.value); }
+    if (event.key === 'Escape') { closeCustomizeSortDropdowns(); dropdown.closest('.sort-field').querySelector('[data-customize-sort]').focus(); }
+    if (event.key === 'Tab') closeCustomizeSortDropdowns();
+  }
 });
-customizeTabTags.addEventListener('keydown', (event) => {
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); setCustomizeTab('display'); customizeTabDisplay.focus(); }
+const customizeTabOrder = ['display', 'sites', 'providers', 'models', 'tags'];
+const customizeTabButtons = Object.fromEntries(customizeTabOrder.map((key) => [key, customizeNav.querySelector(`[data-customize-tab="${key}"]`)]));
+customizeNav.querySelectorAll('[data-customize-tab]').forEach((button) => {
+  button.addEventListener('click', () => setCustomizeTab(button.dataset.customizeTab));
+});
+customizeNav.addEventListener('keydown', (event) => {
+  const current = event.target.closest('[data-customize-tab]');
+  if (!current) return;
+  const index = customizeTabOrder.indexOf(current.dataset.customizeTab);
+  if (index === -1) return;
+  let next = null;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = customizeTabOrder[(index + 1) % customizeTabOrder.length];
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = customizeTabOrder[(index - 1 + customizeTabOrder.length) % customizeTabOrder.length];
+  if (next) {
+    event.preventDefault();
+    setCustomizeTab(next);
+    customizeTabButtons[next].focus();
+  }
 });
 document.addEventListener('click', (event) => {
   const hint = event.target.closest('[data-open-customize]');
@@ -1811,17 +1926,41 @@ function enterCustomize() {
   openSiteMenu = null;
   openColorMenu = null;
   if (customizeNav) customizeNav.hidden = state !== 'active';
-  customizeTagsPanel.hidden = state !== 'active';
   if (state === 'active') {
+    for (const panel of Object.values(CUSTOMIZE_PANEL_BY_TAB)) panel.hidden = false;
     renderCustomize();
   } else {
+    // 门禁态：仅 settings 面板承载 gate，其余面板隐藏
+    customizeSettingsPanel.hidden = false;
+    customizeSitesPanel.hidden = true;
+    customizeProvidersPanel.hidden = true;
+    customizeModelsPanel.hidden = true;
+    customizeTagsPanel.hidden = true;
     renderCustomizeGate(!currentUser);
   }
   updateCustomizeSubtitle();
 }
 
 function renderCustomizeGate(loggedOut) {
-  customizeDisplayPanel.innerHTML = `<section class="pref-section customize-gate"><span class="gate-mark" aria-hidden="true">✦</span><h3>${loggedOut ? '登录后使用定制' : '定制需要有效会员'}</h3><p class="muted">${loggedOut ? '定制是会员功能：登录 LINUX DO 账号并开通会员后，可以屏蔽站点与模型、管理标签，设置自动云端同步。' : '会员到期后，您的定制设置仍保留在服务器，续期后自动恢复。'}</p><p class="gate-pitch">成为会员：<b>${siteSettings.membershipMonthlyPriceLdc || 15} LDC / 月</b><br>每月额外获赠 <b>${siteSettings.wishFreeCreditLdc || 10} LDC</b> <a class="gate-wish-link" href="#wishes">许愿</a>额度</p><div class="gate-actions">${loggedOut ? '<button type="button" class="primary-button" data-gate-login>登录 LINUX DO</button>' : '<button type="button" class="primary-button" data-gate-redeem>兑换会员</button><button type="button" class="ghost" data-gate-recharge>LDC 直充</button>'}</div></section>`;
+  const price = siteSettings.membershipMonthlyPriceLdc || 15;
+  const freeCredit = siteSettings.wishFreeCreditLdc || 10;
+  const title = loggedOut ? '开通会员以使用定制' : '定制需要有效会员';
+  const actions = loggedOut
+    ? '<button type="button" class="gate-cta gate-cta-primary" data-gate-login>登录 LINUX DO<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></button>'
+    : '<button type="button" class="gate-cta gate-cta-primary" data-gate-redeem>兑换会员</button><button type="button" class="gate-cta gate-cta-ghost" data-gate-recharge>LDC 直充</button>';
+  const features = `
+    <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" /><path d="m1 1 22 22" /></svg></span><span class="gate-feature-text"><strong>站点筛选</strong><small>只看你想看的站点</small></span></li>
+    <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><path d="M7 7h.01" /></svg></span><span class="gate-feature-text"><strong>标签管理</strong><small>为站点设置自定义标签</small></span></li>
+    <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><path d="M8 12V6.5M5.6 8.9 8 6.5l2.4 2.4" /><path d="M16 12v5.5M13.6 15.1 16 17.5l2.4-2.4" /></svg></span><span class="gate-feature-text"><strong>云端同步</strong><small>你的配置会在云端同步</small></span></li>`;
+  customizeSettingsPanel.innerHTML = `<section class="pref-section customize-gate">
+    <div class="gate-hero">
+      <span class="gate-mark" aria-hidden="true">✦</span>
+      <h3>${title}</h3>
+    </div>
+    <ul class="gate-features">${features}</ul>
+    <div class="gate-price"><span class="gate-price-label">会员价</span><span class="gate-price-value"><b>${price}</b><small>LDC / 月</small></span><span class="gate-price-perk">每月额外获赠 <b>${freeCredit} LDC</b> <a class="gate-wish-link" href="#wishes">许愿额度</a></span></div>
+    <div class="gate-actions">${actions}</div>
+  </section>`;
 }
 
 // ---- 账号菜单 ----
