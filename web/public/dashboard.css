@@ -1059,16 +1059,56 @@
 }
 
 .card-head .card-title {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.card-title .card-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.card-title .card-title-text:first-child {
+  flex: 1 1 0%;
 }
 
 .card-title small {
   color: var(--muted);
   font-size: var(--font-caption);
   font-weight: 520;
+}
+
+.site-home-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 5px;
+  border-radius: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0.55;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.site-home-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.site-home-link:hover,
+.site-home-link:focus-visible {
+  opacity: 1;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .card-site {

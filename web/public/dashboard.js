@@ -734,10 +734,21 @@ function renderTimeline(timeline) {
   return `<div class="uptime-strip" aria-label="最近 24 小时状态：${escapeHTML(summary)}">${timeline.map((slot) => `<i class="${slot.state}"></i>`).join('')}</div>`;
 }
 
+const HOMEPAGE_OVERRIDE = {
+  'HXI AI': 'https://runanytime.hxi.me/',
+};
+
+function homepageOf(siteName, url) {
+  if (HOMEPAGE_OVERRIDE[siteName]) return HOMEPAGE_OVERRIDE[siteName];
+  try { return new URL(url).origin + '/'; } catch (_) { return ''; }
+}
+
 function renderCard(card) {
+  const homeUrl = homepageOf(card.siteName, card.siteUrl);
+  const homeLink = homeUrl ? `<a class="site-home-link" href="${escapeHTML(homeUrl)}" target="_blank" rel="noopener" title="访问站点主页" onclick="event.stopPropagation()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2h5v5"/><path d="M14 2L7 9"/><path d="M2 5v7a2 2 0 0 0 2 2h7"/></svg></a>` : '';
   const title = view === 'model'
-    ? `<strong class="card-title"><span>${escapeHTML(card.siteName)}</span><small> · ${escapeHTML(card.rawModelName)}</small></strong>`
-    : `<strong>${escapeHTML(card.rawModelName)}</strong>`;
+    ? `<strong class="card-title"><span class="card-title-text">${escapeHTML(card.siteName)}</span><small class="card-title-text"> · ${escapeHTML(card.rawModelName)}</small>${homeLink}</strong>`
+    : `<strong class="card-title"><span class="card-title-text">${escapeHTML(card.rawModelName)}</span>${homeLink}</strong>`;
   const tagsHTML = (card.tagNames || []).length
     ? `<div class="card-tags">${card.tagNames.map((name) => {
       const color = tags.get(name)?.color || 'mint';
