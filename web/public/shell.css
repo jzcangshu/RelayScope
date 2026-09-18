@@ -32,7 +32,7 @@
 
 .public-dashboard .topbar {
   min-height: 72px;
-  padding: 12px max(24px, calc((100% - 1440px) / 2 + 24px));
+  padding: 12px max(24px, calc((100% - var(--page-max, 1440px)) / 2 + 24px));
   justify-content: flex-start;
   gap: 32px;
   background: var(--surface);

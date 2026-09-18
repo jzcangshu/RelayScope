@@ -75,6 +75,16 @@ BUCKETS = []
 for _ in range(48):
     BUCKETS.append({"siteId": 1, "rawModelName": "gpt-4o-2024-11-20", "groupName": "官方", "serviceState": "healthy", "start": NOW, "end": NOW})
 
+# 通知订阅（内存态，重启即清空）
+SUBSCRIPTIONS = []
+NEXT_SUB_ID = 1
+
+def _site_name(site_id):
+    for r in ROWS:
+        if r["siteId"] == site_id:
+            return r["siteName"]
+    return ""
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -95,10 +105,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/public/dashboard":
             return self._json({"revision": "mock-1", "rows": ROWS, "buckets": BUCKETS, "hours": 24})
         if path == "/api/v1/public/announcements":
+            fail_anns = [
+                {"siteId": 3, "siteName": "蓝光通道", "failureCode": "challenge_failed", "reason": "Cloudflare 验证持续失败，FlareSolverr 无法通过 challenge"},
+                {"siteId": 2, "siteName": "紫电API", "failureCode": "collection_failed", "reason": "请求超时（7 分钟内未响应）"},
+            ]
+            site_ann_ids = [1, 2, 3]
             if LOGGED_IN:
                 notice = {"markdown": "# 欢迎使用 RelayScope\n\n- 数据每 **5 分钟** 自动刷新\n\n- 问题请通过反馈提交", "updatedAt": NOW}
-                return self._json({"announcements": [], "revision": "mock-1", "notice": notice})
-            return self._json({"announcements": [], "revision": "mock-1"})
+                return self._json({"announcements": fail_anns, "revision": "mock-1", "notice": notice, "siteAnnouncementSiteIds": site_ann_ids})
+            return self._json({"announcements": fail_anns, "revision": "mock-1", "siteAnnouncementSiteIds": site_ann_ids})
+        if path.startswith("/api/v1/public/site-announcements"):
+            site_id = int(self.path.split("site_id=")[-1].split("&")[0]) if "site_id=" in self.path else 0
+            now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+            anns_by_site = {
+                1: [
+                    {"id": 1, "siteId": 1, "externalId": "a1", "title": "上线 glm-5.3-flash", "content": "Translate 分组扩容，现已支持 GLM-5.3-flash 模型，倍率 0.5。请勿高并发使用。", "annType": "success", "extra": "", "publishedAt": now_ts - 3600000 * 2, "firstSeenAt": now_ts - 3600000 * 2, "lastSeenAt": now_ts},
+                    {"id": 2, "siteId": 1, "externalId": "a2", "title": "", "content": "由于学业繁重，且本人为住宿生，故维护频率会降低。GLM5.2 空回复/429 稍等重试即可。", "annType": "warning", "extra": "", "publishedAt": now_ts - 86400000 * 2, "firstSeenAt": now_ts - 86400000 * 2, "lastSeenAt": now_ts},
+                ],
+                2: [
+                    {"id": 3, "siteId": 2, "externalId": "a3", "title": "关于账号封禁问题的说明", "content": "由于目前资源紧张，当天token资源分配完毕后将不再继续分配，请求也不会被处理。请大家留意以下几点：正常使用者请自查，若发现大量 429 错误建议立即停止使用。", "annType": "warning", "extra": "", "publishedAt": now_ts - 7200000, "firstSeenAt": now_ts - 7200000, "lastSeenAt": now_ts},
+                ],
+                3: [
+                    {"id": 4, "siteId": 3, "externalId": "a4", "title": "", "content": "complimentary分组glm-5.2模型目前有几率降级路由至glm-5.1，glm-5以提升可用性。", "annType": "default", "extra": "", "publishedAt": now_ts - 86400000, "firstSeenAt": now_ts - 86400000, "lastSeenAt": now_ts},
+                ],
+            }
+            return self._json({"announcements": anns_by_site.get(site_id, [])})
         if path == "/api/v1/public/details":
             return self._json({"buckets": BUCKETS, "groups": [g for g in ROWS if g["siteName"] == "星云中转" or g["groupName"] == "官方"]})
         if path == "/api/v1/auth/me":
@@ -111,6 +142,10 @@ class Handler(BaseHTTPRequestHandler):
             if LOGGED_IN:
                 return self._json({"eligible": True, "available": 10})
             return self._json({"eligible": False, "available": 0})
+        if path == "/api/v1/me/notification-subscriptions":
+            if not LOGGED_IN:
+                return self._json({"error": "请先登录"}, status=401)
+            return self._json({"subscriptions": SUBSCRIPTIONS})
         if path == "/api/v1/wishes":
             return self._json({"wishes": MOCK_WISHES})
         if path.startswith("/api/v1/payment/orders/"):
@@ -149,6 +184,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"orderNo": "LDmock" + str(int(time.time())), "payUrl": "https://credit.linux.do/paying?order_no=mock", "amountLdc": 30})
         if path == "/api/v1/wishes":
             return self._json({"wish": MOCK_WISHES[0]})
+        if path == "/api/v1/me/notification-subscriptions":
+            if not LOGGED_IN:
+                return self._json({"error": "请先登录"}, status=401)
+            global NEXT_SUB_ID
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            platform = (payload.get("platform") or "").strip()
+            target = (payload.get("target") or "").strip()
+            site_id = payload.get("siteId")
+            if not site_id or platform not in ("telegram", "feishu", "bark") or not target:
+                return self._json({"message": "siteId, platform, and target are required"}, status=400)
+            sub = {"id": NEXT_SUB_ID, "userId": 1, "siteId": site_id, "siteName": _site_name(site_id), "platform": platform, "target": target, "config": payload.get("config") or "{}", "enabled": True, "createdAt": NOW, "updatedAt": NOW}
+            NEXT_SUB_ID += 1
+            SUBSCRIPTIONS.append(sub)
+            return self._json({"status": "ok", "subscription": sub})
         if path == "/api/v1/feedback":
             return self._json({"status": "ok"})
         if path.startswith("/api/v1/admin/"):
@@ -161,7 +210,22 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({}, status=404)
 
     def do_DELETE(self):
-        if self.path.split("?")[0].startswith("/api/v1/admin/"):
+        path = self.path.split("?")[0]
+        prefix = "/api/v1/me/notification-subscriptions/"
+        if path.startswith(prefix):
+            if not LOGGED_IN:
+                return self._json({"error": "请先登录"}, status=401)
+            sub_id = int(path[len(prefix):])
+            global SUBSCRIPTIONS
+            SUBSCRIPTIONS = [s for s in SUBSCRIPTIONS if s["id"] != sub_id]
+            return self._json({"status": "ok"})
+        if path.startswith("/api/v1/admin/"):
+            return self._json({"status": "ok"})
+        return self._json({}, status=404)
+
+    def do_PUT(self):
+        path = self.path.split("?")[0]
+        if path == "/api/v1/me/preferences":
             return self._json({"status": "ok"})
         return self._json({}, status=404)
 

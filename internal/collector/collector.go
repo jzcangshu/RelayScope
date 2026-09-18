@@ -15,6 +15,12 @@ import (
 	"relayscope/internal/store"
 )
 
+// AnnouncementNotifier is an optional interface for enqueueing announcement
+// notifications. It lives here to avoid a circular collector→notifier import.
+type AnnouncementNotifier interface {
+	Enqueue(announcements []store.SiteAnnouncement)
+}
+
 type Collector struct {
 	store       *store.Store
 	registry    *adapter.Registry
@@ -26,6 +32,7 @@ type Collector struct {
 	activeSites map[int64]struct{}
 	matcher     *matcher.Engine
 	matcherMu   sync.RWMutex
+	notifier    AnnouncementNotifier
 }
 
 type Options struct {
@@ -34,6 +41,7 @@ type Options struct {
 	Fetcher            adapter.Fetcher
 	Logger             *slog.Logger
 	MaxHTTPConcurrency int
+	Notifier           AnnouncementNotifier
 }
 
 func New(options Options) (*Collector, error) {
@@ -54,7 +62,8 @@ func New(options Options) (*Collector, error) {
 	return &Collector{
 		store: options.Store, registry: options.Registry, fetcher: options.Fetcher, logger: options.Logger,
 		httpSlots: make(chan struct{}, options.MaxHTTPConcurrency), browserLock: make(chan struct{}, 1), activeSites: make(map[int64]struct{}),
-		matcher: modelMatcher,
+		matcher:  modelMatcher,
+		notifier: options.Notifier,
 	}, nil
 }
 
@@ -187,6 +196,34 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	if len(blockedRawNames) > 0 {
 		if err := collector.store.RemoveRawModels(ctx, site.ID, blockedRawNames, now); err != nil {
 			collection.Issues = append(collection.Issues, domain.CollectionIssue{Code: "blocked_removal_failed", Scope: "blocked models", Message: err.Error()})
+		}
+	}
+	// Collect announcements if the adapter supports it.
+	if provider, ok := adapterImpl.(adapter.AnnouncementProvider); ok {
+		anns, annErr := provider.CollectAnnouncements(ctx, siteDefinition, fetcher)
+		if annErr != nil {
+			collector.logger.Warn("announcement collection failed", "site_id", site.ID, "error", annErr)
+		} else if len(anns) > 0 {
+			inputs := make([]store.AnnouncementInput, len(anns))
+			for i, ann := range anns {
+				inputs[i] = store.AnnouncementInput{
+					ExternalID:  ann.ExternalID,
+					Title:       ann.Title,
+					Content:     ann.Content,
+					AnnType:     ann.Type,
+					Extra:       ann.Extra,
+					PublishedAt: ann.PublishedAt,
+				}
+			}
+			newAnns, applyErr := collector.store.ApplyAnnouncements(ctx, site.ID, inputs, now)
+			if applyErr != nil {
+				collector.logger.Warn("apply announcements failed", "site_id", site.ID, "error", applyErr)
+			} else if len(newAnns) > 0 {
+				collector.logger.Info("new announcements detected", "site_id", site.ID, "count", len(newAnns))
+				if collector.notifier != nil {
+					go collector.notifier.Enqueue(newAnns)
+				}
+			}
 		}
 	}
 	modelCount, groupCount := countObservation(collection)

@@ -36,7 +36,7 @@ type ProbeAdapter struct {
 func (adapter ProbeAdapter) Key() string         { return adapter.adapterKey }
 func (adapter ProbeAdapter) DisplayName() string { return adapter.display }
 func (adapter ProbeAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"statusBaseUrl":{"type":"string"},"catalogPath":{"type":"string"},"statusPath":{"type":"string"},"detailPath":{"type":"string"},"detailPathTemplate":{"type":"string"},"groupsPath":{"type":"string"},"batchPath":{"type":"string"},"pageSize":{"type":"integer","minimum":1,"maximum":200},"pricingAdapter":{"type":"string"},"pricingBaseUrl":{"type":"string"},"pricingPath":{"type":"string"},"pricingStatusPath":{"type":"string"},"pricingOptional":{"type":"boolean"},"pricingRequiresSession":{"type":"boolean"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"statusBaseUrl":{"type":"string"},"catalogPath":{"type":"string"},"statusPath":{"type":"string"},"detailPath":{"type":"string"},"detailPathTemplate":{"type":"string"},"groupsPath":{"type":"string"},"batchPath":{"type":"string"},"pageSize":{"type":"integer","minimum":1,"maximum":200},"pricingAdapter":{"type":"string"},"pricingBaseUrl":{"type":"string"},"pricingPath":{"type":"string"},"pricingStatusPath":{"type":"string"},"pricingOptional":{"type":"boolean"},"pricingRequiresSession":{"type":"boolean"},"announcementMode":{"type":"string","enum":["timeline","notice_diff","disabled"],"default":"timeline"}}}`)
 }
 
 type probeConfig struct {

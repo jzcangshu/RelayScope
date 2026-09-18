@@ -22,9 +22,11 @@ const customizeSitesPanel = document.querySelector('#customize-sites');
 const customizeProvidersPanel = document.querySelector('#customize-providers');
 const customizeModelsPanel = document.querySelector('#customize-models');
 const customizeTagsPanel = document.querySelector('#customize-tags');
-const announcementDialog = document.querySelector('#announcement-dialog');
+const customizeNotifyPanel = document.querySelector('#customize-notify');
+const boardShell = document.querySelector('#board-shell');
+const ncPanel = document.querySelector('#nc-sidebar');
 const announcementAction = document.querySelector('#announcement-action');
-const announcementClose = document.querySelector('#announcement-close');
+const ncCloseBtn = document.querySelector('#nc-close-btn');
 const announcementContent = document.querySelector('#announcement-content');
 const noticeContent = document.querySelector('#notice-content');
 const userAction = document.querySelector('#user-action');
@@ -76,6 +78,7 @@ let currentPage = 1;
 let pageSize = 20;
 let announcements = [];
 let announcementSignature = '';
+let sitesWithAnnouncements = new Set(); // siteIds that have recent announcements
 
 // 定制个性化（全部保存在浏览器本地）
 const TAG_COLORS = ['mint', 'blue', 'violet', 'amber', 'rose', 'slate'];
@@ -249,7 +252,7 @@ function mergePreferences(local, cloud) {
 }
 function wishProgress(pledged, target) {
   if (target == null) return { undecided: true, percent: 0, label: '许愿目标尚未确定' };
-  const capped = target > 0 ? Math.min(1, pledged / target) : 1;
+  const capped = target > 0 ? Math.min(1, pledged / target) : 0;
   return { undecided: false, percent: Math.round(capped * 100), label: `已许愿 ${pledged} / ${target} LDC` };
 }
 function wishStatusBadge(status) {
@@ -623,6 +626,7 @@ function buildCards() {
     card.tagNames = cardTagsOf(card.siteName);
     const cardHistory = historyByCard.get(card.key) || [];
     card.hasHistory = cardHistory.length > 0;
+    card.hasAnnouncements = sitesWithAnnouncements.has(card.siteId);
     card.timeline = buildTimeline(cardHistory);
     card.lowestPrice = lowestPrice(card.groups);
     return card;
@@ -746,9 +750,10 @@ function homepageOf(siteName, url) {
 function renderCard(card) {
   const homeUrl = homepageOf(card.siteName, card.siteUrl);
   const homeLink = homeUrl ? `<a class="site-home-link" href="${escapeHTML(homeUrl)}" target="_blank" rel="noopener" title="访问站点主页" onclick="event.stopPropagation()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2h5v5"/><path d="M14 2L7 9"/><path d="M2 5v7a2 2 0 0 0 2 2h7"/></svg></a>` : '';
+  const annAttr = card.hasAnnouncements ? ` onclick="event.stopPropagation();showSiteAnnouncements(${card.siteId},'${escapeHTML(card.siteName)}')"` : '';
   const title = view === 'model'
-    ? `<strong class="card-title"><span class="card-title-text">${escapeHTML(card.siteName)}</span><small class="card-title-text"> · ${escapeHTML(card.rawModelName)}</small>${homeLink}</strong>`
-    : `<strong class="card-title"><span class="card-title-text">${escapeHTML(card.rawModelName)}</span>${homeLink}</strong>`;
+    ? `<strong class="card-title"><span class="card-title-text"${annAttr}>${escapeHTML(card.siteName)}</span><small class="card-title-text"> · ${escapeHTML(card.rawModelName)}</small>${homeLink}</strong>`
+    : `<strong class="card-title"><span class="card-title-text"${annAttr}>${escapeHTML(card.rawModelName)}</span>${homeLink}</strong>`;
   const tagsHTML = (card.tagNames || []).length
     ? `<div class="card-tags">${card.tagNames.map((name) => {
       const color = tags.get(name)?.color || 'mint';
@@ -916,10 +921,10 @@ function render() {
 
 async function loadRows() {
   try {
-    await loadAnnouncements();
     const metaResponse = await fetch('/api/v1/meta', { cache: 'no-store' });
     const meta = metaResponse.ok ? await metaResponse.json() : {};
     if (revision !== null && meta.revision === revision) {
+      await loadAnnouncements();
       return;
     }
     revision = meta.revision ?? revision;
@@ -930,20 +935,158 @@ async function loadRows() {
     rows = dashboard.rows || [];
     historyBuckets = dashboard.buckets || [];
     historyEnd = meta.serverTime ? Date.parse(meta.serverTime) : Date.now();
-    // 让浏览器先绘制首帧再构建大卡片树；不能用 rAF：窗口被遮挡时 rAF 永不触发，
-    // 而后续轮询会因 revision 未变提前返回，看板将一直空白。
+    await loadAnnouncements();
     await new Promise((resolve) => setTimeout(resolve, 0));
     buildCards();
     render();
   } catch {}
 }
 
+/* ---------- 通知中心渲染 ---------- */
+
+let ncRange = '24h';
+let ncSiteAnnouncements = []; // site announcements from API
+let ncAllItems = []; // merged + sorted items
+
 function renderAnnouncements() {
-  const sectionLabel = document.querySelector('.announcement-section');
-  if (sectionLabel) sectionLabel.hidden = !(siteNotice && siteNotice.markdown);
-  announcementContent.innerHTML = announcements.length
-    ? `<ul class="announcement-list">${announcements.map((item) => `<li><span class="announcement-indicator" aria-hidden="true"></span><div class="announcement-item-body"><div class="announcement-item-heading"><strong>${escapeHTML(item.siteName)}</strong><code>${escapeHTML(item.failureCode)}</code></div><p class="announcement-reason">${escapeHTML(item.reason || '当前采集暂时失败，恢复成功后会自动撤下。')}</p></div></li>`).join('')}</ul>`
-    : '<p class="muted announcement-empty">当前所有已启用站点均已恢复采集。</p>';
+  ncSiteAnnouncements = ncSiteAnnouncements.map(item => ({
+    type: 'site',
+    siteId: item.siteId,
+    siteName: item.siteName || `站点 #${item.siteId}`,
+    title: item.title,
+    content: item.content,
+    annType: item.annType || 'default',
+    time: item.publishedAt ? new Date(item.publishedAt) : null,
+  }));
+  ncAllItems = [...ncSiteAnnouncements].sort((a, b) => {
+    if (!a.time && !b.time) return 0;
+    if (!a.time) return 1;
+    if (!b.time) return -1;
+    return b.time - a.time;
+  });
+  renderNotificationCenter();
+}
+
+function renderNotificationCenter() {
+  const container = announcementContent;
+  const now = Date.now();
+  const rangeMs = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 }[ncRange] || 86400000;
+  const cutoff = now - rangeMs;
+  // Filter out hidden sites
+  const filtered = ncAllItems.filter(item => !(hidden.sites && hidden.sites.has(item.siteName)));
+  const siteItems = filtered.filter(item => !item.time || item.time.getTime() >= cutoff);
+  const hasFailures = announcements.length > 0;
+  const hasSiteItems = siteItems.length > 0;
+
+  if (!hasFailures && !hasSiteItems) {
+    container.innerHTML = `<div class="nc-empty"><div class="nc-empty-icon">🔔</div><p class="nc-empty-title">暂无通知</p><p class="nc-empty-desc">该时间范围内没有通知，试试扩大范围。</p></div>`;
+    return;
+  }
+
+  let html = '';
+
+  // Section 1: 采集异常
+  if (hasFailures) {
+    html += `<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot nc-section-dot--alert"></span><span class="nc-section-title">采集异常</span><span class="nc-section-count">${announcements.length}</span></div>`;
+    for (const item of announcements) {
+      if (hidden.sites && hidden.sites.has(item.siteName)) continue;
+      const initial = (item.siteName || '?')[0];
+      html += `<div class="nc-item nc-item--failure"><div class="nc-avatar">${escapeHTML(initial)}</div><div class="nc-content"><div class="nc-meta"><span class="nc-site-name">${escapeHTML(item.siteName)}</span><span class="nc-badge nc-badge-error">${escapeHTML(item.failureCode)}</span></div><div class="nc-text">${escapeHTML(item.reason || '当前采集暂时失败，恢复成功后会自动撤下。')}</div></div></div>`;
+    }
+    html += '</div>';
+  }
+
+  // Section 2: 站点公告时间线 (with inline range pills)
+  if (hasSiteItems) {
+    const groups = new Map();
+    for (const item of siteItems) {
+      const dateKey = item.time ? formatDateKey(item.time) : '其他';
+      if (!groups.has(dateKey)) groups.set(dateKey, []);
+      groups.get(dateKey).push(item);
+    }
+    html += `<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot"></span><span class="nc-section-title">站点公告</span><span class="nc-section-count">${siteItems.length}</span><div class="nc-range-group" id="nc-range-group"><button class="nc-range-btn${ncRange==='24h'?' active':''}" data-range="24h">24h</button><button class="nc-range-btn${ncRange==='7d'?' active':''}" data-range="7d">7d</button><button class="nc-range-btn${ncRange==='30d'?' active':''}" data-range="30d">30d</button></div></div>`;
+    for (const [dateKey, groupItems] of groups) {
+      html += `<div class="nc-date-group"><div class="nc-date-label">${escapeHTML(dateKey)}</div>`;
+      for (const item of groupItems) {
+        html += renderNCTimelineItem(item);
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+  // Re-bind range buttons
+  container.querySelector('#nc-range-group')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.nc-range-btn');
+    if (!btn) return;
+    ncRange = btn.dataset.range || '24h';
+    renderNotificationCenter();
+  });
+}
+
+function renderNCTimelineItem(item) {
+  const isFailure = item.type === 'failure';
+  const initial = (item.siteName || '?')[0];
+  const timeStr = item.time ? formatNCTime(item.time) : '';
+  const badgeClass = isFailure ? 'nc-badge-error' : `nc-badge-${item.annType || 'default'}`;
+  const badgeLabel = isFailure ? item.code : ({ default: '', success: '成功', warning: '警告', error: '错误', ongoing: '进行中' }[item.annType] || '');
+  const titleHTML = item.title ? `<div class="nc-title-line">${escapeHTML(item.title)}</div>` : '';
+  const contentPreview = truncateContent(item.content || '', 150);
+  const needsExpand = (item.content || '').length > 150;
+  const expandBtn = needsExpand ? `<button class="nc-expand-btn" onclick="ncExpandContent(this)">展开全文</button>` : '';
+  const fullContent = escapeHTML(item.content || '');
+
+  return `<div class="nc-item ${isFailure ? 'nc-item--failure' : ''}">
+    <div class="nc-avatar">${escapeHTML(initial)}</div>
+    <div class="nc-content">
+      <div class="nc-meta">
+        <span class="nc-site-name">${escapeHTML(item.siteName)}</span>
+        ${badgeLabel ? `<span class="nc-badge ${badgeClass}">${escapeHTML(badgeLabel)}</span>` : ''}
+        <span class="nc-time">${escapeHTML(timeStr)}</span>
+      </div>
+      ${titleHTML}
+      <div class="nc-text" data-full="${fullContent}">${escapeHTML(contentPreview)}</div>
+      ${expandBtn}
+    </div>
+  </div>`;
+}
+
+function ncExpandContent(btn) {
+  const textEl = btn.previousElementSibling;
+  if (!textEl) return;
+  const full = textEl.dataset.full;
+  if (textEl.classList.contains('nc-text-expanded')) {
+    textEl.textContent = truncateContent(full, 150);
+    textEl.classList.remove('nc-text-expanded');
+    btn.textContent = '展开全文';
+  } else {
+    textEl.textContent = full;
+    textEl.classList.add('nc-text-expanded');
+    btn.textContent = '收起';
+  }
+}
+
+function truncateContent(text, max) {
+  if (text.length <= max) return text;
+  return text.substring(0, max) + '…';
+}
+
+function formatDateKey(date) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = today - target;
+  if (diff === 0) return '今天';
+  if (diff === 86400000) return '昨天';
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
+  return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+}
+
+function formatNCTime(date) {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
 }
 
 let siteNotice = null;
@@ -965,26 +1108,71 @@ async function loadAnnouncements() {
     const payload = await response.json();
     siteNotice = payload.notice || null;
     renderNotice();
+    sitesWithAnnouncements = new Set(payload.siteAnnouncementSiteIds || []);
     const next = payload.announcements || [];
     const nextSignature = next.map((item) => `${item.siteId}:${item.failureCode}:${item.reason}`).join('|');
     const changed = nextSignature !== announcementSignature;
     announcements = next;
     announcementSignature = nextSignature;
+    // Load site announcements if we have sites with announcements
+    if (sitesWithAnnouncements.size > 0) {
+      await loadSiteAnnouncementsBatch();
+    }
     renderAnnouncements();
     if (changed && announcements.length) {
       let seen = '';
       try { seen = localStorage.getItem('relayscope-announcements-seen') || ''; } catch (_) {}
       if (seen !== nextSignature) {
         try { localStorage.setItem('relayscope-announcements-seen', nextSignature); } catch (_) {}
-        announcementDialog.showModal();
+        toggleNCSidebar(true);
       }
     }
   } catch (_) {}
 }
 
-announcementAction.addEventListener('click', () => announcementDialog.showModal());
-announcementClose.addEventListener('click', () => announcementDialog.close());
-announcementDialog.addEventListener('click', (event) => { if (event.target === announcementDialog) announcementDialog.close(); });
+async function loadSiteAnnouncementsBatch() {
+  const siteIds = [...sitesWithAnnouncements];
+  const results = await Promise.allSettled(
+    siteIds.map(id => fetch(`/api/v1/public/site-announcements?site_id=${id}&limit=5`).then(r => r.ok ? r.json() : { announcements: [] }))
+  );
+  const siteNameMap = new Map(rows.map(r => [r.siteId, r.siteName]));
+  ncSiteAnnouncements = [];
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === 'fulfilled') {
+      for (const ann of (results[i].value.announcements || [])) {
+        ncSiteAnnouncements.push({ ...ann, siteName: siteNameMap.get(siteIds[i]) || ann.siteName || `站点 #${siteIds[i]}` });
+      }
+    }
+  }
+}
+
+// Sidebar toggle — 通知面板是 board-shell 的右侧拓展列，开合会带动整页重新居中
+function toggleNCSidebar(show) {
+  if (!boardShell) return;
+  const isOpen = boardShell.classList.contains('nc-open');
+  const next = show !== undefined ? show : !isOpen;
+  boardShell.classList.toggle('nc-open', next);
+  if (ncPanel) ncPanel.inert = !next; // 收起时 0 宽面板不应进入 Tab 顺序
+  try { localStorage.setItem('relayscope-nc-open', next ? '1' : '0'); } catch {}
+}
+announcementAction?.addEventListener('click', () => toggleNCSidebar());
+ncCloseBtn?.addEventListener('click', () => toggleNCSidebar(false));
+// Subscribe button → jump to customize notify tab
+const ncSubscribeBtn = document.querySelector('#nc-subscribe-btn');
+if (ncSubscribeBtn) {
+  ncSubscribeBtn.addEventListener('click', () => {
+    toggleNCSidebar(false);
+    window.location.hash = '#customize'; // hashchange → applyRoute 打开定制页
+    if (!currentUser) return; // 未登录走门禁拦截页
+    setCustomizeTab('notify');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+}
+// Restore sidebar state
+let ncRestoreOpen = true;
+try { ncRestoreOpen = localStorage.getItem('relayscope-nc-open') !== '0'; } catch {}
+if (ncRestoreOpen) boardShell?.classList.add('nc-open');
+else if (ncPanel) ncPanel.inert = true;
 
 async function openDetails(rawModel, siteName) {
   detailTitle.textContent = rawModel;
@@ -1150,6 +1338,7 @@ if (sortDropdown) {
 document.addEventListener('click', (e) => {
   if (sortDropdown && !sortDropdown.hidden && !e.target.closest('#sort-field')) closeSortDropdown();
   if (!e.target.closest('#customize-display-settings .sort-field')) closeCustomizeSortDropdowns();
+  if (!e.target.closest('[data-notify-platform-field]')) closeNotifyPlatformDropdown();
 });
 themeToggle.addEventListener('click', () => {
   const modes = ['auto', 'light', 'dark'];
@@ -1173,7 +1362,8 @@ function renderCustomize() {
   else if (customizeTab === 'sites') renderChipGrid(CUSTOMIZE_DIMENSIONS[0], customizeSitesPanel);
   else if (customizeTab === 'providers') renderChipGrid(CUSTOMIZE_DIMENSIONS[1], customizeProvidersPanel);
   else if (customizeTab === 'models') renderChipGrid(CUSTOMIZE_DIMENSIONS[2], customizeModelsPanel);
-  else renderCustomizeTags();
+  else if (customizeTab === 'tags') renderCustomizeTags();
+  else if (customizeTab === 'notify') renderCustomizeNotify();
   updateNavBadges();
   if (searchFocusKey && !tagFocusAfterRender) {
     const panel = customizeTab === 'display' ? customizeSettingsPanel : customizeTab === 'tags' ? customizeTagsPanel : (customizeTab === 'sites' ? customizeSitesPanel : customizeTab === 'providers' ? customizeProvidersPanel : customizeModelsPanel);
@@ -1185,7 +1375,7 @@ function renderCustomize() {
   }
 }
 
-const CUSTOMIZE_PANEL_BY_TAB = { display: customizeSettingsPanel, sites: customizeSitesPanel, providers: customizeProvidersPanel, models: customizeModelsPanel, tags: customizeTagsPanel };
+const CUSTOMIZE_PANEL_BY_TAB = { display: customizeSettingsPanel, sites: customizeSitesPanel, providers: customizeProvidersPanel, models: customizeModelsPanel, tags: customizeTagsPanel, notify: customizeNotifyPanel };
 
 function updateNavBadges() {
   for (const key of ['sites', 'providers', 'models']) {
@@ -1198,8 +1388,8 @@ function updateNavBadges() {
 }
 
 function setCustomizeTab(tab) {
-  // 非会员（含已过期）永远停留在门禁页，禁止通过切换标签渲染出定制内容
-  if (membershipIs() !== 'active') { enterCustomize(); return; }
+  // 非会员（含已过期）永远停留在门禁页，禁止通过切换标签渲染出定制内容（通知订阅除外）
+  if (membershipIs() !== 'active' && tab !== 'notify') { enterCustomize(); return; }
   customizeTab = tab;
   customizeNav.querySelectorAll('[data-customize-tab]').forEach((button) => {
     button.setAttribute('aria-selected', String(button.dataset.customizeTab === tab));
@@ -1297,6 +1487,15 @@ function closeCustomizeSortDropdowns() {
     trigger.setAttribute('aria-expanded', 'false');
     trigger.classList.remove('open');
   });
+}
+
+function closeNotifyPlatformDropdown() {
+  if (!customizeNotifyPanel) return;
+  const trigger = customizeNotifyPanel.querySelector('[data-notify-platform-trigger]');
+  const dropdown = customizeNotifyPanel.querySelector('[data-notify-platform-dropdown]');
+  if (!dropdown || dropdown.hidden) return;
+  dropdown.hidden = true;
+  if (trigger) { trigger.setAttribute('aria-expanded', 'false'); trigger.classList.remove('open'); }
 }
 
 function renderCustomizeDisplay() {
@@ -1494,8 +1693,31 @@ function cancelTagEditor() {
 }
 
 function handleCustomizeClick(event) {
-  const target = event.target.closest('[data-pref-reset],[data-pref-toggle],[data-customize-sort],[data-customize-sort-dropdown] .sort-option,[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo]');
+  const target = event.target.closest('[data-pref-reset],[data-pref-toggle],[data-customize-sort],[data-customize-sort-dropdown] .sort-option,[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo],[data-notify-platform-trigger],[data-notify-platform-dropdown] .sort-option');
   if (!target) return;
+
+  if (target.matches('[data-notify-platform-trigger]')) {
+    const dropdown = customizeNotifyPanel.querySelector('[data-notify-platform-dropdown]');
+    if (!dropdown) return;
+    const isOpen = !dropdown.hidden;
+    closeNotifyPlatformDropdown();
+    if (!isOpen) {
+      dropdown.hidden = false;
+      target.setAttribute('aria-expanded', 'true');
+      target.classList.add('open');
+      const current = dropdown.querySelector('.sort-option.selected');
+      if (current) current.focus();
+    }
+    return;
+  }
+
+  if (target.matches('[data-notify-platform-dropdown] .sort-option')) {
+    const prev = notifyPlatform;
+    notifyPlatform = target.dataset.value;
+    closeNotifyPlatformDropdown();
+    if (prev !== notifyPlatform) renderCustomizeNotify();
+    return;
+  }
 
   if (target.matches('[data-customize-sort]')) {
     const key = target.dataset.customizeSort;
@@ -1760,7 +1982,40 @@ customizeSettingsPanel.addEventListener('keydown', (event) => {
     if (event.key === 'Tab') closeCustomizeSortDropdowns();
   }
 });
-const customizeTabOrder = ['display', 'sites', 'providers', 'models', 'tags'];
+// 通知订阅面板平台下拉键盘导航
+customizeNotifyPanel.addEventListener('keydown', (event) => {
+  const trigger = event.target.closest('[data-notify-platform-trigger]');
+  if (trigger) {
+    if (event.key === 'Escape') { closeNotifyPlatformDropdown(); trigger.focus(); }
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const dropdown = customizeNotifyPanel.querySelector('[data-notify-platform-dropdown]');
+      if (dropdown.hidden) {
+        closeNotifyPlatformDropdown();
+        dropdown.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('open');
+      }
+      const current = dropdown.querySelector('.sort-option.selected');
+      if (current) current.focus();
+    }
+    return;
+  }
+  const dropdown = event.target.closest('[data-notify-platform-dropdown]');
+  if (dropdown) {
+    const options = [...dropdown.querySelectorAll('.sort-option')];
+    const idx = options.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown') { event.preventDefault(); options[Math.min(idx + 1, options.length - 1)]?.focus(); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); options[Math.max(idx - 1, 0)]?.focus(); }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (idx >= 0) { notifyPlatform = options[idx].dataset.value; closeNotifyPlatformDropdown(); renderCustomizeNotify(); }
+    }
+    if (event.key === 'Escape') { closeNotifyPlatformDropdown(); customizeNotifyPanel.querySelector('[data-notify-platform-trigger]')?.focus(); }
+    if (event.key === 'Tab') closeNotifyPlatformDropdown();
+  }
+});
+const customizeTabOrder = ['display', 'sites', 'providers', 'models', 'tags', 'notify'];
 const customizeTabButtons = Object.fromEntries(customizeTabOrder.map((key) => [key, customizeNav.querySelector(`[data-customize-tab="${key}"]`)]));
 customizeNav.querySelectorAll('[data-customize-tab]').forEach((button) => {
   button.addEventListener('click', () => setCustomizeTab(button.dataset.customizeTab));
@@ -1936,10 +2191,19 @@ function enterCustomize() {
   tagEditor = null;
   openSiteMenu = null;
   openColorMenu = null;
-  if (customizeNav) customizeNav.hidden = state !== 'active';
+  if (customizeNav) customizeNav.hidden = state !== 'active' && !currentUser;
   if (state === 'active') {
-    for (const panel of Object.values(CUSTOMIZE_PANEL_BY_TAB)) panel.hidden = false;
-    renderCustomize();
+    setCustomizeTab(customizeTab);
+  } else if (currentUser) {
+    // Logged in but not member: show notify tab only
+    customizeNav.hidden = false;
+    customizeSettingsPanel.hidden = true;
+    customizeSitesPanel.hidden = true;
+    customizeProvidersPanel.hidden = true;
+    customizeModelsPanel.hidden = true;
+    customizeTagsPanel.hidden = true;
+    customizeNotifyPanel.hidden = false;
+    renderCustomizeGate(false);
   } else {
     // 门禁态：仅 settings 面板承载 gate，其余面板隐藏
     customizeSettingsPanel.hidden = false;
@@ -1947,10 +2211,173 @@ function enterCustomize() {
     customizeProvidersPanel.hidden = true;
     customizeModelsPanel.hidden = true;
     customizeTagsPanel.hidden = true;
+    customizeNotifyPanel.hidden = true;
     renderCustomizeGate(!currentUser);
   }
   updateCustomizeSubtitle();
 }
+
+/* ---------- 通知订阅管理 ---------- */
+
+let notifySubscriptions = [];
+// 已为哪个用户加载过订阅列表（空列表也算加载完成，避免反复显示"正在加载…"）
+let notifySubscriptionsLoadedFor = null;
+
+async function loadNotifySubscriptions() {
+  const uid = currentUser?.id ?? 0;
+  if (!currentUser) { notifySubscriptions = []; notifySubscriptionsLoadedFor = uid; return; }
+  try {
+    const resp = await fetch('/api/v1/me/notification-subscriptions');
+    if (!resp.ok) { notifySubscriptions = []; notifySubscriptionsLoadedFor = uid; return; }
+    const data = await resp.json();
+    notifySubscriptions = data.subscriptions || [];
+  } catch { notifySubscriptions = []; }
+  notifySubscriptionsLoadedFor = uid;
+}
+
+const NOTIFY_FREE_LIMIT = 3;
+const NOTIFY_PLATFORMS = [
+  { key: 'telegram', label: 'Telegram', icon: '📱', placeholder: 'Chat ID（如 123456789）' },
+  { key: 'feishu', label: '飞书', icon: '💬', placeholder: 'Webhook URL（如 https://open.feishu.cn/...）' },
+  { key: 'bark', label: 'Bark', icon: '🔔', placeholder: '设备 Key' },
+];
+let notifyPlatform = 'telegram';
+
+function renderCustomizeNotify() {
+  if (!currentUser) {
+    customizeNotifyPanel.innerHTML = '<div class="empty-state"><p>请先登录以管理通知订阅。</p></div>';
+    return;
+  }
+  if (notifySubscriptionsLoadedFor !== (currentUser?.id ?? 0)) {
+    loadNotifySubscriptions().then(() => renderCustomizeNotify());
+    customizeNotifyPanel.innerHTML = '<div class="empty-state"><p>正在加载…</p></div>';
+    return;
+  }
+  const isMember = membershipIs() === 'active';
+  const siteMap = new Map(rows.map(r => [r.siteId, r.siteName]));
+  const uniqueSites = [...siteMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'));
+  const subscribedSiteIds = new Set(notifySubscriptions.map(s => s.siteId));
+  const subCount = subscribedSiteIds.size;
+  const limitText = isMember ? '会员无限' : `${subCount} / ${NOTIFY_FREE_LIMIT}`;
+
+  let html = '<div class="notify-panel">';
+
+  // Header with limit indicator
+  html += '<div class="notify-header">';
+  html += '<div><h3 class="notify-title">通知订阅</h3>';
+  html += `<p class="notify-desc">订阅站点公告更新，第一时间收到推送通知。</p></div>`;
+  html += `<div class="notify-limit ${!isMember && subCount >= NOTIFY_FREE_LIMIT ? 'notify-limit--warn' : ''}"><span class="notify-limit-count">${limitText}</span>${!isMember ? '<span class="notify-limit-label">免费额度</span>' : ''}</div>`;
+  html += '</div>';
+
+  // Platform config
+  html += '<div class="notify-platform-section">';
+  html += '<div class="notify-platform-row">';
+  const plat = NOTIFY_PLATFORMS.find(p => p.key === notifyPlatform) || NOTIFY_PLATFORMS[0];
+  html += '<div class="notify-field"><span class="notify-field-label">推送平台</span>';
+  html += '<div class="sort-field" data-notify-platform-field>';
+  html += `<button type="button" class="sort-trigger" data-notify-platform-trigger aria-haspopup="listbox" aria-expanded="false" aria-label="推送平台"><span class="sort-trigger-label">${plat.icon} ${plat.label}</span><svg class="sort-trigger-chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="m6 9 6 6 6-6"/></svg></button>`;
+  html += '<div class="sort-dropdown" data-notify-platform-dropdown role="listbox" hidden>';
+  for (const p of NOTIFY_PLATFORMS) {
+    const sel = p.key === notifyPlatform;
+    html += `<button class="sort-option${sel ? ' selected' : ''}" role="option" data-value="${p.key}"${sel ? ' aria-selected="true"' : ''}>`;
+    html += `<span class="sort-option-label">${p.icon} ${p.label}</span>`;
+    if (sel) html += '<svg class="sort-check" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="20 6 9 17 4 12"/></svg>';
+    html += '</button>';
+  }
+  html += '</div></div></div>';
+  html += '<label class="notify-field notify-field--flex"><span class="notify-field-label">推送目标</span><input id="notify-target" class="notify-input" type="text" placeholder="' + plat.placeholder + '"></label>';
+  html += '</div></div>';
+
+  // Site list
+  html += '<div class="notify-site-list">';
+  html += '<div class="notify-site-list-head"><span class="notify-site-list-title">选择站点</span></div>';
+  for (const [siteId, siteName] of uniqueSites) {
+    const isSubscribed = subscribedSiteIds.has(siteId);
+    const sub = notifySubscriptions.find(s => s.siteId === siteId);
+    const canToggle = isSubscribed || isMember || subCount < NOTIFY_FREE_LIMIT;
+    html += `<label class="notify-site-item ${isSubscribed ? 'notify-site-item--active' : ''} ${!canToggle ? 'notify-site-item--disabled' : ''}" data-site-id="${siteId}">`;
+    html += `<input type="checkbox" class="notify-site-check" data-site-id="${siteId}" ${isSubscribed ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}>`;
+    html += `<span class="notify-site-avatar">${escapeHTML(siteName[0])}</span>`;
+    html += `<span class="notify-site-name">${escapeHTML(siteName)}</span>`;
+    if (isSubscribed && sub) {
+      html += `<span class="notify-site-platform">${NOTIFY_PLATFORMS.find(p => p.key === sub.platform)?.icon || '📢'}</span>`;
+    }
+    html += '</label>';
+  }
+  html += '</div>';
+
+  // Upgrade CTA for non-members at limit
+  if (!isMember && subCount >= NOTIFY_FREE_LIMIT) {
+    html += '<div class="notify-upgrade"><span class="notify-upgrade-icon">✦</span><span>升级会员解锁无限站点订阅</span><button class="btn btn-primary btn-sm" type="button" onclick="showUpgradeGate()">开通会员</button></div>';
+  }
+
+  html += '</div>';
+  customizeNotifyPanel.innerHTML = html;
+
+  // Event: site checkbox toggle
+  customizeNotifyPanel.querySelectorAll('.notify-site-check').forEach(cb => {
+    cb.addEventListener('change', () => handleSiteToggle(cb.dataset.siteId, cb.checked));
+  });
+}
+
+async function handleSiteToggle(siteId, checked) {
+  siteId = Number(siteId);
+  const isMember = membershipIs() === 'active';
+  const platform = notifyPlatform || 'telegram';
+  const target = document.querySelector('#notify-target')?.value?.trim();
+
+  if (checked) {
+    // Check limit
+    if (!isMember) {
+      const uniqueSites = new Set(notifySubscriptions.map(s => s.siteId));
+      if (uniqueSites.size >= NOTIFY_FREE_LIMIT) {
+        showNotifyLimitGate();
+        // Re-render to uncheck
+        renderCustomizeNotify();
+        return;
+      }
+    }
+    // Need target
+    if (!target) {
+      showToast('请先填写推送目标', 'error');
+      renderCustomizeNotify();
+      return;
+    }
+    try {
+      const resp = await fetch('/api/v1/me/notification-subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteId, platform, target })
+      });
+      if (!resp.ok) { const err = await resp.json().catch(() => ({})); showToast(err.message || '订阅失败', 'error'); renderCustomizeNotify(); return; }
+      showToast('已订阅', 'success');
+      await loadNotifySubscriptions();
+      renderCustomizeNotify();
+    } catch { showToast('订阅失败', 'error'); renderCustomizeNotify(); }
+  } else {
+    const sub = notifySubscriptions.find(s => s.siteId === siteId);
+    if (!sub) return;
+    try {
+      await fetch(`/api/v1/me/notification-subscriptions/${sub.id}`, { method: 'DELETE' });
+      showToast('已取消订阅');
+      await loadNotifySubscriptions();
+      renderCustomizeNotify();
+    } catch { showToast('取消失败', 'error'); renderCustomizeNotify(); }
+  }
+}
+
+function showNotifyLimitGate() {
+  const price = siteSettings.membershipMonthlyPriceLdc || 15;
+  showToast(`✦ 免费版最多订阅 ${NOTIFY_FREE_LIMIT} 个站点，升级会员解锁无限订阅`);
+}
+
+function showUpgradeGate() {
+  // Jump to display tab which shows the gate
+  setCustomizeTab('display');
+}
+
+// Pre-load subscriptions when user logs in
+if (currentUser) loadNotifySubscriptions();
 
 function renderCustomizeGate(loggedOut) {
   const price = siteSettings.membershipMonthlyPriceLdc || 15;
@@ -1962,7 +2389,7 @@ function renderCustomizeGate(loggedOut) {
   const features = `
     <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" /><path d="m1 1 22 22" /></svg></span><span class="gate-feature-text"><strong>站点筛选</strong><small>只看你想看的站点</small></span></li>
     <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><path d="M7 7h.01" /></svg></span><span class="gate-feature-text"><strong>标签管理</strong><small>为站点设置自定义标签</small></span></li>
-    <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><path d="M8 12V6.5M5.6 8.9 8 6.5l2.4 2.4" /><path d="M16 12v5.5M13.6 15.1 16 17.5l2.4-2.4" /></svg></span><span class="gate-feature-text"><strong>云端同步</strong><small>你的配置会在云端同步</small></span></li>`;
+    <li class="gate-feature"><span class="gate-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span><span class="gate-feature-text"><strong>订阅站点通知</strong><small>站点公告更新时获得推送</small></span></li>`;
   customizeSettingsPanel.innerHTML = `<section class="pref-section customize-gate">
     <div class="gate-hero">
       <span class="gate-mark" aria-hidden="true">✦</span>
@@ -2155,9 +2582,8 @@ function applyRoute() {
   const boardView = !wishView && !customizeView;
   wishPage.hidden = !wishView;
   customizePage.hidden = !customizeView;
-  document.querySelector('.toolbar').hidden = !boardView;
+  boardShell.hidden = !boardView;
   summaryElement.hidden = !boardView;
-  document.querySelector('.filter-layout').hidden = !boardView;
   const navTargets = { board: document.querySelector('[data-nav-board]'), wishes: document.querySelector('[data-nav-wishes]'), customize: document.querySelector('[data-nav-customize]') };
   const active = customizeView ? 'customize' : wishView ? 'wishes' : 'board';
   for (const [name, link] of Object.entries(navTargets)) {
@@ -2440,3 +2866,30 @@ loadUser().finally(applyRoute);
   if (paidOrder) pollOrderStatus(paidOrder);
 }
 setInterval(loadRows, 60000);
+
+/* ---------- 站点公告 ---------- */
+
+let siteAnnouncementCache = {};
+
+async function showSiteAnnouncements(siteId, siteName) {
+  // Open sidebar filtered to a specific site
+  const titleEl = document.querySelector('.nc-sidebar-title');
+  if (titleEl) titleEl.textContent = siteName;
+  toggleNCSidebar(true);
+  try {
+    const resp = await fetch(`/api/v1/public/site-announcements?site_id=${siteId}&limit=20`);
+    if (!resp.ok) { announcementContent.innerHTML = '<div class="nc-empty"><div class="nc-empty-icon">📭</div><p class="nc-empty-title">加载失败</p></div>'; return; }
+    const data = await resp.json();
+    const anns = (data.announcements || []).map(a => ({
+      type: 'site', siteId, siteName,
+      title: a.title, content: a.content,
+      annType: a.annType || 'default',
+      time: a.publishedAt ? new Date(a.publishedAt) : null,
+    }));
+    const prevItems = ncAllItems;
+    ncAllItems = anns.sort((a, b) => (b.time || 0) - (a.time || 0));
+    ncRange = '30d';
+    renderNotificationCenter();
+    ncAllItems = prevItems;
+  } catch { announcementContent.innerHTML = '<div class="nc-empty"><div class="nc-empty-icon">📭</div><p class="nc-empty-title">加载失败</p></div>'; }
+}

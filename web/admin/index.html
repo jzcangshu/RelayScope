@@ -306,6 +306,23 @@
           <summary>原始配置<span>需要时编辑 JSON（配置数据）</span></summary>
           <label class="field"><span class="sr-only">原始配置数据</span><textarea id="site-config" rows="6" class="mono" spellcheck="false">{}</textarea><span class="field-hint">可视化字段与原始配置同步，未展示的配置项会保留。</span></label>
         </details>
+        <details class="advanced-section" id="site-notice-mode-section">
+          <summary>公告采集<span>监控站点公告/通知更新</span></summary>
+          <div class="form-grid">
+            <label class="field"><span>采集模式</span>
+              <select id="site-announcement-mode">
+                <option value="timeline">时间线（监测 announcements[] 数组）</option>
+                <option value="notice_diff">通知比对（监测 /api/notice 内容变化）</option>
+                <option value="disabled">关闭</option>
+              </select>
+              <span class="field-hint">时间线模式适合正确使用系统公告的站点；通知比对模式适合不断更新站点公告来传达时效信息的站点。</span>
+            </label>
+          </div>
+          <div id="site-announcements-preview" class="announcements-preview" hidden>
+            <h4>最近采集到的公告</h4>
+            <div id="site-announcements-list"></div>
+          </div>
+        </details>
         <details class="advanced-section" id="site-announcement-section">
           <summary>异常公告<span>向公开看板解释采集问题</span></summary>
           <div class="form-grid">

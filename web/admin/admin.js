@@ -464,13 +464,16 @@ function openSite(id = 0) {
   $('#site-failure-reason').value = site?.customFailureReason || '';
   $('#site-enabled').checked = site?.enabled ?? true;
   $('#site-session-required').checked = site?.sessionRequired ?? false;
+  $('#site-announcement-mode').value = config.announcementMode || 'timeline';
   formError($('#site-form'));
   $('#site-schedule-section').open = Boolean(site && (site.intervalSeconds !== 900 || site.jitterSeconds !== 120));
   $('#site-schedule-section summary span').textContent = `每 ${$('#site-interval').value} 分钟 · 随机延后 ${$('#site-jitter').value} 秒`;
   $('#site-blocked-section').open = Boolean(config.blockedKeywords?.length);
+  $('#site-notice-mode-section').open = Boolean(site && config.announcementMode !== 'disabled');
   $('#site-announcement-section').open = Boolean(site?.customFailureReason);
   $('#site-config-section').open = false;
   $('#site-source-settings').open = false;
+  loadSiteAnnouncementPreview(site?.id);
   $('#site-dialog').showModal();
   requestAnimationFrame(() => { $('#site-dialog .dialog-body').scrollTop = 0; $('#site-name').focus({ preventScroll: true }); });
 }
@@ -503,6 +506,7 @@ $('#site-form').addEventListener('submit', async (event) => {
   const blocked = words($('#site-blocked').value);
   if (blocked.length) config.blockedKeywords = blocked;
   else delete config.blockedKeywords;
+  config.announcementMode = $('#site-announcement-mode').value || 'timeline';
   const id = Number($('#site-id').value);
   const payload = { name: $('#site-name').value.trim(), baseUrl: $('#site-base-url').value.trim(), sourceUrl: $('#site-source-url').value.trim(), adapterKey: $('#site-adapter').value, adapterConfig: JSON.stringify(config), customFailureReason: $('#site-failure-reason').value.trim(), enabled: $('#site-enabled').checked, sessionRequired: $('#site-session-required').checked, intervalSeconds: Number($('#site-interval').value) * 60, jitterSeconds: Number($('#site-jitter').value) };
   await saveRequest(id ? `/api/v1/admin/sites/${id}` : '/api/v1/admin/sites', id ? 'PATCH' : 'POST', payload);
@@ -965,3 +969,29 @@ async function checkAdminSession() {
 }
 $('#login-retry').onclick = checkAdminSession;
 checkAdminSession();
+
+/* ---------- 公告采集预览 ---------- */
+
+async function loadSiteAnnouncementPreview(siteId) {
+  const container = $('#site-announcements-preview');
+  const list = $('#site-announcements-list');
+  if (!siteId) { container.hidden = true; return; }
+  try {
+    const resp = await fetch(`/api/v1/admin/sites/${siteId}/announcements?limit=10`);
+    if (!resp.ok) { container.hidden = true; return; }
+    const data = await resp.json();
+    const anns = data.announcements || [];
+    if (anns.length === 0) {
+      list.innerHTML = '<p class="muted" style="font-size:13px">暂无采集到的公告。</p>';
+    } else {
+      list.innerHTML = anns.map(a => {
+        const typeClass = `ann-type-${a.annType || 'default'}`;
+        const typeLabel = { default: '默认', success: '成功', warning: '警告', error: '错误', ongoing: '进行中' }[a.annType] || a.annType;
+        const time = a.publishedAt ? formatRunTime(a.publishedAt) : '';
+        const title = a.title ? `<div class="ann-title">${escapeHTML(a.title)}</div>` : '';
+        return `<div class="ann-item"><div class="ann-head"><span class="ann-type ${typeClass}">${escapeHTML(typeLabel)}</span><span class="ann-time">${escapeHTML(time)}</span></div>${title}<div class="ann-content">${escapeHTML(a.content).substring(0, 200)}${a.content.length > 200 ? '…' : ''}</div></div>`;
+      }).join('');
+    }
+    container.hidden = false;
+  } catch { container.hidden = true; }
+}

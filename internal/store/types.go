@@ -80,6 +80,50 @@ type UnmatchedModel struct {
 	LastSeenAt   time.Time `json:"lastSeenAt"`
 }
 
+type SiteAnnouncement struct {
+	ID          int64      `json:"id"`
+	SiteID      int64      `json:"siteId"`
+	SiteName    string     `json:"siteName,omitempty"`
+	ExternalID  string     `json:"externalId"`
+	Title       string     `json:"title"`
+	Content     string     `json:"content"`
+	AnnType     string     `json:"annType"`
+	Extra       string     `json:"extra"`
+	ContentHash string     `json:"-"`
+	PublishedAt time.Time  `json:"publishedAt"`
+	FirstSeenAt time.Time  `json:"firstSeenAt"`
+	LastSeenAt  time.Time  `json:"lastSeenAt"`
+	RemovedAt   *time.Time `json:"removedAt,omitempty"`
+}
+
+type NotificationSubscription struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"userId"`
+	SiteID    int64     `json:"siteId"`
+	SiteName  string    `json:"siteName,omitempty"`
+	Platform  string    `json:"platform"`
+	Target    string    `json:"target"`
+	Config    string    `json:"config"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type NotificationOutboxEntry struct {
+	ID             int64      `json:"id"`
+	SubscriptionID int64      `json:"subscriptionId"`
+	AnnouncementID int64      `json:"announcementId"`
+	SiteID         int64      `json:"siteId"`
+	Platform       string     `json:"platform"`
+	Target         string     `json:"target"`
+	Payload        string     `json:"payload"`
+	Status         string     `json:"status"`
+	RetryCount     int        `json:"retryCount"`
+	NextRetryAt    *time.Time `json:"nextRetryAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	SentAt         *time.Time `json:"sentAt,omitempty"`
+}
+
 type RunFilters struct {
 	Limit  int
 	SiteID int64

@@ -362,6 +362,79 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		base := strings.TrimSpace(options.PublicURL)
 		http.Redirect(writer, request, base+target, http.StatusFound)
 	})
+
+	// --- 通知订阅管理 ---
+
+	// GET /api/v1/me/notification-subscriptions —— 获取当前用户的通知订阅列表
+	mux.HandleFunc("GET /api/v1/me/notification-subscriptions", func(writer http.ResponseWriter, request *http.Request) {
+		user, ok := requireUser(options, writer, request)
+		if !ok {
+			return
+		}
+		subs, err := options.Store.ListUserSubscriptions(request.Context(), user.ID)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "读取订阅失败")
+			return
+		}
+		writeJSON(writer, map[string]any{"subscriptions": subs})
+	})
+
+	// POST /api/v1/me/notification-subscriptions —— 创建通知订阅
+	mux.HandleFunc("POST /api/v1/me/notification-subscriptions", func(writer http.ResponseWriter, request *http.Request) {
+		user, ok := requireUser(options, writer, request)
+		if !ok {
+			return
+		}
+		var payload struct {
+			SiteID   int64  `json:"siteId"`
+			Platform string `json:"platform"`
+			Target   string `json:"target"`
+			Config   string `json:"config"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8<<10)).Decode(&payload); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid payload")
+			return
+		}
+		if payload.SiteID <= 0 || strings.TrimSpace(payload.Platform) == "" || strings.TrimSpace(payload.Target) == "" {
+			writeError(writer, http.StatusBadRequest, "siteId, platform, and target are required")
+			return
+		}
+		platform := strings.TrimSpace(payload.Platform)
+		switch platform {
+		case "telegram", "feishu", "bark":
+		default:
+			writeError(writer, http.StatusBadRequest, "unsupported platform: "+platform)
+			return
+		}
+		config := strings.TrimSpace(payload.Config)
+		if config == "" {
+			config = "{}"
+		}
+		sub, err := options.Store.CreateSubscription(request.Context(), user.ID, payload.SiteID, platform, strings.TrimSpace(payload.Target), config)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, "创建订阅失败")
+			return
+		}
+		writeJSON(writer, map[string]any{"status": "ok", "subscription": sub})
+	})
+
+	// DELETE /api/v1/me/notification-subscriptions/{id} —— 删除通知订阅
+	mux.HandleFunc("DELETE /api/v1/me/notification-subscriptions/{id}", func(writer http.ResponseWriter, request *http.Request) {
+		user, ok := requireUser(options, writer, request)
+		if !ok {
+			return
+		}
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid subscription id")
+			return
+		}
+		if err := options.Store.DeleteSubscription(request.Context(), user.ID, id); err != nil {
+			writeError(writer, http.StatusBadRequest, "删除订阅失败")
+			return
+		}
+		writeJSON(writer, map[string]string{"status": "ok"})
+	})
 }
 
 // createChargeOrder 建单并创建支付；返回 orderNo 与 payUrl。

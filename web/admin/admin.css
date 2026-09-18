@@ -430,3 +430,19 @@ dialog.compact-dialog { width: min(520px, calc(100vw - 40px)); }
 }
 .stack-form textarea:focus-visible { outline: none; border-color: var(--accent); }
 .form-actions-inline { display: flex; gap: 10px; }
+
+/* 公告采集预览 */
+.announcements-preview { margin-top: 12px; padding: 12px; background: var(--panel-2); border-radius: 8px; }
+.announcements-preview h4 { margin: 0 0 8px; font-size: 13px; color: var(--fg-muted); }
+.ann-item { padding: 8px 0; border-bottom: 1px solid var(--panel-3); }
+.ann-item:last-child { border-bottom: none; }
+.ann-item .ann-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ann-item .ann-type { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.ann-item .ann-type-default { background: var(--panel-3); color: var(--fg-muted); }
+.ann-item .ann-type-success { background: #dcfce7; color: #166534; }
+.ann-item .ann-type-warning { background: #fef9c3; color: #854d0e; }
+.ann-item .ann-type-error { background: #fee2e2; color: #991b1b; }
+.ann-item .ann-type-ongoing { background: #dbeafe; color: #1e40af; }
+.ann-item .ann-time { font-size: 12px; color: var(--fg-faint); }
+.ann-item .ann-content { font-size: 13px; line-height: 1.5; color: var(--fg); }
+.ann-item .ann-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }

@@ -23,6 +23,7 @@ import (
 	"relayscope/internal/httpserver"
 	"relayscope/internal/linuxdo"
 	"relayscope/internal/logging"
+	"relayscope/internal/notifier"
 	"relayscope/internal/payment"
 	"relayscope/internal/payment/epay"
 	"relayscope/internal/scheduler"
@@ -107,8 +108,32 @@ func run() error {
 		sessionVault = vault
 		siteFetcher = session.Provider{Store: dbStore, Vault: vault, Base: baseFetcher}
 	}
+	// Build notification dispatcher (optional — only active if at least one platform is configured)
+	notifDispatcher := notifier.NewDispatcher(notifier.Config{
+		Store:  dbStore,
+		Logger: logger,
+		Telegram: func() *notifier.TelegramConfig {
+			if cfg.TelegramToken != "" {
+				return &notifier.TelegramConfig{Token: cfg.TelegramToken}
+			}
+			return nil
+		}(),
+		Feishu: func() *notifier.FeishuConfig {
+			if cfg.FeishuWebhook != "" {
+				return &notifier.FeishuConfig{WebhookURL: cfg.FeishuWebhook, Secret: cfg.FeishuSecret}
+			}
+			return nil
+		}(),
+		Bark: func() *notifier.BarkConfig {
+			if cfg.BarkKey != "" {
+				return &notifier.BarkConfig{Key: cfg.BarkKey, BaseURL: cfg.BarkBaseURL}
+			}
+			return nil
+		}(),
+	})
+
 	siteCollector, err := collector.New(collector.Options{
-		Store: dbStore, Registry: registry, Fetcher: siteFetcher, Logger: logger, MaxHTTPConcurrency: cfg.HTTPConcurrency,
+		Store: dbStore, Registry: registry, Fetcher: siteFetcher, Logger: logger, MaxHTTPConcurrency: cfg.HTTPConcurrency, Notifier: notifDispatcher,
 	})
 	if err != nil {
 		return fmt.Errorf("build collector: %w", err)
@@ -158,6 +183,8 @@ func run() error {
 	defer stop()
 	go runMaintenance(stopContext, dbStore, logger, cfg.MaintenanceInterval)
 	siteScheduler.Start(stopContext)
+	notifDispatcher.Start(stopContext)
+	logger.Info("notification dispatcher started", "senders", notifDispatcher.SenderCount())
 
 	select {
 	case err := <-serverErrors:
@@ -174,6 +201,7 @@ func run() error {
 	if err := server.Shutdown(shutdownContext); err != nil {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
+	notifDispatcher.Stop()
 	siteScheduler.Stop()
 	logger.Info("server stopped")
 	return nil

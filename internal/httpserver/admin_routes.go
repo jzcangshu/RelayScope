@@ -396,6 +396,25 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			}
 			writeJSON(writer, map[string]string{"status": "ok"})
 		}))))
+		mux.Handle("GET /api/v1/admin/sites/{id}/announcements", options.Auth.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, "invalid site id")
+				return
+			}
+			limit := 50
+			if l := request.URL.Query().Get("limit"); l != "" {
+				if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 200 {
+					limit = parsed
+				}
+			}
+			items, err := options.Store.ListSiteAnnouncements(request.Context(), id, limit)
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "query site announcements")
+				return
+			}
+			writeJSON(writer, map[string]any{"announcements": items})
+		})))
 	}
 }
 

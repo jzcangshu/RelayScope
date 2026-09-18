@@ -350,7 +350,39 @@ func NewHandler(options Options) (http.Handler, error) {
 				updatedAt, _ := options.Store.GetSetting(request.Context(), settingSiteNoticeUpdatedAt, "")
 				response["notice"] = map[string]any{"markdown": markdown, "updatedAt": updatedAt}
 			}
+			// 站点公告 ID 列表（用于前端显示铃铛图标）
+			if siteAnnIDs, err := options.Store.SiteIDsWithAnnouncements(request.Context()); err == nil && len(siteAnnIDs) > 0 {
+				response["siteAnnouncementSiteIds"] = siteAnnIDs
+			}
 			writeJSON(writer, response)
+		})
+		mux.HandleFunc("GET /api/v1/public/site-announcements", func(writer http.ResponseWriter, request *http.Request) {
+			if options.Store == nil {
+				writeJSON(writer, map[string]any{"announcements": []store.SiteAnnouncement{}})
+				return
+			}
+			siteIDStr := request.URL.Query().Get("site_id")
+			if siteIDStr == "" {
+				writeError(writer, http.StatusBadRequest, "site_id is required")
+				return
+			}
+			siteID, err := strconv.ParseInt(siteIDStr, 10, 64)
+			if err != nil || siteID <= 0 {
+				writeError(writer, http.StatusBadRequest, "invalid site_id")
+				return
+			}
+			limit := 20
+			if l := request.URL.Query().Get("limit"); l != "" {
+				if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
+					limit = parsed
+				}
+			}
+			items, err := options.Store.ListSiteAnnouncements(request.Context(), siteID, limit)
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "query site announcements")
+				return
+			}
+			writeJSON(writer, map[string]any{"announcements": items})
 		})
 		mux.HandleFunc("GET /api/v1/public/rows", func(writer http.ResponseWriter, request *http.Request) {
 			rows, err := options.Store.QueryPublicRows(request.Context(), request.URL.Query().Get("model"), request.URL.Query().Get("site"))

@@ -118,6 +118,22 @@ type DetailCollector interface {
 	CollectDetails(ctx context.Context, site Site, fetcher Fetcher, collection *domain.Collection, modelNames []string, now time.Time) error
 }
 
+// Announcement is a single announcement scraped from a site.
+type Announcement struct {
+	ExternalID  string
+	Title       string
+	Content     string
+	Type        string
+	Extra       string
+	PublishedAt time.Time
+}
+
+// AnnouncementProvider is an optional interface that adapters can implement
+// to scrape site announcements/notices during collection.
+type AnnouncementProvider interface {
+	CollectAnnouncements(ctx context.Context, site Site, fetcher Fetcher) ([]Announcement, error)
+}
+
 type Registry struct {
 	mu       sync.RWMutex
 	adapters map[string]Adapter

@@ -40,6 +40,12 @@ type Config struct {
 	PayGateway           string
 	PayPID               string
 	PayKey               string
+	// Notification push
+	TelegramToken   string
+	FeishuWebhook   string
+	FeishuSecret    string
+	BarkKey         string
+	BarkBaseURL     string
 }
 
 func Load() (Config, error) {
@@ -63,6 +69,12 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		PayGateway:           strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_PAY_GATEWAY", "")),
 		PayPID:               strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_PAY_PID", "")),
 		PayKey:               valueOrDefault(lookup, "RELAYSCOPE_PAY_KEY", ""),
+		// Notification push
+		TelegramToken: strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_TELEGRAM_TOKEN", "")),
+		FeishuWebhook: strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_FEISHU_WEBHOOK", "")),
+		FeishuSecret:  strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_FEISHU_SECRET", "")),
+		BarkKey:       strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_BARK_KEY", "")),
+		BarkBaseURL:   strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_BARK_BASE_URL", "")),
 	}
 
 	if err := validateListenAddr(cfg.ListenAddr); err != nil {
