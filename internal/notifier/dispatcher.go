@@ -111,6 +111,10 @@ func (d *Dispatcher) Stop() {
 // SenderCount returns the number of registered senders (for diagnostics).
 func (d *Dispatcher) SenderCount() int { return len(d.senders) }
 
+// Senders exposes the configured platform senders so the HTTP layer can
+// reuse them for user-initiated test pushes.
+func (d *Dispatcher) Senders() map[string]Sender { return d.senders }
+
 func (d *Dispatcher) dispatch(ctx context.Context) {
 	entries, err := d.store.ListPendingNotifications(ctx, 50)
 	if err != nil {

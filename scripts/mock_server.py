@@ -199,6 +199,10 @@ class Handler(BaseHTTPRequestHandler):
             NEXT_SUB_ID += 1
             SUBSCRIPTIONS.append(sub)
             return self._json({"status": "ok", "subscription": sub})
+        if path == "/api/v1/me/notification-test":
+            if not LOGGED_IN:
+                return self._json({"error": "请先登录"}, status=401)
+            return self._json({"status": "ok"})
         if path == "/api/v1/feedback":
             return self._json({"status": "ok"})
         if path.startswith("/api/v1/admin/"):

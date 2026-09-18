@@ -3396,6 +3396,15 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
   background: color-mix(in srgb, var(--surface-subtle) 50%, transparent);
 }
 .notify-platform-row { display: flex; gap: 10px; align-items: flex-end; }
+.notify-test-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.notify-test-hint { font-size: 12px; color: var(--faint); }
+.notify-test-row .btn-sm { height: auto; padding: 4px 12px; font-size: 12px; }
 .notify-field { display: flex; flex-direction: column; gap: 4px; }
 .notify-field--flex { flex: 1; }
 .notify-field-label { font-size: 11px; font-weight: 650; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }

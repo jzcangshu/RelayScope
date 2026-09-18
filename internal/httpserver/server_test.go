@@ -19,6 +19,7 @@ import (
 	"relayscope/internal/collector"
 	"relayscope/internal/domain"
 	"relayscope/internal/linuxdo"
+	"relayscope/internal/notifier"
 	"relayscope/internal/session"
 	"relayscope/internal/store"
 )
@@ -250,6 +251,93 @@ func TestPublicSiteAnnouncementsEndpointReturnsStoredRows(t *testing.T) {
 	if !strings.Contains(index.Body.String(), `"siteAnnouncementSiteIds":[`+strconv.FormatInt(site.ID, 10)+`]`) {
 		t.Fatalf("announcement index did not report the site: %s", index.Body.String())
 	}
+}
+
+func TestNotificationTestEndpointUsesConfiguredSender(t *testing.T) {
+	t.Parallel()
+	db, err := store.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service := linuxdo.New(linuxdo.Config{}, db)
+	// 记录测试推送的调用，模拟一个已配置的 telegram sender。
+	sent := make(chan notifier.Message, 1)
+	fake := &fakeNotifierSender{platform: "telegram", onSend: func(msg notifier.Message) { sent <- msg }}
+	handler, err := NewHandler(Options{
+		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Store:     db,
+		LinuxDO:   service,
+		Notifiers: map[string]notifier.Sender{"telegram": fake},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := db.UpsertUser(context.Background(), "linuxdo", "42", "tester", "Tester", "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := service.StartSession(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := func() *http.Cookie { return &http.Cookie{Name: "relayscope_user", Value: token} }
+
+	// 未配置渠道 → 501（用独立的 handler，不带 Notifiers）
+	bare, err := NewHandler(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: db, LinuxDO: service})
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := httptest.NewRecorder()
+	missingReq := httptest.NewRequest(http.MethodPost, "/api/v1/me/notification-test?platform=bark", strings.NewReader(`{"target":"key"}`))
+	missingReq.AddCookie(auth())
+	bare.ServeHTTP(missing, missingReq)
+	if missing.Code != http.StatusNotImplemented {
+		t.Fatalf("unconfigured platform status = %d", missing.Code)
+	}
+
+	// 已配置渠道 → 同步调用 sender
+	ok := httptest.NewRecorder()
+	okReq := httptest.NewRequest(http.MethodPost, "/api/v1/me/notification-test?platform=telegram", strings.NewReader(`{"target":"123456"}`))
+	okReq.Header.Set("Content-Type", "application/json")
+	okReq.AddCookie(auth())
+	handler.ServeHTTP(ok, okReq)
+	if ok.Code != http.StatusOK {
+		t.Fatalf("test push status = %d, body = %s", ok.Code, ok.Body.String())
+	}
+	select {
+	case msg := <-sent:
+		if msg.Title == "" {
+			t.Fatal("test push message has no title")
+		}
+	default:
+		t.Fatal("sender was not invoked for the test push")
+	}
+
+	// 缺 target → 400
+	bad := httptest.NewRecorder()
+	badReq := httptest.NewRequest(http.MethodPost, "/api/v1/me/notification-test?platform=telegram", strings.NewReader(`{}`))
+	badReq.Header.Set("Content-Type", "application/json")
+	badReq.AddCookie(auth())
+	handler.ServeHTTP(bad, badReq)
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("missing target status = %d", bad.Code)
+	}
+}
+
+// fakeNotifierSender records messages without touching the network.
+type fakeNotifierSender struct {
+	platform string
+	onSend   func(notifier.Message)
+}
+
+func (f *fakeNotifierSender) Platform() string { return f.platform }
+
+func (f *fakeNotifierSender) Send(ctx context.Context, target string, msg notifier.Message) error {
+	if f.onSend != nil {
+		f.onSend(msg)
+	}
+	return nil
 }
 
 func TestAdminAssetsDisableCaching(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"relayscope/internal/admin"
 	"relayscope/internal/collector"
 	"relayscope/internal/linuxdo"
+	"relayscope/internal/notifier"
 	"relayscope/internal/payment"
 	"relayscope/internal/session"
 	"relayscope/internal/store"
@@ -31,6 +32,9 @@ type Options struct {
 	SessionSync  *session.SyncManager
 	LinuxDO      *linuxdo.Service
 	Payment      payment.Provider
+	// Notifiers holds the platform senders (keyed by platform) shared with the
+	// notification dispatcher; used by the user-facing test-push endpoint.
+	Notifiers map[string]notifier.Sender
 }
 
 type sessionSyncSite struct {

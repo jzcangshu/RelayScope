@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"relayscope/internal/notifier"
 	"relayscope/internal/payment"
 	"relayscope/internal/store"
 )
@@ -431,6 +432,41 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		}
 		if err := options.Store.DeleteSubscription(request.Context(), user.ID, id); err != nil {
 			writeError(writer, http.StatusBadRequest, "删除订阅失败")
+			return
+		}
+		writeJSON(writer, map[string]string{"status": "ok"})
+	})
+
+	// POST /api/v1/me/notification-test —— 向指定渠道同步发送一条测试推送，
+	// 让用户在订阅前验证平台/目标配置是否可用。
+	mux.HandleFunc("POST /api/v1/me/notification-test", func(writer http.ResponseWriter, request *http.Request) {
+		if _, ok := requireUser(options, writer, request); !ok {
+			return
+		}
+		sender, ok := options.Notifiers[request.URL.Query().Get("platform")]
+		if !ok {
+			writeError(writer, http.StatusNotImplemented, "该推送渠道未在服务端配置")
+			return
+		}
+		var payload struct {
+			Target string `json:"target"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 2<<10)).Decode(&payload); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid payload")
+			return
+		}
+		target := strings.TrimSpace(payload.Target)
+		if target == "" {
+			writeError(writer, http.StatusBadRequest, "target is required")
+			return
+		}
+		ctx, cancel := context.WithTimeout(request.Context(), 15*time.Second)
+		defer cancel()
+		if err := sender.Send(ctx, target, notifier.Message{
+			Title: "RelayScope 测试推送",
+			Body:  "配置有效，站点公告更新时将推送到此渠道。",
+		}); err != nil {
+			writeError(writer, http.StatusBadGateway, "发送失败："+err.Error())
 			return
 		}
 		writeJSON(writer, map[string]string{"status": "ok"})

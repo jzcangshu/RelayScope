@@ -2313,12 +2313,15 @@ function renderCustomizeNotify() {
   }
   html += '</div></div></div>';
   html += '<label class="notify-field notify-field--flex"><span class="notify-field-label">推送目标</span><input id="notify-target" class="notify-input" type="text" placeholder="' + plat.placeholder + '"></label>';
-  html += '</div></div>';
+  html += '</div>';
+  html += '<div class="notify-test-row"><span class="notify-test-hint">订阅前先验证渠道是否可达</span><button type="button" class="btn btn-primary btn-sm" data-notify-test>测试推送</button></div>';
+  html += '</div>';
   html += '</section>';
 
   // Site list
   html += '<section class="pref-section">';
-  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点</span></div>`;
+  const allSelected = uniqueSites.length > 0 && uniqueSites.every(([siteId]) => subscribedSiteIds.has(siteId));
+  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点</span><button type="button" class="pref-reset" data-notify-select-all>${allSelected ? '全不选' : '全选'}</button></div>`;
   for (const [siteId, siteName] of uniqueSites) {
     const isSubscribed = subscribedSiteIds.has(siteId);
     const sub = notifySubscriptions.find(s => s.siteId === siteId);
@@ -2347,6 +2350,89 @@ function renderCustomizeNotify() {
   customizeNotifyPanel.querySelectorAll('.notify-site-check').forEach(cb => {
     cb.addEventListener('change', () => handleSiteToggle(cb.dataset.siteId, cb.checked));
   });
+  customizeNotifyPanel.querySelector('[data-notify-test]')?.addEventListener('click', handleNotifyTest);
+  customizeNotifyPanel.querySelector('[data-notify-select-all]')?.addEventListener('click', handleNotifySelectAll);
+}
+
+// 测试推送：向当前填写的渠道目标同步发送一条验证消息
+async function handleNotifyTest(event) {
+  const button = event.currentTarget;
+  const target = document.querySelector('#notify-target')?.value?.trim();
+  if (!target) {
+    showToast('请先填写推送目标', 'error');
+    return;
+  }
+  button.disabled = true;
+  try {
+    const resp = await fetch(`/api/v1/me/notification-test?platform=${encodeURIComponent(notifyPlatform || 'telegram')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.message || '测试推送失败', 'error');
+      return;
+    }
+    showToast('测试消息已发送，请查收', 'success');
+  } catch {
+    showToast('测试推送失败', 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// 全选/全不选：逐个调用订阅接口，免费额度门禁照常生效
+async function handleNotifySelectAll() {
+  const isMember = membershipIs() === 'active';
+  const uniqueSites = [...new Map(rows.map(r => [r.siteId, r.siteName])).keys()];
+  const subscribed = new Set(notifySubscriptions.map(s => s.siteId));
+  const allSelected = uniqueSites.length > 0 && uniqueSites.every(id => subscribed.has(id));
+  const target = document.querySelector('#notify-target')?.value?.trim();
+  const platform = notifyPlatform || 'telegram';
+
+  if (allSelected) {
+    let removed = 0;
+    for (const sub of [...notifySubscriptions]) {
+      try {
+        const resp = await fetch(`/api/v1/me/notification-subscriptions/${sub.id}`, { method: 'DELETE' });
+        if (!resp.ok) break;
+        removed += 1;
+      } catch { break; }
+    }
+    await loadNotifySubscriptions();
+    renderCustomizeNotify();
+    if (removed) showToast(`已取消 ${removed} 个订阅`);
+    return;
+  }
+
+  if (!target) {
+    showToast('请先填写推送目标', 'error');
+    return;
+  }
+  let added = 0;
+  let failed = false;
+  for (const siteId of uniqueSites) {
+    if (subscribed.has(siteId)) continue;
+    if (!isMember && subscribed.size >= NOTIFY_FREE_LIMIT) {
+      showNotifyLimitGate();
+      break;
+    }
+    try {
+      const resp = await fetch('/api/v1/me/notification-subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteId, platform, target })
+      });
+      if (!resp.ok) { failed = true; break; }
+      subscribed.add(siteId);
+      added += 1;
+    } catch { failed = true; break; }
+  }
+  await loadNotifySubscriptions();
+  renderCustomizeNotify();
+  if (added && !failed) showToast(`已订阅 ${added} 个站点`, 'success');
+  else if (added && failed) showToast(`已订阅 ${added} 个站点，其余失败，请重试`, 'error');
 }
 
 async function handleSiteToggle(siteId, checked) {
