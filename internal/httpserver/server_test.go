@@ -195,6 +195,63 @@ func TestPublicAnnouncementsEndpointListsOnlyActiveFailures(t *testing.T) {
 	}
 }
 
+func TestPublicSiteAnnouncementsEndpointReturnsStoredRows(t *testing.T) {
+	t.Parallel()
+	db, err := store.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	site, err := db.CreateSite(ctx, store.Site{Name: "公告站点", BaseURL: "https://announce.example", SourceURL: "https://announce.example/status", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, time.September, 13, 1, 37, 2, 0, time.UTC)
+	if _, err := db.ApplyAnnouncements(ctx, site.ID, []store.AnnouncementInput{{
+		ExternalID: "2026-09-13T01:37:02.720Z", Content: "站点维护完毕", AnnType: "success", PublishedAt: now,
+	}}, now); err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: db})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/site-announcements?site_id="+strconv.FormatInt(site.ID, 10), nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("site announcements status = %d %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Announcements []store.SiteAnnouncement `json:"announcements"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode site announcements: %v", err)
+	}
+	if len(payload.Announcements) != 1 {
+		t.Fatalf("announcements = %d, want 1", len(payload.Announcements))
+	}
+	item := payload.Announcements[0]
+	if item.Content != "站点维护完毕" || item.AnnType != "success" {
+		t.Fatalf("announcement = %+v, want 站点维护完毕/success", item)
+	}
+	if !item.PublishedAt.UTC().Equal(now) {
+		t.Fatalf("publishedAt = %s, want %s", item.PublishedAt, now)
+	}
+
+	// The dashboard polls this endpoint on every refresh, so the announcement
+	// list must also advertise the site as having announcements.
+	index := httptest.NewRecorder()
+	handler.ServeHTTP(index, httptest.NewRequest(http.MethodGet, "/api/v1/public/announcements", nil))
+	if index.Code != http.StatusOK {
+		t.Fatalf("announcement index status = %d %s", index.Code, index.Body.String())
+	}
+	if !strings.Contains(index.Body.String(), `"siteAnnouncementSiteIds":[`+strconv.FormatInt(site.ID, 10)+`]`) {
+		t.Fatalf("announcement index did not report the site: %s", index.Body.String())
+	}
+}
+
 func TestAdminAssetsDisableCaching(t *testing.T) {
 	t.Parallel()
 	handler, err := NewHandler(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})

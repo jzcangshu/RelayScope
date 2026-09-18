@@ -944,9 +944,29 @@ async function loadRows() {
 
 /* ---------- 通知中心渲染 ---------- */
 
-let ncRange = '24h';
+const NC_RANGES = [
+  { key: '24h', ms: 86400000 },
+  { key: '7d', ms: 604800000 },
+  { key: '30d', ms: 2592000000 },
+];
+// 'auto' 表示跟随数据：取能装下最新公告的最窄范围。站点公告本身很稀疏（有的站
+// 一个月才发一条），固定 24h 默认会让"站点公告"长期显示为空。
+let ncRange = 'auto';
 let ncSiteAnnouncements = []; // site announcements from API
 let ncAllItems = []; // merged + sorted items
+
+function ncRangeMs(key) {
+  const range = NC_RANGES.find(item => item.key === key);
+  return range ? range.ms : NC_RANGES[0].ms;
+}
+
+function resolveNcRange(items, now) {
+  if (ncRange !== 'auto') return ncRange; // 用户手动选过就听用户的
+  for (const range of NC_RANGES) {
+    if (items.some(item => item.time && now - item.time.getTime() <= range.ms)) return range.key;
+  }
+  return NC_RANGES[NC_RANGES.length - 1].key;
+}
 
 function renderAnnouncements() {
   ncSiteAnnouncements = ncSiteAnnouncements.map(item => ({
@@ -970,16 +990,19 @@ function renderAnnouncements() {
 function renderNotificationCenter() {
   const container = announcementContent;
   const now = Date.now();
-  const rangeMs = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 }[ncRange] || 86400000;
-  const cutoff = now - rangeMs;
   // Filter out hidden sites
   const filtered = ncAllItems.filter(item => !(hidden.sites && hidden.sites.has(item.siteName)));
+  const visibleFailures = announcements.filter(item => !(hidden.sites && hidden.sites.has(item.siteName)));
+  const rangeKey = resolveNcRange(filtered, now);
+  const cutoff = now - ncRangeMs(rangeKey);
   const siteItems = filtered.filter(item => !item.time || item.time.getTime() >= cutoff);
-  const hasFailures = announcements.length > 0;
-  const hasSiteItems = siteItems.length > 0;
+  const hasFailures = visibleFailures.length > 0;
+  // 有公告数据就要渲染分节（含时间范围切换），即使当前范围里一条都没有 ——
+  // 否则分节连同胶囊一起消失，用户没有任何入口把范围放大。
+  const hasSiteFeed = filtered.length > 0;
 
-  if (!hasFailures && !hasSiteItems) {
-    container.innerHTML = `<div class="nc-empty"><div class="nc-empty-icon">🔔</div><p class="nc-empty-title">暂无通知</p><p class="nc-empty-desc">该时间范围内没有通知，试试扩大范围。</p></div>`;
+  if (!hasFailures && !hasSiteFeed) {
+    container.innerHTML = `<div class="nc-empty"><div class="nc-empty-icon">🔔</div><p class="nc-empty-title">暂无通知</p><p class="nc-empty-desc">站点公告和采集异常都会出现在这里。</p></div>`;
     return;
   }
 
@@ -987,9 +1010,8 @@ function renderNotificationCenter() {
 
   // Section 1: 采集异常
   if (hasFailures) {
-    html += `<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot nc-section-dot--alert"></span><span class="nc-section-title">采集异常</span><span class="nc-section-count">${announcements.length}</span></div>`;
-    for (const item of announcements) {
-      if (hidden.sites && hidden.sites.has(item.siteName)) continue;
+    html += `<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot nc-section-dot--alert"></span><span class="nc-section-title">采集异常</span><span class="nc-section-count">${visibleFailures.length}</span></div>`;
+    for (const item of visibleFailures) {
       const initial = (item.siteName || '?')[0];
       html += `<div class="nc-item nc-item--failure"><div class="nc-avatar">${escapeHTML(initial)}</div><div class="nc-content"><div class="nc-meta"><span class="nc-site-name">${escapeHTML(item.siteName)}</span><span class="nc-badge nc-badge-error">${escapeHTML(item.failureCode)}</span></div><div class="nc-text">${escapeHTML(item.reason || '当前采集暂时失败，恢复成功后会自动撤下。')}</div></div></div>`;
     }
@@ -997,14 +1019,18 @@ function renderNotificationCenter() {
   }
 
   // Section 2: 站点公告时间线 (with inline range pills)
-  if (hasSiteItems) {
+  if (hasSiteFeed) {
     const groups = new Map();
     for (const item of siteItems) {
       const dateKey = item.time ? formatDateKey(item.time) : '其他';
       if (!groups.has(dateKey)) groups.set(dateKey, []);
       groups.get(dateKey).push(item);
     }
-    html += `<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot"></span><span class="nc-section-title">站点公告</span><span class="nc-section-count">${siteItems.length}</span><div class="nc-range-group" id="nc-range-group"><button class="nc-range-btn${ncRange==='24h'?' active':''}" data-range="24h">24h</button><button class="nc-range-btn${ncRange==='7d'?' active':''}" data-range="7d">7d</button><button class="nc-range-btn${ncRange==='30d'?' active':''}" data-range="30d">30d</button></div></div>`;
+    const pills = NC_RANGES.map(range => `<button class="nc-range-btn${rangeKey === range.key ? ' active' : ''}" data-range="${range.key}">${range.key}</button>`).join('');
+    html += `<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot"></span><span class="nc-section-title">站点公告</span><span class="nc-section-count">${siteItems.length}</span><div class="nc-range-group" id="nc-range-group">${pills}</div></div>`;
+    if (!siteItems.length) {
+      html += `<p class="nc-range-empty">该时间范围内没有公告，换一个范围看看。</p>`;
+    }
     for (const [dateKey, groupItems] of groups) {
       html += `<div class="nc-date-group"><div class="nc-date-label">${escapeHTML(dateKey)}</div>`;
       for (const item of groupItems) {
@@ -1019,8 +1045,8 @@ function renderNotificationCenter() {
   // Re-bind range buttons
   container.querySelector('#nc-range-group')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.nc-range-btn');
-    if (!btn) return;
-    ncRange = btn.dataset.range || '24h';
+    if (!btn || !btn.dataset.range) return;
+    ncRange = btn.dataset.range;
     renderNotificationCenter();
   });
 }
@@ -1153,6 +1179,7 @@ function toggleNCSidebar(show) {
   const next = show !== undefined ? show : !isOpen;
   boardShell.classList.toggle('nc-open', next);
   if (ncPanel) ncPanel.inert = !next; // 收起时 0 宽面板不应进入 Tab 顺序
+  announcementAction?.setAttribute('aria-expanded', next ? 'true' : 'false');
   try { localStorage.setItem('relayscope-nc-open', next ? '1' : '0'); } catch {}
 }
 announcementAction?.addEventListener('click', () => toggleNCSidebar());
@@ -1171,8 +1198,7 @@ if (ncSubscribeBtn) {
 // Restore sidebar state
 let ncRestoreOpen = true;
 try { ncRestoreOpen = localStorage.getItem('relayscope-nc-open') !== '0'; } catch {}
-if (ncRestoreOpen) boardShell?.classList.add('nc-open');
-else if (ncPanel) ncPanel.inert = true;
+toggleNCSidebar(ncRestoreOpen);
 
 async function openDetails(rawModel, siteName) {
   detailTitle.textContent = rawModel;
@@ -1515,7 +1541,7 @@ function renderChipGrid(definition, panel) {
       return `<button type="button" class="hide-chip${visible ? '' : ' hidden'}" data-pref-toggle data-pref-key="${key}" data-pref-value="${escapeHTML(item.value)}" aria-pressed="${visible ? 'true' : 'false'}" title="${escapeHTML(item.value)}（${item.count} 个模型入口）"><span class="hide-chip-name">${escapeHTML(item.value)}</span><span class="hide-chip-count">${item.count}</span></button>`;
     }).join('');
   const hiddenCount = hidden[key].size;
-  panel.innerHTML = `<section class="pref-section chip-grid-section"><div class="chip-grid-head"><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${key}" value="${escapeHTML(customizeSearches[key])}" placeholder="筛选${definition.title}"></label>${hiddenCount ? `<button type="button" class="pref-reset" data-pref-reset="${key}">全部显示</button>` : ''}</div><div class="chip-grid" data-pref-list="${key}">${chips || '<p class="pref-empty">没有匹配的条目</p>'}</div><p class="muted chip-grid-hint">点击胶囊切换显示；已隐藏的会变暗并带删除线。</p></section>`;
+  panel.innerHTML = `<section class="pref-section chip-grid-section"><div class="pref-head"><h3>屏蔽${definition.title}</h3><span class="pref-note">点击胶囊切换显示；已隐藏的会变暗并带删除线</span></div><div class="chip-grid-head"><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${key}" value="${escapeHTML(customizeSearches[key])}" placeholder="筛选${definition.title}"></label>${hiddenCount ? `<button type="button" class="pref-reset" data-pref-reset="${key}">全部显示</button>` : ''}</div><div class="chip-grid" data-pref-list="${key}">${chips || '<p class="pref-empty">没有匹配的条目</p>'}</div></section>`;
 }
 
 function siteTagCount(site) {
@@ -2262,12 +2288,13 @@ function renderCustomizeNotify() {
 
   let html = '<div class="notify-panel">';
 
-  // Header with limit indicator
-  html += '<div class="notify-header">';
-  html += '<div><h3 class="notify-title">通知订阅</h3>';
-  html += `<p class="notify-desc">订阅站点公告更新，第一时间收到推送通知。</p></div>`;
+  // Header with limit indicator — 与其它定制页面板同款 pref-head 标题行
+  html += '<section class="pref-section">';
+  html += '<div class="pref-head">';
+  html += '<h3>通知订阅</h3>';
   html += `<div class="notify-limit ${!isMember && subCount >= NOTIFY_FREE_LIMIT ? 'notify-limit--warn' : ''}"><span class="notify-limit-count">${limitText}</span>${!isMember ? '<span class="notify-limit-label">免费额度</span>' : ''}</div>`;
   html += '</div>';
+  html += '<p class="pref-desc">订阅站点公告更新，第一时间收到推送通知。</p>';
 
   // Platform config
   html += '<div class="notify-platform-section">';
@@ -2287,10 +2314,11 @@ function renderCustomizeNotify() {
   html += '</div></div></div>';
   html += '<label class="notify-field notify-field--flex"><span class="notify-field-label">推送目标</span><input id="notify-target" class="notify-input" type="text" placeholder="' + plat.placeholder + '"></label>';
   html += '</div></div>';
+  html += '</section>';
 
   // Site list
-  html += '<div class="notify-site-list">';
-  html += '<div class="notify-site-list-head"><span class="notify-site-list-title">选择站点</span></div>';
+  html += '<section class="pref-section">';
+  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点</span></div>`;
   for (const [siteId, siteName] of uniqueSites) {
     const isSubscribed = subscribedSiteIds.has(siteId);
     const sub = notifySubscriptions.find(s => s.siteId === siteId);
@@ -2305,6 +2333,7 @@ function renderCustomizeNotify() {
     html += '</label>';
   }
   html += '</div>';
+  html += '</section>';
 
   // Upgrade CTA for non-members at limit
   if (!isMember && subCount >= NOTIFY_FREE_LIMIT) {

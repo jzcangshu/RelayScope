@@ -14,21 +14,27 @@ function loadPriceHelpers() {
 
 const { lowestPrice } = loadPriceHelpers();
 
-test('public dashboard uses a compact bell control and single announcement title', () => {
+test('public dashboard uses a bell control that toggles the notification sidebar', () => {
   const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
   const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
   assert.match(html, /id="announcement-action" class="theme-toggle announcement-action"/);
-  assert.match(html, /站点公告/);
-  assert.doesNotMatch(html, /service-status|announcement-count|运行公告|运行状态通知/);
+  assert.match(html, /id="nc-sidebar"/);
+  assert.match(html, /id="announcement-content"/);
   assert.match(html, /id="notice-content"/);
-  assert.equal((html.match(/class="icon-button"/g) || []).length, 7);
-  assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 7);
-  assert.match(css, /detail-head\.announcement-head h2/);
-  assert.match(css, /font-size: 23px/);
-  assert.match(css, /color: var\(--accent\)/);
-  assert.match(css, /data-theme="dark"[^\n]+color: var\(--accent\)/);
+  // The bell drives the sidebar, not a dialog, so it must not advertise a
+  // popup it cannot open.
+  assert.match(html, /aria-controls="nc-sidebar"/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.doesNotMatch(html, /announcement-dialog|aria-haspopup="dialog"/);
+  assert.doesNotMatch(html, /service-status|announcement-count|运行公告|运行状态通知/);
+  assert.equal((html.match(/class="icon-button"/g) || []).length, 6);
+  assert.equal((html.match(/class="icon-button"[^>]*>[\s\S]*?<svg/g) || []).length, 6);
+  assert.match(css, /\.nc-sidebar-title \{ margin: 0; font-size: 17px/);
+  assert.match(css, /\.nc-range-btn\.active \{ background: var\(--surface\); color: var\(--accent\)/);
   assert.match(css, /\.icon-button[\s\S]*?width: 34px[\s\S]*?height: 34px/);
   assert.match(css, /\.icon-button svg[\s\S]*?width: 19px[\s\S]*?height: 19px/);
+  assert.match(source, /announcementAction\?\.setAttribute\('aria-expanded'/);
 });
 
 test('dashboard script binds the public login control', () => {
@@ -48,11 +54,67 @@ test('public theme initialization is CSP-compatible', () => {
 test('dashboard script renders and polls failure announcements', () => {
   const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
   assert.match(source, /\/api\/v1\/public\/announcements/);
-  assert.match(source, /announcementDialog\.showModal\(\)/);
+  assert.match(source, /toggleNCSidebar\(/);
   assert.match(source, /failureCode/);
   assert.match(source, /setInterval\(loadRows, 60000\)/);
   assert.doesNotMatch(source, /数据未变化/);
   assert.doesNotMatch(source, /announcementCount/);
+});
+
+function loadNcRangeHelpers() {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const start = source.indexOf('const NC_RANGES = [');
+  const end = source.indexOf('function renderAnnouncements()');
+  assert.notEqual(start, -1, 'NC_RANGES is missing');
+  assert.notEqual(end, -1, 'renderAnnouncements marker is missing');
+  const body = source.slice(start, end);
+  return Function(`${body}\nreturn { NC_RANGES, ncRangeMs, resolveNcRange, setRange: (value) => { ncRange = value; } };`)();
+}
+
+const ncRangeHelpers = loadNcRangeHelpers();
+const HOUR_MS = 3600000;
+const DAY_MS = 86400000;
+const postedAgo = (ms, now) => ({ time: new Date(now - ms) });
+
+test('announcement range auto-fits the narrowest window holding the newest post', () => {
+  const now = Date.now();
+  ncRangeHelpers.setRange('auto');
+  assert.equal(ncRangeHelpers.resolveNcRange([postedAgo(2 * HOUR_MS, now)], now), '24h');
+  assert.equal(ncRangeHelpers.resolveNcRange([postedAgo(3 * DAY_MS, now)], now), '7d');
+  assert.equal(ncRangeHelpers.resolveNcRange([postedAgo(10 * DAY_MS, now)], now), '30d');
+  // 站点公告经常比 30 天还旧：回落到最宽范围，而不是把「站点公告」整节藏掉
+  assert.equal(ncRangeHelpers.resolveNcRange([postedAgo(90 * DAY_MS, now)], now), '30d');
+});
+
+test('announcement range keeps an explicit user choice over auto-fit', () => {
+  const now = Date.now();
+  const items = [postedAgo(10 * DAY_MS, now)];
+  ncRangeHelpers.setRange('24h');
+  assert.equal(ncRangeHelpers.resolveNcRange(items, now), '24h');
+  ncRangeHelpers.setRange('auto');
+  assert.equal(ncRangeHelpers.resolveNcRange(items, now), '30d');
+});
+
+test('announcement range ignores undated entries when auto-fitting', () => {
+  const now = Date.now();
+  ncRangeHelpers.setRange('auto');
+  assert.equal(ncRangeHelpers.resolveNcRange([], now), '30d');
+  assert.equal(ncRangeHelpers.resolveNcRange([{ time: null }], now), '30d');
+});
+
+test('announcement range falls back to 24h for unknown keys', () => {
+  assert.equal(ncRangeHelpers.ncRangeMs('24h'), DAY_MS);
+  assert.equal(ncRangeHelpers.ncRangeMs('nonsense'), DAY_MS);
+});
+
+test('notification center keeps the range switcher when the range holds nothing', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  // 分节的存在性取决于"有没有公告数据"，不是"当前范围内有没有"——否则胶囊会被一起藏掉
+  assert.match(source, /const hasSiteFeed = filtered\.length > 0;/);
+  assert.match(source, /if \(hasSiteFeed\) \{/);
+  assert.match(source, /nc-range-empty/);
+  assert.match(css, /\.nc-range-empty \{/);
 });
 
 test('lowestPrice selects the cheapest currently usable group', () => {

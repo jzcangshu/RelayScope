@@ -176,17 +176,20 @@ func scanSiteAnnouncements(rows *sql.Rows) ([]SiteAnnouncement, error) {
 	var items []SiteAnnouncement
 	for rows.Next() {
 		var a SiteAnnouncement
+		var publishedAt, firstSeenAt, lastSeenAt int64
 		var removedAt sql.NullInt64
-		if err := rows.Scan(&a.ID, &a.SiteID, &a.ExternalID, &a.Title, &a.Content, &a.AnnType, &a.Extra, &a.PublishedAt, &a.FirstSeenAt, &a.LastSeenAt, &removedAt); err != nil {
+		// The timestamp columns are INTEGER milliseconds, so they must be scanned
+		// as int64 and converted; scanning them into time.Time fails at runtime.
+		if err := rows.Scan(&a.ID, &a.SiteID, &a.ExternalID, &a.Title, &a.Content, &a.AnnType, &a.Extra, &publishedAt, &firstSeenAt, &lastSeenAt, &removedAt); err != nil {
 			return nil, fmt.Errorf("scan announcement: %w", err)
 		}
+		a.PublishedAt = time.UnixMilli(publishedAt).UTC()
+		a.FirstSeenAt = time.UnixMilli(firstSeenAt).UTC()
+		a.LastSeenAt = time.UnixMilli(lastSeenAt).UTC()
 		if removedAt.Valid {
 			t := time.UnixMilli(removedAt.Int64).UTC()
 			a.RemovedAt = &t
 		}
-		a.PublishedAt = time.UnixMilli(a.PublishedAt.UnixMilli()).UTC()
-		a.FirstSeenAt = time.UnixMilli(a.FirstSeenAt.UnixMilli()).UTC()
-		a.LastSeenAt = time.UnixMilli(a.LastSeenAt.UnixMilli()).UTC()
 		items = append(items, a)
 	}
 	return items, rows.Err()
@@ -197,17 +200,18 @@ func scanAllAnnouncements(rows *sql.Rows) ([]SiteAnnouncement, error) {
 	var items []SiteAnnouncement
 	for rows.Next() {
 		var a SiteAnnouncement
+		var publishedAt, firstSeenAt, lastSeenAt int64
 		var removedAt sql.NullInt64
-		if err := rows.Scan(&a.ID, &a.SiteID, &a.SiteName, &a.ExternalID, &a.Title, &a.Content, &a.AnnType, &a.Extra, &a.PublishedAt, &a.FirstSeenAt, &a.LastSeenAt, &removedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.SiteID, &a.SiteName, &a.ExternalID, &a.Title, &a.Content, &a.AnnType, &a.Extra, &publishedAt, &firstSeenAt, &lastSeenAt, &removedAt); err != nil {
 			return nil, fmt.Errorf("scan announcement: %w", err)
 		}
+		a.PublishedAt = time.UnixMilli(publishedAt).UTC()
+		a.FirstSeenAt = time.UnixMilli(firstSeenAt).UTC()
+		a.LastSeenAt = time.UnixMilli(lastSeenAt).UTC()
 		if removedAt.Valid {
 			t := time.UnixMilli(removedAt.Int64).UTC()
 			a.RemovedAt = &t
 		}
-		a.PublishedAt = time.UnixMilli(a.PublishedAt.UnixMilli()).UTC()
-		a.FirstSeenAt = time.UnixMilli(a.FirstSeenAt.UnixMilli()).UTC()
-		a.LastSeenAt = time.UnixMilli(a.LastSeenAt.UnixMilli()).UTC()
 		items = append(items, a)
 	}
 	return items, rows.Err()

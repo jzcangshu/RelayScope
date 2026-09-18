@@ -123,9 +123,8 @@
 
 /* ===== 通知中心：与筛选面板同款的右侧圆角卡片 ===== */
 .nc-sidebar {
-  position: sticky;
-  top: 92px; /* 顶栏 72 + main 上内边距 20：与搜索排序横条顶对齐 */
-  height: calc(100vh - 112px);
+  /* 随页面滚动：不 sticky、不设视口高度，卡片高度由内容决定 */
+  position: static;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -173,15 +172,9 @@
 .nc-notice-bar:empty { display: none; }
 /* Body */
 .nc-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
+  /* 面板整体随页面滚动，内部不再自己滚 */
   padding: 0;
 }
-.nc-body::-webkit-scrollbar { width: 5px; }
-.nc-body::-webkit-scrollbar-track { background: transparent; }
-.nc-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 /* Section */
 .nc-section { padding: 0 0 4px; }
 .nc-section + .nc-section { border-top: 1px solid var(--border); }
@@ -190,9 +183,6 @@
   align-items: center;
   gap: 8px;
   padding: 14px 16px 8px;
-  position: sticky;
-  top: 0;
-  z-index: 2;
   background: var(--surface);
 }
 .nc-section-dot {
@@ -245,12 +235,15 @@
 }
 .nc-range-btn:hover { color: var(--muted); background: var(--surface-hover); }
 .nc-range-btn.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+.nc-range-empty {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--faint);
+}
 /* Date group */
 .nc-date-group { padding: 0; }
 .nc-date-label {
-  position: sticky;
-  top: 38px;
-  z-index: 1;
   padding: 12px 16px 8px;
   font-size: 13px;
   font-weight: 700;
@@ -1887,8 +1880,15 @@ body:has(.board-shell:not([hidden]).nc-open) { --page-max: 1798px; }
   color: var(--faint);
   font-size: var(--font-small);
 }
+/* 标题行下方的说明行（pref-head 的补充说明，与标题同起点） */
+.pref-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-small);
+}
 .pref-count {
-  color: var(--failed);
+  /* 与 .pref-note 同色调：计数是中性信息，不用警示红 */
+  color: var(--faint);
   font-size: var(--font-small);
   font-variant-numeric: tabular-nums;
 }
@@ -1984,11 +1984,6 @@ body:has(.board-shell:not([hidden]).nc-open) { --page-max: 1798px; }
 }
 .chip-grid + .pref-empty,
 .chip-grid > .pref-empty { flex-basis: 100%; }
-.chip-grid-hint {
-  margin: 2px 0 0;
-  color: var(--faint);
-  font-size: var(--font-caption);
-}
 .public-dashboard .hide-chip {
   display: inline-flex;
   min-width: 0;
@@ -3368,19 +3363,10 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
 /* 卡片标题可点击（有站点公告时） */
 .card-title .card-title-text[onclick] { cursor: pointer; }
 
-/* ===== 通知订阅面板 ===== */
+/* ===== 通知订阅面板（标题复用 .pref-head 体系，仅保留本页特有的额度徽标/配置卡） ===== */
 .notify-panel { padding: 0; }
-.notify-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.notify-title { margin: 0; font-size: 15px; font-weight: 720; color: var(--text); }
-.notify-desc { margin: 4px 0 0; font-size: 13px; color: var(--faint); }
 .notify-limit {
+  margin-left: auto; /* pref-head 行内右对齐，与 pref-note/pref-reset 同位 */
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -3404,8 +3390,9 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
 .notify-limit-label { font-size: 11px; color: var(--faint); }
 /* Platform config */
 .notify-platform-section {
-  padding: 14px 20px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: color-mix(in srgb, var(--surface-subtle) 50%, transparent);
 }
 .notify-platform-row { display: flex; gap: 10px; align-items: flex-end; }
@@ -3425,9 +3412,8 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
 .notify-select:focus, .notify-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent); }
 .notify-input { width: 100%; }
 /* Site list */
-.notify-site-list { padding: 0 8px; }
-.notify-site-list-head { padding: 12px 12px 6px; }
-.notify-site-list-title { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.notify-site-list { padding: 0; }
+.notify-site-list-head { padding: 0; }
 .notify-site-item {
   display: flex;
   align-items: center;
@@ -3473,7 +3459,7 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 12px 20px 16px;
+  margin: 12px 0 0; /* 与面板内容同宽对齐（容器已提供边距） */
   padding: 10px 14px;
   border-radius: 10px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), color-mix(in srgb, var(--degraded) 6%, transparent));

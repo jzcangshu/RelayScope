@@ -121,6 +121,7 @@ class Handler(BaseHTTPRequestHandler):
                 1: [
                     {"id": 1, "siteId": 1, "externalId": "a1", "title": "上线 glm-5.3-flash", "content": "Translate 分组扩容，现已支持 GLM-5.3-flash 模型，倍率 0.5。请勿高并发使用。", "annType": "success", "extra": "", "publishedAt": now_ts - 3600000 * 2, "firstSeenAt": now_ts - 3600000 * 2, "lastSeenAt": now_ts},
                     {"id": 2, "siteId": 1, "externalId": "a2", "title": "", "content": "由于学业繁重，且本人为住宿生，故维护频率会降低。GLM5.2 空回复/429 稍等重试即可。", "annType": "warning", "extra": "", "publishedAt": now_ts - 86400000 * 2, "firstSeenAt": now_ts - 86400000 * 2, "lastSeenAt": now_ts},
+                    {"id": 9, "siteId": 1, "externalId": "a9", "title": "", "content": "站点上线一周年，感谢大家支持。历史公告比 24h/7d 都旧，用于验证默认范围自动适配。", "annType": "default", "extra": "", "publishedAt": now_ts - 86400000 * 45, "firstSeenAt": now_ts - 86400000 * 45, "lastSeenAt": now_ts},
                 ],
                 2: [
                     {"id": 3, "siteId": 2, "externalId": "a3", "title": "关于账号封禁问题的说明", "content": "由于目前资源紧张，当天token资源分配完毕后将不再继续分配，请求也不会被处理。请大家留意以下几点：正常使用者请自查，若发现大量 429 错误建议立即停止使用。", "annType": "warning", "extra": "", "publishedAt": now_ts - 7200000, "firstSeenAt": now_ts - 7200000, "lastSeenAt": now_ts},

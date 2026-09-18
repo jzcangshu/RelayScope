@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +17,33 @@ import (
 	"relayscope/internal/matcher"
 	"relayscope/internal/pricing"
 )
+
+// expectedSchemaVersion mirrors what migrate() records — the highest migration
+// file number — so adding a migration cannot leave these assertions stale.
+func expectedSchemaVersion(t *testing.T) string {
+	t.Helper()
+	entries, err := fs.ReadDir(migrationFiles, "migrations")
+	if err != nil {
+		t.Fatalf("read migrations: %v", err)
+	}
+	highest := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		version, err := migrationVersion(entry.Name())
+		if err != nil {
+			t.Fatalf("parse migration %s: %v", entry.Name(), err)
+		}
+		if version > highest {
+			highest = version
+		}
+	}
+	if highest == 0 {
+		t.Fatal("no migrations found")
+	}
+	return strconv.Itoa(highest)
+}
 
 func TestRefreshMatchesSupportsConcurrentCollectors(t *testing.T) {
 	dbStore := openTestStore(t)
@@ -150,8 +179,8 @@ func TestOpenAppliesSchemaAndPragmas(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version != "5" {
-		t.Fatalf("schema version = %q, want 3", version)
+	if want := expectedSchemaVersion(t); version != want {
+		t.Fatalf("schema version = %q, want %q", version, want)
 	}
 }
 
@@ -161,8 +190,8 @@ func TestMigrationVersionIsRecordedAndIdempotent(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT value FROM app_meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != "5" {
-		t.Fatalf("version = %q, want 3", version)
+	if want := expectedSchemaVersion(t); version != want {
+		t.Fatalf("version = %q, want %q", version, want)
 	}
 	if err := store.migrate(context.Background()); err != nil {
 		t.Fatalf("second migration: %v", err)
