@@ -66,7 +66,8 @@ func NewDispatcher(cfg Config) *Dispatcher {
 		senders[s.Platform()] = s
 		limiters[s.Platform()] = newTokenBucket(5.0, 10) // 5 msg/sec
 	}
-	if cfg.Bark != nil && cfg.Bark.Key != "" {
+	if cfg.Bark != nil {
+		// Key 仅作为 target 为空时的回退；测试推送与用户订阅始终自带 target
 		s := NewBarkSender(cfg.Bark)
 		senders[s.Platform()] = s
 		limiters[s.Platform()] = newTokenBucket(5.0, 10) // 5 msg/sec

@@ -124,12 +124,8 @@ func run() error {
 			}
 			return nil
 		}(),
-		Bark: func() *notifier.BarkConfig {
-			if cfg.BarkKey != "" {
-				return &notifier.BarkConfig{Key: cfg.BarkKey, BaseURL: cfg.BarkBaseURL}
-			}
-			return nil
-		}(),
+		// Bark 不需要服务端凭据（设备 key 由用户填写），始终注册以便测试推送可用
+		Bark: &notifier.BarkConfig{Key: cfg.BarkKey, BaseURL: cfg.BarkBaseURL},
 	})
 
 	siteCollector, err := collector.New(collector.Options{
