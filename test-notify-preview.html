@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通知侧栏预览</title>
+<style>
+:root {
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --page: #15171a; --surface: #1f2226; --surface-subtle: #2a2e33; --surface-hover: #262a2f;
+  --border: #383d43; --border-strong: #4e5560;
+  --text: #eef1f4; --muted: #a9b0b8; --faint: #8e969f;
+  --accent: #70c4b0; --accent-soft: #1b3831;
+  --healthy: #68cba0; --healthy-soft: #1c3b2f;
+  --degraded: #e6b554; --degraded-soft: #3f341f;
+  --failed: #ef8a82; --failed-soft: #402a2b;
+  --focus: #7fb6ef;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--page); color: var(--text); min-height: 100vh; }
+
+/* Layout */
+.demo-layout {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) 0;
+  gap: 18px;
+  padding: 0 24px;
+  min-height: 100vh;
+  transition: grid-template-columns 280ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.demo-layout.open {
+  grid-template-columns: 248px minmax(0, 1fr) 340px;
+}
+
+/* Left sidebar (mock filter) */
+.mock-filter {
+  position: sticky; top: 0; height: 100vh;
+  padding: 13px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface);
+}
+.mock-filter h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.mock-filter-item { padding: 6px 10px; margin: 2px 0; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.mock-filter-item:hover { background: var(--surface-hover); }
+.mock-filter-item.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* Main content area */
+.demo-main { min-height: 100vh; }
+.demo-topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); margin-bottom: 18px;
+}
+.demo-search { flex: 1; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-subtle); color: var(--text); font-size: 13px; }
+.demo-toggle-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--accent); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 150ms ease; position: relative;
+}
+.demo-toggle-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.demo-toggle-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--failed); position: absolute; top: 6px; right: 6px; }
+
+/* Mock cards */
+.demo-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.mock-card {
+  padding: 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); cursor: pointer; transition: border-color 150ms ease;
+}
+.mock-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.mock-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.mock-card-name { font-size: 14px; font-weight: 650; }
+.mock-card-badge { font-size: 11px; padding: 2px 8px; border-radius: 5px; font-weight: 600; }
+.mock-card-badge.healthy { background: var(--healthy-soft); color: var(--healthy); }
+.mock-card-badge.degraded { background: var(--degraded-soft); color: var(--degraded); }
+.mock-card-badge.failed { background: var(--failed-soft); color: var(--failed); }
+.mock-card-bar { height: 4px; border-radius: 2px; background: var(--surface-subtle); margin-top: 10px; overflow: hidden; }
+.mock-card-bar i { display: block; height: 100%; border-radius: 2px; }
+.mock-card-bar .bar-healthy { width: 85%; background: var(--healthy); }
+.mock-card-bar .bar-degraded { width: 45%; background: var(--degraded); }
+.mock-card-bar .bar-failed { width: 12%; background: var(--failed); }
+
+/* Right sidebar (notification center) */
+.nc-sidebar {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+  opacity: 0; transform: translateX(12px);
+  transition: opacity 240ms ease, transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+}
+.demo-layout.open .nc-sidebar {
+  opacity: 1; transform: translateX(0); pointer-events: auto;
+}
+.nc-sidebar-head {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+}
+.nc-sidebar-title { margin: 0; font-size: 15px; font-weight: 720; }
+.nc-sidebar-actions { display: flex; align-items: center; gap: 4px; }
+.nc-subscribe-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--accent); font-size: 11px; font-weight: 650;
+  cursor: pointer; transition: all 120ms ease;
+}
+.nc-subscribe-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.nc-close-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border: none; border-radius: 6px;
+  background: transparent; color: var(--faint); cursor: pointer;
+  transition: all 120ms ease;
+}
+.nc-close-btn:hover { background: var(--surface-hover); color: var(--text); }
+.nc-notice-bar {
+  padding: 10px 16px 12px; border-bottom: 1px solid var(--border);
+  font-size: 12px; line-height: 1.7; color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.nc-body { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.nc-body::-webkit-scrollbar { width: 5px; }
+.nc-body::-webkit-scrollbar-track { background: transparent; }
+.nc-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Section */
+.nc-section { padding: 0 0 4px; }
+.nc-section + .nc-section { border-top: 1px solid var(--border); }
+.nc-section-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 16px 8px;
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
+}
+.nc-section-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.nc-section-dot--alert { background: var(--failed); box-shadow: 0 0 0 3px var(--failed-soft); }
+.nc-section-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.nc-section-count {
+  font-size: 11px; font-weight: 700; color: var(--faint);
+  background: var(--surface-subtle); padding: 1px 6px; border-radius: 10px; border: 1px solid var(--border);
+}
+.nc-range-group {
+  display: flex; gap: 2px; padding: 2px;
+  background: var(--surface-subtle); border-radius: 6px; border: 1px solid var(--border);
+  margin-left: auto;
+}
+.nc-range-btn {
+  padding: 3px 8px; border: none; border-radius: 5px; background: transparent;
+  color: var(--faint); font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: all 120ms ease;
+}
+.nc-range-btn:hover { color: var(--muted); background: var(--surface-hover); }
+.nc-range-btn.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+
+/* Date group */
+.nc-date-group { padding: 0 16px; }
+.nc-date-label {
+  position: sticky; top: 38px; z-index: 1;
+  padding: 12px 0 8px;
+  font-size: 13px; font-weight: 700; color: var(--faint); background: var(--surface);
+}
+.nc-date-label::before {
+  content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px;
+  border-radius: 50%; background: var(--accent); vertical-align: middle; opacity: 0.6;
+}
+
+/* Timeline item */
+.nc-item {
+  position: relative; display: grid; grid-template-columns: 32px 1fr;
+  gap: 0 10px; padding: 8px 0 14px;
+}
+.nc-item::before { content: ''; position: absolute; top: 24px; left: 15px; bottom: -2px; width: 1px; background: var(--border); }
+.nc-item:last-child::before { display: none; }
+.nc-avatar {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--surface-subtle); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--accent); text-transform: uppercase;
+  flex-shrink: 0; position: relative; z-index: 1;
+}
+.nc-item--failure .nc-avatar { background: var(--failed-soft); color: var(--failed); border-color: color-mix(in srgb, var(--failed) 20%, var(--border)); }
+.nc-content { min-width: 0; }
+.nc-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.nc-site-name { font-size: 13px; font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-badge {
+  display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+.nc-badge-error { background: color-mix(in srgb, var(--failed) 15%, transparent); color: var(--failed); }
+.nc-badge-success { background: color-mix(in srgb, var(--healthy) 15%, transparent); color: var(--healthy); }
+.nc-badge-warning { background: color-mix(in srgb, var(--degraded) 15%, transparent); color: var(--degraded); }
+.nc-badge-default { background: var(--surface-subtle); color: var(--faint); }
+.nc-badge-ongoing { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.nc-time { font-size: 11px; color: var(--faint); margin-left: auto; flex-shrink: 0; }
+.nc-title-line { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.nc-text { font-size: 13px; line-height: 1.7; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.nc-text.expanded { -webkit-line-clamp: unset; overflow: visible; }
+.nc-expand-btn { display: inline-block; margin-top: 3px; padding: 0; border: none; background: none; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+.nc-expand-btn:hover { text-decoration: underline; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); z-index: 200;
+  padding: 10px 20px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 25%);
+  font-size: 13px; color: var(--text); font-weight: 500;
+  opacity: 0; transition: opacity 200ms ease, transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="demo-layout open" id="layout">
+  <!-- Left: mock filter sidebar -->
+  <aside class="mock-filter">
+    <h3>筛选</h3>
+    <div class="mock-filter-item active">全部站点</div>
+    <div class="mock-filter-item">DeepSeek</div>
+    <div class="mock-filter-item">GPT-4o</div>
+    <div class="mock-filter-item">Claude</div>
+    <div class="mock-filter-item">Gemini</div>
+    <div class="mock-filter-item">Qwen</div>
+  </aside>
+
+  <!-- Center: mock card grid -->
+  <section class="demo-main">
+    <div class="demo-topbar">
+      <input class="demo-search" type="text" placeholder="搜索站点或模型…" readonly>
+      <button class="demo-toggle-btn" onclick="toggleSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        通知
+        <span class="dot"></span>
+      </button>
+    </div>
+    <div class="demo-cards">
+      <div class="mock-card"><div class="mock-card-head"><span class="mock-card-name">GPT-4o · Ark API</span><span class="mock-card-badge healthy">正常</span></div><div class="mock-card-bar"><i class="bar-healthy"></i></div></div>
+      <div class="mock-card"><div class="mock-card-head"><span class="mock-card-name">Claude · Huainova</span><span class="mock-card-badge degraded">降级</span></div><div class="mock-card-bar"><i class="bar-degraded"></i></div></div>
+      <div class="mock-card"><div class="mock-card-head"><span class="mock-card-name">DeepSeek · 42w</span><span class="mock-card-badge healthy">正常</span></div><div class="mock-card-bar"><i class="bar-healthy"></i></div></div>
+      <div class="mock-card"><div class="mock-card-head"><span class="mock-card-name">Gemini · 月城公益站</span><span class="mock-card-badge failed">失败</span></div><div class="mock-card-bar"><i class="bar-failed"></i></div></div>
+      <div class="mock-card"><div class="mock-card-head"><span class="mock-card-name">Qwen · 感恩公益站</span><span class="mock-card-badge healthy">正常</span></div><div class="mock-card-bar"><i class="bar-healthy"></i></div></div>
+      <div class="mock-card"><div class="mock-card-head"><span class="mock-card-name">GLM · 薄荷 API</span><span class="mock-card-badge healthy">正常</span></div><div class="mock-card-bar"><i class="bar-healthy"></i></div></div>
+    </div>
+  </section>
+
+  <!-- Right: notification sidebar -->
+  <aside class="nc-sidebar">
+    <div class="nc-sidebar-head">
+      <h2 class="nc-sidebar-title">通知</h2>
+      <div class="nc-sidebar-actions">
+        <button class="nc-subscribe-btn">订阅</button>
+        <button class="nc-close-btn" onclick="toggleSidebar()" title="收起">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="nc-notice-bar">📢 系统维护公告：本周五凌晨 2:00-4:00 进行例行维护。</div>
+    <div class="nc-body" id="nc-body"></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const failures = [
+  { site: 'chybenzun', code: 'challenge_failed', reason: 'Cloudflare 验证持续失败，FlareSolverr 无法通过 challenge' },
+  { site: '月城公益站', code: 'collection_failed', reason: '请求超时（7 分钟内未响应）' },
+  { site: 'X-API', code: 'login_expired', reason: '登录态已过期，需要重新同步 session' },
+];
+const announcements = [
+  { site: 'Ark API', title: '上线 glm-5.3-flash', content: 'Translate 分组扩容，现已支持 GLM-5.3-flash 模型，倍率 0.5。', type: 'success', time: '2026-09-17T14:32:00' },
+  { site: 'Huainova', title: '关于账号封禁问题的说明', content: '由于目前资源紧张，当天token资源分配完毕后将不再继续分配。正常使用者请自查，若发现大量 429 错误建议立即停止使用。', type: 'warning', time: '2026-09-17T09:15:00' },
+  { site: '42w', title: '', content: 'complimentary分组glm-5.2模型目前有几率降级路由至glm-5.1，glm-5以提升可用性。', type: 'default', time: '2026-09-16T22:08:00' },
+  { site: 'Hiyo Free', title: '使用须知', content: 'Hiyo Free 是本站为了回馈忠实用户而开设的完全免费福利站。无需充值，通过每日签到、邀请好友等方式即可获取免费额度。', type: 'default', time: '2026-09-16T10:45:00' },
+  { site: '感恩公益站', title: '', content: '上线complimentary分组，本分组0倍率，不扣除任何余额，支持多种模型。', type: 'success', time: '2026-09-15T18:30:00' },
+  { site: 'Ark API', title: '', content: '由于学业繁重，且本人为住宿生，故维护频率会降低。', type: 'warning', time: '2026-09-15T04:04:00' },
+  { site: '薄荷 API', title: '渠道调整通知', content: '普通分组已开启，plus分组也正常开启，双边分组都正常运行。', type: 'default', time: '2026-09-14T16:20:00' },
+];
+
+let ncRange = '24h';
+
+function toggleSidebar() {
+  document.getElementById('layout').classList.toggle('open');
+}
+
+function render() {
+  const body = document.getElementById('nc-body');
+  const rangeMs = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 }[ncRange];
+  const cutoff = Date.now() - rangeMs;
+  const items = announcements.filter(a => new Date(a.time).getTime() >= cutoff);
+
+  let html = '';
+  // Failures
+  html += '<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot nc-section-dot--alert"></span><span class="nc-section-title">采集异常</span><span class="nc-section-count">' + failures.length + '</span></div>';
+  for (const f of failures) {
+    html += `<div class="nc-item nc-item--failure"><div class="nc-avatar">${f.site[0]}</div><div class="nc-content"><div class="nc-meta"><span class="nc-site-name">${f.site}</span><span class="nc-badge nc-badge-error">${f.code}</span></div><div class="nc-text">${f.reason}</div></div></div>`;
+  }
+  html += '</div>';
+  // Announcements
+  const groups = {};
+  for (const a of items) {
+    const d = new Date(a.time);
+    const key = fmtDate(d);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(a);
+  }
+  html += '<div class="nc-section"><div class="nc-section-head"><span class="nc-section-dot"></span><span class="nc-section-title">站点公告</span><span class="nc-section-count">' + items.length + '</span><div class="nc-range-group">';
+  for (const r of ['24h','7d','30d']) html += `<button class="nc-range-btn${ncRange===r?' active':''}" data-range="${r}">${r}</button>`;
+  html += '</div></div>';
+  for (const [dk, arr] of Object.entries(groups)) {
+    html += `<div class="nc-date-group"><div class="nc-date-label">${dk}</div>`;
+    for (const a of arr) {
+      const d = new Date(a.time);
+      const t = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      const badge = a.type !== 'default' ? `<span class="nc-badge nc-badge-${a.type}">${({success:'成功',warning:'警告',error:'错误',ongoing:'进行中'})[a.type]||''}</span>` : '';
+      const ttl = a.title ? `<div class="nc-title-line">${a.title}</div>` : '';
+      const long = a.content.length > 100;
+      const preview = long ? a.content.slice(0,100) + '…' : a.content;
+      html += `<div class="nc-item"><div class="nc-avatar">${a.site[0]}</div><div class="nc-content"><div class="nc-meta"><span class="nc-site-name">${a.site}</span>${badge}<span class="nc-time">${t}</span></div>${ttl}<div class="nc-text">${preview}</div>${long?'<button class="nc-expand-btn" onclick="toggleExp(this)">展开全文</button>':''}</div></div>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  body.innerHTML = html;
+  body.querySelector('.nc-range-group')?.addEventListener('click', e => {
+    const btn = e.target.closest('.nc-range-btn');
+    if (!btn) return;
+    ncRange = btn.dataset.range;
+    render();
+  });
+}
+
+function toggleExp(btn) {
+  const t = btn.previousElementSibling;
+  if (t.classList.contains('expanded')) { t.classList.remove('expanded'); t.textContent = t.textContent.slice(0,100)+'…'; btn.textContent='展开全文'; }
+  else { t.classList.add('expanded'); btn.textContent='收起'; }
+}
+
+function fmtDate(d) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = today - target;
+  if (diff === 0) return '今天';
+  if (diff === 86400000) return '昨天';
+  if (diff < 604800000) return Math.floor(diff/86400000) + ' 天前';
+  return (d.getMonth()+1) + ' 月 ' + d.getDate() + ' 日';
+}
+
+render();
+</script>
+</body>
+</html>
