@@ -89,6 +89,12 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def end_headers(self):
+        # 与生产 securityHeaders 保持一致：本地也要有 CSP，
+        # 否则「CSP 静默拦截内联 style」这类只在生产爆发的问题本地永远测不出来。
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+        super().end_headers()
+
     def _json(self, payload, status=200):
         body = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
