@@ -238,6 +238,21 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/api/v1/me/preferences":
             return self._json({"status": "ok"})
+        if path == "/api/v1/me/notification-subscriptions":
+            if not LOGGED_IN:
+                return self._json({"error": "请先登录"}, status=401)
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            platform = (payload.get("platform") or "").strip()
+            target = (payload.get("target") or "").strip()
+            if platform not in ("telegram", "feishu", "bark") or not target:
+                return self._json({"message": "platform and target are required"}, status=400)
+            updated = 0
+            for sub in SUBSCRIPTIONS:
+                sub["platform"] = platform
+                sub["target"] = target
+                sub["updatedAt"] = NOW
+                updated += 1
+            return self._json({"status": "ok", "updated": updated})
         return self._json({}, status=404)
 
     def do_OPTIONS(self):

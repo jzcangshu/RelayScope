@@ -3396,6 +3396,23 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
   background: color-mix(in srgb, var(--surface-subtle) 50%, transparent);
 }
 .notify-platform-row { display: flex; gap: 10px; align-items: flex-end; }
+.notify-channel-status {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.notify-channel-status--saved { color: var(--healthy); font-weight: 600; }
+.notify-channel-status--dirty { color: var(--degraded); font-weight: 600; }
+.notify-channel-status--hint { color: var(--faint); }
+.notify-channel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.notify-channel-actions .btn-sm { height: auto; padding: 5px 14px; font-size: 12px; }
+.notify-channel-actions .btn-sm[disabled] { opacity: 0.5; cursor: not-allowed; }
 .notify-test-row {
   display: flex;
   align-items: center;
@@ -3422,7 +3439,7 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
 .notify-input { width: 100%; }
 /* Site list */
 .notify-site-list { padding: 0; }
-.notify-site-list-head { padding: 0; }
+.notify-site-list-head { padding: 0; flex-wrap: wrap; row-gap: 4px; }
 .notify-site-item {
   display: flex;
   align-items: center;
@@ -3462,6 +3479,19 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 .notify-site-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notify-site-channel {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--faint);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
 .notify-site-platform { font-size: 14px; flex-shrink: 0; }
 /* Upgrade CTA */
 .notify-upgrade {

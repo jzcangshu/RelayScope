@@ -242,6 +242,51 @@ func TestNewAPIAdapterAcceptsWrappedCatalogAndRejectsEmptyModels(t *testing.T) {
 	}
 }
 
+func TestNewAPIAdapterEmptyCatalogReportsNoModels(t *testing.T) {
+	t.Parallel()
+
+	// Ad公益站 ships this exact shape: a 2xx pricing body with vendors
+	// configured but a genuinely empty model list.
+	empty := []byte(`{"auto_groups":[],"data":[],"group_ratio":{},"success":true,"usable_group":{},"vendors":[{"id":1,"name":"DeepSeek"}]}`)
+	collection, err := (NewAPIAdapter{}).Collect(context.Background(), Site{ID: 7, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{"https://example.test/api/pricing": empty}}, time.Now())
+	if err != nil {
+		t.Fatalf("empty pricing catalog should not fail: %v", err)
+	}
+	if len(collection.Models) != 0 || !collection.CatalogComplete {
+		t.Fatalf("expected complete empty catalog: %+v", collection)
+	}
+	if collection.MissingCatalogState != domain.ServiceFailed {
+		t.Fatalf("missing catalog state = %q, want failed", collection.MissingCatalogState)
+	}
+	if collection.SiteID != 7 {
+		t.Fatalf("site id lost: %d", collection.SiteID)
+	}
+}
+
+func TestNewAPIAdapterEmptyArrayCatalogReportsNoModels(t *testing.T) {
+	t.Parallel()
+
+	collection, err := (NewAPIAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{"https://example.test/api/pricing": []byte(`{"data":[]}`)}}, time.Now())
+	if err != nil {
+		t.Fatalf("empty array catalog should not fail: %v", err)
+	}
+	if len(collection.Models) != 0 || collection.MissingCatalogState != domain.ServiceFailed {
+		t.Fatalf("unexpected empty collection: %+v", collection)
+	}
+}
+
+func TestNewAPIAdapterAPIFailureStillErrors(t *testing.T) {
+	t.Parallel()
+
+	// A 2xx body carrying an explicit business error must not be mistaken for
+	// a site that simply has no models.
+	failure := []byte(`{"code":"AUTH_UNAUTHORIZED","message":"Unauthorized, invalid access token","success":false}`)
+	_, err := (NewAPIAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{"https://example.test/api/pricing": failure}}, time.Now())
+	if err == nil {
+		t.Fatal("explicit API failure on a 2xx body should still error")
+	}
+}
+
 func TestNewAPIAdapterParsesRealPricingGroups(t *testing.T) {
 	body := []byte(`{"data":[{"model_name":"vendor/gpt-5.6-sol-free","enable_groups":["free","vip"]}]}`)
 	collection, err := (NewAPIAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{"https://example.test/api/pricing": body}}, time.Now())
@@ -251,6 +296,84 @@ func TestNewAPIAdapterParsesRealPricingGroups(t *testing.T) {
 	groups := collection.Models[0].Groups
 	if len(groups) != 2 || groups[0].RawName != "free" || groups[1].RawName != "vip" {
 		t.Fatalf("real pricing groups lost: %+v", groups)
+	}
+}
+
+func TestNewAPIAdapterCollectsTimelineAnnouncements(t *testing.T) {
+	t.Parallel()
+
+	status := []byte(`{"data":{"announcements_enabled":true,"announcements":[
+		{"id":8,"content":"系统维护通知","extra":"维护详情","publishDate":"2026-07-30T08:10:00.000Z","type":"warning"},
+		{"id":9,"content":"  ","publishDate":"2026-07-31T08:10:00.000Z","type":"default"}
+	]}}`)
+	anns, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test"},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anns) != 1 {
+		t.Fatalf("expected 1 non-empty announcement, got %d", len(anns))
+	}
+	ann := anns[0]
+	if ann.ExternalID != "2026-07-30T08:10:00.000Z" {
+		t.Errorf("external id = %q, want publishDate", ann.ExternalID)
+	}
+	if ann.Content != "系统维护通知" {
+		t.Errorf("content = %q", ann.Content)
+	}
+	if ann.Type != "warning" {
+		t.Errorf("type = %q", ann.Type)
+	}
+	if ann.Extra != "维护详情" {
+		t.Errorf("extra = %q", ann.Extra)
+	}
+	if expected := time.Date(2026, time.July, 30, 8, 10, 0, 0, time.UTC); !ann.PublishedAt.Equal(expected) {
+		t.Errorf("published at = %v, want %v", ann.PublishedAt, expected)
+	}
+}
+
+func TestNewAPIAdapterCollectsNoticeDiffAnnouncements(t *testing.T) {
+	t.Parallel()
+
+	notice := []byte(`{"data":"全站维护中，预计 30 分钟恢复"}`)
+	anns, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test", ConfigJSON: `{"announcementMode":"notice_diff"}`},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/notice": notice}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anns) != 1 || anns[0].ExternalID != "__notice__" || anns[0].Content != "全站维护中，预计 30 分钟恢复" {
+		t.Fatalf("notice diff announcement lost: %+v", anns)
+	}
+}
+
+func TestNewAPIAdapterAnnouncementsDisabledByConfig(t *testing.T) {
+	t.Parallel()
+
+	anns, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test", ConfigJSON: `{"announcementMode":"disabled"}`},
+		fakeFetcher{responses: map[string][]byte{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anns != nil {
+		t.Fatalf("disabled mode should collect nothing, got %d", len(anns))
+	}
+}
+
+func TestNewAPIAdapterIgnoresAnnouncementsWhenDisabledUpstream(t *testing.T) {
+	t.Parallel()
+
+	status := []byte(`{"data":{"announcements_enabled":false,"announcements":[{"id":8,"content":"隐藏的公告","publishDate":"2026-07-30T08:10:00.000Z"}]}}`)
+	anns, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test"},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anns != nil {
+		t.Fatalf("site with announcements disabled should collect nothing, got %d", len(anns))
 	}
 }
 

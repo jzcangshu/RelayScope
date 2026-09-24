@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -297,7 +298,7 @@ func classifyFetchError(err error) string {
 		if fetchErr.ChallengeFailed {
 			return "challenge_failed"
 		}
-		if fetchErr.LoginRequired || fetchErr.StatusCode == 401 {
+		if fetchErr.LoginRequired || fetchErr.StatusCode == http.StatusUnauthorized || fetchErr.StatusCode == http.StatusForbidden {
 			return "login_expired"
 		}
 		if fetchErr.Challenge {

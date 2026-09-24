@@ -38,7 +38,8 @@ func (store *Store) ListPendingNotifications(ctx context.Context, limit int) ([]
 	for rows.Next() {
 		var e NotificationOutboxEntry
 		var nextRetryAt, sentAt *int64
-		if err := rows.Scan(&e.ID, &e.SubscriptionID, &e.AnnouncementID, &e.SiteID, &e.Platform, &e.Target, &e.Payload, &e.Status, &e.RetryCount, &nextRetryAt, &e.CreatedAt, &sentAt); err != nil {
+		var createdAt int64
+		if err := rows.Scan(&e.ID, &e.SubscriptionID, &e.AnnouncementID, &e.SiteID, &e.Platform, &e.Target, &e.Payload, &e.Status, &e.RetryCount, &nextRetryAt, &createdAt, &sentAt); err != nil {
 			return nil, fmt.Errorf("scan outbox entry: %w", err)
 		}
 		if nextRetryAt != nil {
@@ -49,7 +50,7 @@ func (store *Store) ListPendingNotifications(ctx context.Context, limit int) ([]
 			t := time.UnixMilli(*sentAt).UTC()
 			e.SentAt = &t
 		}
-		e.CreatedAt = time.UnixMilli(e.CreatedAt.UnixMilli()).UTC()
+		e.CreatedAt = time.UnixMilli(createdAt).UTC()
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
@@ -100,11 +101,12 @@ func (store *Store) ListActiveSubscriptionsForSite(ctx context.Context, siteID i
 	var subs []NotificationSubscription
 	for rows.Next() {
 		var s NotificationSubscription
-		if err := rows.Scan(&s.ID, &s.UserID, &s.SiteID, &s.Platform, &s.Target, &s.Config, &s.Enabled, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		var createdAt, updatedAt int64
+		if err := rows.Scan(&s.ID, &s.UserID, &s.SiteID, &s.Platform, &s.Target, &s.Config, &s.Enabled, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan subscription: %w", err)
 		}
-		s.CreatedAt = time.UnixMilli(s.CreatedAt.UnixMilli()).UTC()
-		s.UpdatedAt = time.UnixMilli(s.UpdatedAt.UnixMilli()).UTC()
+		s.CreatedAt = time.UnixMilli(createdAt).UTC()
+		s.UpdatedAt = time.UnixMilli(updatedAt).UTC()
 		subs = append(subs, s)
 	}
 	return subs, rows.Err()
@@ -147,14 +149,42 @@ func (store *Store) ListUserSubscriptions(ctx context.Context, userID int64) ([]
 	var subs []NotificationSubscription
 	for rows.Next() {
 		var s NotificationSubscription
-		if err := rows.Scan(&s.ID, &s.UserID, &s.SiteID, &s.SiteName, &s.Platform, &s.Target, &s.Config, &s.Enabled, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		var createdAt, updatedAt int64
+		if err := rows.Scan(&s.ID, &s.UserID, &s.SiteID, &s.SiteName, &s.Platform, &s.Target, &s.Config, &s.Enabled, &createdAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan subscription: %w", err)
 		}
-		s.CreatedAt = time.UnixMilli(s.CreatedAt.UnixMilli()).UTC()
-		s.UpdatedAt = time.UnixMilli(s.UpdatedAt.UnixMilli()).UTC()
+		s.CreatedAt = time.UnixMilli(createdAt).UTC()
+		s.UpdatedAt = time.UnixMilli(updatedAt).UTC()
 		subs = append(subs, s)
 	}
 	return subs, rows.Err()
+}
+
+// UpdateSubscriptionChannel changes the platform and target on every
+// subscription a user owns, so rotating a key or switching channels applies to
+// already-subscribed sites in one shot instead of forcing the user to re-toggle
+// each site. Pending outbox entries carry a denormalized copy of the target, so
+// they are repointed too — otherwise a notification queued seconds earlier
+// would still fly to the old channel.
+func (store *Store) UpdateSubscriptionChannel(ctx context.Context, userID int64, platform, target string) (int64, error) {
+	now := unixMilli(time.Now().UTC())
+	res, err := store.db.ExecContext(ctx,
+		`UPDATE notification_subscriptions SET platform = ?, target = ?, updated_at = ? WHERE user_id = ?`,
+		platform, target, now, userID)
+	if err != nil {
+		return 0, fmt.Errorf("update subscription channel: %w", err)
+	}
+	count, _ := res.RowsAffected()
+	if count > 0 {
+		if _, err := store.db.ExecContext(ctx,
+			`UPDATE notification_outbox SET platform = ?, target = ?
+			 WHERE subscription_id IN (SELECT id FROM notification_subscriptions WHERE user_id = ?)
+			 AND status IN ('pending', 'retry')`,
+			platform, target, userID); err != nil {
+			return count, fmt.Errorf("repoint pending notifications: %w", err)
+		}
+	}
+	return count, nil
 }
 
 // DeleteSubscription removes a subscription (only if owned by the user).

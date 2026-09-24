@@ -42,7 +42,20 @@ func (adapter NewAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fet
 		return domain.Collection{}, fmt.Errorf("decode NewAPI pricing: %w", err)
 	}
 	if len(models) == 0 {
-		return domain.Collection{}, fmt.Errorf("NewAPI pricing returned no models")
+		// A 2xx pricing response whose catalog array is genuinely empty means
+		// the site currently publishes no models: some NewAPI deployments list
+		// vendors before adding price rows, and operators sometimes reset the
+		// pricing table. Report an empty catalog so previously seen models are
+		// marked unavailable instead of failing the whole run. Catalog entries
+		// that exist but carry no usable model name, and explicit API-level
+		// failures on a 2xx body, are still collection errors.
+		if pricingCatalogItemCount(body) > 0 {
+			return domain.Collection{}, fmt.Errorf("NewAPI pricing contained no valid model names")
+		}
+		if message := pricingAPIErrorMessage(body); message != "" {
+			return domain.Collection{}, fmt.Errorf("NewAPI pricing reported failure: %s", message)
+		}
+		return emptyPricingCollection(site, now), nil
 	}
 	pricingRegistry := adapter.PricingRegistry
 	if pricingRegistry == nil {
@@ -222,6 +235,19 @@ func appendDetailIssue(collection *domain.Collection, code, modelName string, er
 		message = string(runes[:512])
 	}
 	collection.Issues = append(collection.Issues, domain.CollectionIssue{Code: code, Scope: modelName, Message: message})
+}
+
+// emptyPricingCollection is the result of a successful collection over a
+// pricing catalog that publishes no models. The store marks the site's
+// previously seen models as unavailable instead of recording a failed run.
+func emptyPricingCollection(site Site, now time.Time) domain.Collection {
+	return domain.Collection{
+		SiteID:              site.ID,
+		ObservedAt:          now,
+		CollectedAt:         now,
+		CatalogComplete:     true,
+		MissingCatalogState: domain.ServiceFailed,
+	}
 }
 
 // decodePricingModels accepts the response shapes used by NewAPI versions and

@@ -419,6 +419,41 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]any{"status": "ok", "subscription": sub})
 	})
 
+	// PUT /api/v1/me/notification-subscriptions —— 统一更新所有已订阅站点的推送平台与目标
+	// （换 key / 换渠道时一次应用到全部站点，待发送队列同步改道）
+	mux.HandleFunc("PUT /api/v1/me/notification-subscriptions", func(writer http.ResponseWriter, request *http.Request) {
+		user, ok := requireUser(options, writer, request)
+		if !ok {
+			return
+		}
+		var payload struct {
+			Platform string `json:"platform"`
+			Target   string `json:"target"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8<<10)).Decode(&payload); err != nil {
+			writeError(writer, http.StatusBadRequest, "invalid payload")
+			return
+		}
+		platform := strings.TrimSpace(payload.Platform)
+		target := strings.TrimSpace(payload.Target)
+		if platform == "" || target == "" {
+			writeError(writer, http.StatusBadRequest, "platform and target are required")
+			return
+		}
+		switch platform {
+		case "telegram", "feishu", "bark":
+		default:
+			writeError(writer, http.StatusBadRequest, "unsupported platform: "+platform)
+			return
+		}
+		count, err := options.Store.UpdateSubscriptionChannel(request.Context(), user.ID, platform, target)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "更新渠道失败")
+			return
+		}
+		writeJSON(writer, map[string]any{"status": "ok", "updated": count})
+	})
+
 	// DELETE /api/v1/me/notification-subscriptions/{id} —— 删除通知订阅
 	mux.HandleFunc("DELETE /api/v1/me/notification-subscriptions/{id}", func(writer http.ResponseWriter, request *http.Request) {
 		user, ok := requireUser(options, writer, request)

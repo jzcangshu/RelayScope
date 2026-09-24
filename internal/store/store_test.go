@@ -1290,3 +1290,101 @@ func assertRemovalEvidence(t *testing.T, store *Store, expectedRuns int, removed
 		t.Fatalf("removal evidence = (%d, %v), want (%d, %v)", runs, removedAt, expectedRuns, removed)
 	}
 }
+
+func TestUpdateSubscriptionChannelAppliesToAllSitesAndRepointsOutbox(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbStore := openTestStore(t)
+	user, err := dbStore.UpsertUser(ctx, "linuxdo", "42", "owner", "Owner", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID := user.ID
+	siteA, err := dbStore.CreateSite(ctx, Site{Name: "A", BaseURL: "https://a.example", SourceURL: "https://a.example/pricing", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	siteB, err := dbStore.CreateSite(ctx, Site{Name: "B", BaseURL: "https://b.example", SourceURL: "https://b.example/pricing", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, siteID := range []int64{siteA.ID, siteB.ID} {
+		if _, err := dbStore.CreateSubscription(ctx, userID, siteID, "telegram", "old-chat-id", "{}"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A queued notification still carries the denormalized old target.
+	newAnns, err := dbStore.ApplyAnnouncements(ctx, siteA.ID, []AnnouncementInput{
+		{ExternalID: "ann-1", Content: "maintenance window", AnnType: "default", PublishedAt: time.Now().UTC()},
+	}, time.Now().UTC())
+	if err != nil || len(newAnns) != 1 {
+		t.Fatalf("seed announcement: %v %d", err, len(newAnns))
+	}
+	if err := dbStore.EnqueueNotification(ctx, 1, newAnns[0].ID, siteA.ID, "telegram", "old-chat-id", "{}"); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := dbStore.UpdateSubscriptionChannel(ctx, userID, "bark", "new-device-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated != 2 {
+		t.Fatalf("updated = %d, want 2", updated)
+	}
+
+	subs, err := dbStore.ListUserSubscriptions(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sub := range subs {
+		if sub.Platform != "bark" || sub.Target != "new-device-key" {
+			t.Fatalf("subscription %d channel = (%s, %s), want (bark, new-device-key)", sub.ID, sub.Platform, sub.Target)
+		}
+	}
+
+	pending, err := dbStore.ListPendingNotifications(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].Platform != "bark" || pending[0].Target != "new-device-key" {
+		t.Fatalf("pending entry not repointed: %+v", pending)
+	}
+}
+
+func TestUpdateSubscriptionChannelOnlyTouchesOwnUser(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbStore := openTestStore(t)
+	one, err := dbStore.UpsertUser(ctx, "linuxdo", "1", "one", "One", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := dbStore.UpsertUser(ctx, "linuxdo", "2", "two", "Two", "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site, err := dbStore.CreateSite(ctx, Site{Name: "shared", BaseURL: "https://shared.example", SourceURL: "https://shared.example/pricing", AdapterKey: "test", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dbStore.CreateSubscription(ctx, one.ID, site.ID, "telegram", "user-one-chat", "{}"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dbStore.CreateSubscription(ctx, two.ID, site.ID, "bark", "user-two-key", "{}"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := dbStore.UpdateSubscriptionChannel(ctx, two.ID, "bark", "rotated-key"); err != nil {
+		t.Fatal(err)
+	}
+
+	subs, err := dbStore.ListUserSubscriptions(ctx, one.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subs) != 1 || subs[0].Target != "user-one-chat" {
+		t.Fatalf("other user's channel was changed: %+v", subs)
+	}
+}

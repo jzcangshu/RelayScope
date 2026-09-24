@@ -6,6 +6,44 @@ import (
 	"strings"
 )
 
+// pricingCatalogItemCount reports how many raw catalog entries the pricing
+// body carries, regardless of whether they decode into usable models. It
+// distinguishes a site that publishes no models from one that publishes
+// entries the decoder cannot read.
+func pricingCatalogItemCount(body []byte) int {
+	var value any
+	if json.Unmarshal(body, &value) != nil {
+		return 0
+	}
+	if items := findArray(value, 0); len(items) > 0 {
+		return len(items)
+	}
+	return len(findStringArray(value, 0))
+}
+
+// pricingAPIErrorMessage returns the message of an explicit API-level failure
+// on a 2xx pricing body. NewAPI reports business errors as
+// {"success": false, "message": "..."}; without this check such a response
+// would be mistaken for a site that simply has no models.
+func pricingAPIErrorMessage(body []byte) string {
+	var probe struct {
+		Success *bool  `json:"success"`
+		OK      *bool  `json:"ok"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &probe) != nil {
+		return ""
+	}
+	failed := (probe.Success != nil && !*probe.Success) || (probe.OK != nil && !*probe.OK)
+	if !failed {
+		return ""
+	}
+	if message := strings.TrimSpace(probe.Message); message != "" {
+		return message
+	}
+	return "pricing endpoint reported failure"
+}
+
 func decodePricingModels(body []byte) ([]pricingModel, error) {
 	var value any
 	if err := json.Unmarshal(body, &value); err != nil {

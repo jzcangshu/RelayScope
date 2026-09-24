@@ -73,6 +73,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public dashboard is untouched.
 
 ### Fixed
+- 通知订阅页的配置状态现在一目了然。之前推送目标（Bark key / Chat ID /
+  Webhook）只是一个草稿输入框：没有保存按钮、没有已保存回填、刷新即丢，
+  站点勾选时悄悄把「当时输入框里有什么」当作目标，用户无从确认配置到底存没存好。
+  现在渠道是显式的单一事实来源：打开页面回填已保存的平台与目标，状态行直接写明
+  「✓ 已保存 · Bark …5678 · 1 个站点订阅使用此渠道」，输入即显示
+  「● 有未保存的修改」并点亮「保存渠道」按钮；换 key/换渠道一次应用到全部已订阅站点
+  （待发送队列同步改道），历史不一致的目标在保存时统一。站点订阅改用已保存渠道而非
+  输入框草稿，每行右侧显示 `🔔 …5678` 渠道徽标，未保存渠道时勾选站点会被拦下并提示
+  先保存渠道。
+- 修复 `notification_subscriptions` / `notification_outbox` 时间戳列的扫描错误：
+  `created_at` / `updated_at` 是 INTEGER 毫秒列，`ListUserSubscriptions`、
+  `ListActiveSubscriptionsForSite` 和 `ListPendingNotifications` 却直接 Scan 进
+  `time.Time`。`ListPendingNotifications` 尤其致命——生产 outbox 之前恒为空，
+  第一条真实待推送就会让 dispatcher 的扫描报错并静默跳过整批投递。现在统一先扫 int64
+  再 `time.UnixMilli` 转换（由新测试覆盖）。
+- NewAPI pricing sites now collect announcements. `NewAPIAdapter` never
+  implemented the announcement provider interface, so sites using the
+  `newapi-pricing` adapter (e.g. 小鸡毛的公益API站) never fed the notification
+  outbox — subscribers' Bark/Feishu/Telegram channels only ever received manual
+  test pushes, never automatic ones. The adapter now reads the same `/api/status`
+  timeline (plus `/api/notice` diff and `disabled`) modes the probe adapter uses,
+  through shared collection logic.
+- NewAPI sites that publish an empty pricing catalog (2xx body with a
+  genuinely empty model list, e.g. Ad公益站, which returns vendors but zero
+  price rows) no longer fail the collection run. The adapter now reports a
+  complete empty catalog, so the run is recorded as success and previously
+  seen models are marked unavailable via the missing-catalog path instead of
+  surfacing a misleading "returned no models" error. Catalog entries that
+  exist but carry no usable model name still fail, and an explicit API-level
+  failure on a 2xx body (`{"success": false, "message": …}`) still surfaces
+  as a collection error rather than being mistaken for an empty site.
+- Collection-time HTTP 403 now classifies the site as login expired, matching
+  how the session-refresh path already treated it. Sites that newly require
+  login for their pricing endpoint and reject a stale stored credential with
+  403 (instead of 401) previously showed an opaque "collection failed" with no
+  path to recovery; they now show "登录已失效，请重新同步浏览器登录态" with the
+  import-login-state action, same as a 401.
 - NewAPI probe sites now report every key group and honest 24h timelines.
   The collector ignored the plugin's `token-groups` endpoint, so groups came
   only from pricing `enable_groups` (3 of 8 groups on one site) and models

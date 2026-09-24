@@ -65,23 +65,25 @@ func (adapter ProbeAdapter) CollectAnnouncements(ctx context.Context, site Site,
 
 	switch mode {
 	case "notice_diff":
-		return adapter.collectNoticeDiff(ctx, site, fetcher, statusBaseURL)
+		return collectNewAPINoticeDiff(ctx, fetcher, statusBaseURL)
 	default: // "timeline"
-		return adapter.collectTimeline(ctx, site, fetcher, statusBaseURL, config)
+		statusPath := strings.TrimSpace(config.StatusPath)
+		if statusPath == "" {
+			statusPath = adapter.defaultStatusPath
+		}
+		if statusPath == "" {
+			statusPath = config.PricingStatusPath
+		}
+		if statusPath == "" {
+			statusPath = "/api/status"
+		}
+		return collectNewAPITimeline(ctx, fetcher, statusBaseURL, statusPath)
 	}
 }
 
-func (adapter ProbeAdapter) collectTimeline(ctx context.Context, site Site, fetcher Fetcher, statusBaseURL string, config probeAnnouncementConfig) ([]Announcement, error) {
-	statusPath := strings.TrimSpace(config.StatusPath)
-	if statusPath == "" {
-		statusPath = adapter.defaultStatusPath
-	}
-	if statusPath == "" {
-		statusPath = config.PricingStatusPath
-	}
-	if statusPath == "" {
-		statusPath = "/api/status"
-	}
+// collectNewAPITimeline reads a NewAPI /api/status payload and returns every
+// published announcement. It is shared by the probe and pricing adapters.
+func collectNewAPITimeline(ctx context.Context, fetcher Fetcher, statusBaseURL, statusPath string) ([]Announcement, error) {
 	endpoint, err := resolveSiteURL(statusBaseURL, statusPath)
 	if err != nil {
 		return nil, err
@@ -92,7 +94,7 @@ func (adapter ProbeAdapter) collectTimeline(ctx context.Context, site Site, fetc
 	}
 	var resp newapiStatusResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("decode %s status for announcements: %w", adapter.Key(), err)
+		return nil, fmt.Errorf("decode NewAPI status for announcements: %w", err)
 	}
 	if !resp.Data.AnnouncementsEnabled || len(resp.Data.Announcements) == 0 {
 		return nil, nil
@@ -119,7 +121,9 @@ func (adapter ProbeAdapter) collectTimeline(ctx context.Context, site Site, fetc
 	return anns, nil
 }
 
-func (adapter ProbeAdapter) collectNoticeDiff(ctx context.Context, site Site, fetcher Fetcher, statusBaseURL string) ([]Announcement, error) {
+// collectNewAPINoticeDiff reads the single NewAPI /api/notice payload and
+// returns it as one announcement; the store detects content changes.
+func collectNewAPINoticeDiff(ctx context.Context, fetcher Fetcher, statusBaseURL string) ([]Announcement, error) {
 	endpoint, err := resolveSiteURL(statusBaseURL, "/api/notice")
 	if err != nil {
 		return nil, err
@@ -138,8 +142,6 @@ func (adapter ProbeAdapter) collectNoticeDiff(ctx context.Context, site Site, fe
 	if notice == "" {
 		return nil, nil
 	}
-	// Use a stable external ID since there's only one notice.
-	// Content hash changes will be detected by the store layer.
 	return []Announcement{{
 		ExternalID:  "__notice__",
 		Content:     notice,
@@ -166,6 +168,41 @@ func parseNewAPITime(value string) time.Time {
 		return t.UTC()
 	}
 	return time.Time{}
+}
+
+// CollectAnnouncements implements AnnouncementProvider for NewAPIAdapter.
+// NewAPI pricing sites publish announcements through the same /api/status
+// timeline the probe adapter reads, so the site the user subscribes to (for
+// example 小鸡毛的公益API站) now feeds the notification outbox as well.
+//
+// Modes mirror the probe adapter: "timeline" (default), "notice_diff", and
+// "disabled".
+func (adapter NewAPIAdapter) CollectAnnouncements(ctx context.Context, site Site, fetcher Fetcher) ([]Announcement, error) {
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return nil, fmt.Errorf("apply %s config defaults: %w", adapter.Key(), err)
+	}
+	var config NewAPIConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return nil, fmt.Errorf("decode %s announcement config: %w", adapter.Key(), err)
+	}
+
+	mode := strings.TrimSpace(config.AnnouncementMode)
+	if mode == "" {
+		mode = "timeline"
+	}
+	if mode == "disabled" {
+		return nil, nil
+	}
+
+	statusPath := strings.TrimSpace(config.PricingStatusPath)
+	if statusPath == "" {
+		statusPath = "/api/status"
+	}
+	if mode == "notice_diff" {
+		return collectNewAPINoticeDiff(ctx, fetcher, site.BaseURL)
+	}
+	return collectNewAPITimeline(ctx, fetcher, site.BaseURL, statusPath)
 }
 
 // --- Sub2MonitorAdapter announcement implementation ---

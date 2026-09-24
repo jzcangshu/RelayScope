@@ -45,6 +45,16 @@ func TestClassifyFetchErrorDistinguishesLoginExpiryFromTransientFailure(t *testi
 			want: "login_expired",
 		},
 		{
+			name: "collection-time forbidden is login expiry",
+			err:  &adapter.FetchError{StatusCode: http.StatusForbidden, Err: errors.New("fetch returned HTTP 403")},
+			want: "login_expired",
+		},
+		{
+			name: "not found stays a collection failure",
+			err:  &adapter.FetchError{StatusCode: http.StatusNotFound, Err: errors.New("fetch returned HTTP 404")},
+			want: "adapter_collect_failed",
+		},
+		{
 			name: "server error refresh is transient collection failure",
 			err:  errors.New("refresh returned HTTP 503"),
 			want: "adapter_collect_failed",
@@ -387,6 +397,35 @@ func TestCollectSiteAcceptsIntentionalEmptyCatalog(t *testing.T) {
 	}
 	if state != domain.AcquisitionFresh {
 		t.Fatalf("acquisition state after empty catalog = %q, want fresh", state)
+	}
+}
+
+func TestCollectSiteRecordsSuccessForEmptyPricingCatalog(t *testing.T) {
+	t.Parallel()
+
+	dbStore := openCollectorStore(t)
+	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "empty", BaseURL: "https://empty.test", SourceURL: "https://empty.test/pricing", AdapterKey: "newapi-pricing", AdapterConfig: `{}`, Enabled: true, Interval: 20 * time.Minute})
+	if err != nil {
+		t.Fatalf("create site: %v", err)
+	}
+	registry, err := adapter.NewRegistry(adapter.NewAPIAdapter{})
+	if err != nil {
+		t.Fatalf("registry: %v", err)
+	}
+	// Ad公益站 shape: 2xx body, vendors present, zero models published.
+	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fakeJSONFetcher{body: []byte(`{"auto_groups":[],"data":[],"group_ratio":{},"success":true,"vendors":[{"id":1,"name":"DeepSeek"}]}`)}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatalf("collector: %v", err)
+	}
+	if err := collector.CollectSite(context.Background(), site, time.Now().UTC()); err != nil {
+		t.Fatalf("collect site with empty catalog: %v", err)
+	}
+	runs, err := dbStore.ListCollectionRuns(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("list runs: %v", err)
+	}
+	if len(runs) != 1 || runs[0].Status != "success" {
+		t.Fatalf("run status = %+v, want success", runs)
 	}
 }
 

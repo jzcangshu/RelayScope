@@ -17,6 +17,7 @@ type NewAPIConfig struct {
 	PricingStatusPath string `json:"pricingStatusPath"`
 	AvailabilityMode  string `json:"availabilityMode"`
 	PricingNeedsLogin bool   `json:"pricingRequiresSession"`
+	AnnouncementMode  string `json:"announcementMode"`
 }
 
 type NewAPIAdapter struct {
@@ -26,7 +27,7 @@ type NewAPIAdapter struct {
 func (NewAPIAdapter) Key() string         { return "newapi-pricing" }
 func (NewAPIAdapter) DisplayName() string { return "NewAPI 模型广场" }
 func (NewAPIAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"pricingPath":{"type":"string","default":"/api/pricing"},"summaryPath":{"type":"string","default":"/api/perf-metrics/summary"},"detailPath":{"type":"string","default":"/api/perf-metrics"},"windowHours":{"type":"integer","minimum":1,"maximum":72,"default":24},"catalogPageSize":{"type":"integer","minimum":1,"maximum":1000,"default":1000},"skipDetails":{"type":"boolean","default":false},"pricingAdapter":{"type":"string","default":"newapi"},"pricingStatusPath":{"type":"string","default":"/api/status"},"availabilityMode":{"type":"string","enum":["metrics","presence"]},"pricingRequiresSession":{"type":"boolean"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"pricingPath":{"type":"string","default":"/api/pricing"},"summaryPath":{"type":"string","default":"/api/perf-metrics/summary"},"detailPath":{"type":"string","default":"/api/perf-metrics"},"windowHours":{"type":"integer","minimum":1,"maximum":72,"default":24},"catalogPageSize":{"type":"integer","minimum":1,"maximum":1000,"default":1000},"skipDetails":{"type":"boolean","default":false},"pricingAdapter":{"type":"string","default":"newapi"},"pricingStatusPath":{"type":"string","default":"/api/status"},"availabilityMode":{"type":"string","enum":["metrics","presence"]},"pricingRequiresSession":{"type":"boolean"},"announcementMode":{"type":"string","enum":["timeline","notice_diff","disabled"],"default":"timeline"}}}`)
 }
 
 type pricingModel struct {

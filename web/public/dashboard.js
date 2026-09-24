@@ -1741,7 +1741,7 @@ function handleCustomizeClick(event) {
     const prev = notifyPlatform;
     notifyPlatform = target.dataset.value;
     closeNotifyPlatformDropdown();
-    if (prev !== notifyPlatform) renderCustomizeNotify();
+    if (prev !== notifyPlatform) { notifyChannelDirty = true; renderCustomizeNotify(); }
     return;
   }
 
@@ -2035,7 +2035,7 @@ customizeNotifyPanel.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowUp') { event.preventDefault(); options[Math.max(idx - 1, 0)]?.focus(); }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      if (idx >= 0) { notifyPlatform = options[idx].dataset.value; closeNotifyPlatformDropdown(); renderCustomizeNotify(); }
+      if (idx >= 0) { notifyPlatform = options[idx].dataset.value; notifyChannelDirty = true; closeNotifyPlatformDropdown(); renderCustomizeNotify(); }
     }
     if (event.key === 'Escape') { closeNotifyPlatformDropdown(); customizeNotifyPanel.querySelector('[data-notify-platform-trigger]')?.focus(); }
     if (event.key === 'Tab') closeNotifyPlatformDropdown();
@@ -2268,6 +2268,40 @@ const NOTIFY_PLATFORMS = [
   { key: 'bark', label: 'Bark', icon: '🔔', placeholder: '设备 Key' },
 ];
 let notifyPlatform = 'telegram';
+// 渠道输入框是否有未保存的修改（输入或切换平台都会置脏；保存后清掉）
+let notifyChannelDirty = false;
+
+// 从已有订阅里推出“当前生效的渠道”：按 platform+target 计数取众数。
+// 返回 null 表示用户还没保存过任何渠道——此时不允许订阅站点。
+function notifySavedChannel() {
+  if (!notifySubscriptions.length) return null;
+  const counts = new Map();
+  for (const sub of notifySubscriptions) {
+    const key = sub.platform + '|' + sub.target;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let best = null, bestCount = 0;
+  for (const [key, count] of counts) {
+    if (count > bestCount) { best = key; bestCount = count; }
+  }
+  const sep = best.indexOf('|');
+  return {
+    platform: sep < 0 ? notifyPlatform : best.slice(0, sep),
+    target: sep < 0 ? '' : best.slice(sep + 1),
+    count: bestCount,
+    distinctTargets: counts.size,
+  };
+}
+
+// 脱敏显示目标：只露尾 4 位，用户能确认“是我那个 key”又不泄露全文
+function maskNotifyTarget(target) {
+  if (!target) return '';
+  return target.length <= 4 ? target : '…' + target.slice(-4);
+}
+
+function platformLabel(key) {
+  return NOTIFY_PLATFORMS.find(p => p.key === key)?.label || key;
+}
 
 function renderCustomizeNotify() {
   if (!currentUser) {
@@ -2296,7 +2330,15 @@ function renderCustomizeNotify() {
   html += '</div>';
   html += '<p class="pref-desc">订阅站点公告更新，第一时间收到推送通知。</p>';
 
-  // Platform config
+  // Platform config —— 渠道是第一步：必须先显式保存，站点订阅才能用上它
+  const saved = notifySavedChannel();
+  // 未编辑时，平台与输入框都回填已保存的渠道，让用户一眼看到“现在生效的是这个”
+  if (!notifyChannelDirty && saved) {
+    notifyPlatform = saved.platform;
+  }
+  const dirtyInput = customizeNotifyPanel.querySelector('#notify-target')?.value ?? '';
+  const currentValue = notifyChannelDirty ? dirtyInput : (saved?.target ?? '');
+
   html += '<div class="notify-platform-section">';
   html += '<div class="notify-platform-row">';
   const plat = NOTIFY_PLATFORMS.find(p => p.key === notifyPlatform) || NOTIFY_PLATFORMS[0];
@@ -2312,16 +2354,19 @@ function renderCustomizeNotify() {
     html += '</button>';
   }
   html += '</div></div></div>';
-  html += '<label class="notify-field notify-field--flex"><span class="notify-field-label">推送目标</span><input id="notify-target" class="notify-input" type="text" placeholder="' + plat.placeholder + '"></label>';
+  html += `<label class="notify-field notify-field--flex"><span class="notify-field-label">推送目标</span><input id="notify-target" class="notify-input" type="text" value="${escapeHTML(currentValue)}" placeholder="${plat.placeholder}" autocomplete="off" spellcheck="false"></label>`;
   html += '</div>';
-  html += '<div class="notify-test-row"><span class="notify-test-hint">订阅前先验证渠道是否可达</span><button type="button" class="btn btn-primary btn-sm" data-notify-test>测试推送</button></div>';
+  html += '<div class="notify-channel-status" data-notify-channel-status></div>';
+  const canSave = notifyChannelDirty && currentValue.trim() !== '';
+  html += `<div class="notify-channel-actions"><span class="notify-test-hint">保存前可先测试当前填写值</span><button type="button" class="btn btn-sm" data-notify-test>测试推送</button><button type="button" class="btn btn-primary btn-sm" data-notify-channel-save ${canSave ? '' : 'disabled'}>保存渠道</button></div>`;
   html += '</div>';
   html += '</section>';
 
   // Site list
   html += '<section class="pref-section">';
   const allSelected = uniqueSites.length > 0 && uniqueSites.every(([siteId]) => subscribedSiteIds.has(siteId));
-  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点</span><button type="button" class="pref-reset" data-notify-select-all>${allSelected ? '全不选' : '全选'}</button></div>`;
+  const channelSummary = saved ? ` · 渠道 ${platformLabel(saved.platform)} ${maskNotifyTarget(saved.target)}` : ' · 请先保存渠道';
+  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点${channelSummary}</span><button type="button" class="pref-reset" data-notify-select-all>${allSelected ? '全不选' : '全选'}</button></div>`;
   for (const [siteId, siteName] of uniqueSites) {
     const isSubscribed = subscribedSiteIds.has(siteId);
     const sub = notifySubscriptions.find(s => s.siteId === siteId);
@@ -2331,7 +2376,8 @@ function renderCustomizeNotify() {
     html += `<span class="notify-site-avatar">${escapeHTML(siteName[0])}</span>`;
     html += `<span class="notify-site-name">${escapeHTML(siteName)}</span>`;
     if (isSubscribed && sub) {
-      html += `<span class="notify-site-platform">${NOTIFY_PLATFORMS.find(p => p.key === sub.platform)?.icon || '📢'}</span>`;
+      const subPlat = NOTIFY_PLATFORMS.find(p => p.key === sub.platform);
+      html += `<span class="notify-site-channel" title="${escapeHTML(platformLabel(sub.platform))} · ${escapeHTML(sub.target)}">${subPlat?.icon || '📢'} ${escapeHTML(maskNotifyTarget(sub.target))}</span>`;
     }
     html += '</label>';
   }
@@ -2345,13 +2391,78 @@ function renderCustomizeNotify() {
 
   html += '</div>';
   customizeNotifyPanel.innerHTML = html;
+  updateNotifyChannelStatus();
 
   // Event: site checkbox toggle
   customizeNotifyPanel.querySelectorAll('.notify-site-check').forEach(cb => {
     cb.addEventListener('change', () => handleSiteToggle(cb.dataset.siteId, cb.checked));
   });
+  // 输入只置脏 + 局部刷新状态行，不整页重渲染（否则输入框会丢焦点）
+  customizeNotifyPanel.querySelector('#notify-target')?.addEventListener('input', () => {
+    notifyChannelDirty = true;
+    updateNotifyChannelStatus();
+  });
   customizeNotifyPanel.querySelector('[data-notify-test]')?.addEventListener('click', handleNotifyTest);
+  customizeNotifyPanel.querySelector('[data-notify-channel-save]')?.addEventListener('click', handleNotifyChannelSave);
   customizeNotifyPanel.querySelector('[data-notify-select-all]')?.addEventListener('click', handleNotifySelectAll);
+}
+
+// 渠道状态行：不重渲染，只更新文本/按钮，避免输入时丢焦点
+function updateNotifyChannelStatus() {
+  const statusEl = customizeNotifyPanel.querySelector('[data-notify-channel-status]');
+  const saveBtn = customizeNotifyPanel.querySelector('[data-notify-channel-save]');
+  if (!statusEl) return;
+  const saved = notifySavedChannel();
+  const value = customizeNotifyPanel.querySelector('#notify-target')?.value?.trim() ?? '';
+  let text = '', cls = 'notify-channel-status';
+  if (!saved) {
+    text = '尚未保存任何推送渠道 —— 填写目标并保存后，再订阅站点';
+    cls += ' notify-channel-status--hint';
+  } else if (notifyChannelDirty) {
+    if (saved.distinctTargets > 1) {
+      text = `● 有未保存的修改 —— 现有订阅存在 ${saved.distinctTargets} 个不同目标，保存后将统一为当前填写值`;
+    } else {
+      text = '● 有未保存的修改 —— 保存后才会应用到已订阅站点';
+    }
+    cls += ' notify-channel-status--dirty';
+  } else {
+    text = `✓ 已保存 · ${platformLabel(saved.platform)} ${maskNotifyTarget(saved.target)} · ${saved.count} 个站点订阅使用此渠道`;
+    cls += ' notify-channel-status--saved';
+  }
+  statusEl.className = cls;
+  statusEl.textContent = text;
+  if (saveBtn) saveBtn.disabled = !(notifyChannelDirty && value !== '');
+}
+
+// 保存渠道：把平台+目标统一写入用户名下全部订阅，待发送队列同步改道
+async function handleNotifyChannelSave(event) {
+  const button = event.currentTarget;
+  const target = customizeNotifyPanel.querySelector('#notify-target')?.value?.trim();
+  const platform = notifyPlatform || 'telegram';
+  if (!target) { showToast('请先填写推送目标', 'error'); return; }
+  button.disabled = true;
+  try {
+    const resp = await fetch('/api/v1/me/notification-subscriptions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, target })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.message || '保存渠道失败', 'error');
+      updateNotifyChannelStatus();
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    notifyChannelDirty = false;
+    await loadNotifySubscriptions();
+    renderCustomizeNotify();
+    const n = data.updated ?? 0;
+    showToast(n > 0 ? `渠道已保存 · 已应用到 ${n} 个订阅` : '渠道已保存', 'success');
+  } catch {
+    showToast('保存渠道失败', 'error');
+    updateNotifyChannelStatus();
+  }
 }
 
 // 测试推送：向当前填写的渠道目标同步发送一条验证消息
@@ -2382,14 +2493,13 @@ async function handleNotifyTest(event) {
   }
 }
 
-// 全选/全不选：逐个调用订阅接口，免费额度门禁照常生效
+// 全选/全不选：用已保存的渠道逐个调用订阅接口，免费额度门禁照常生效
 async function handleNotifySelectAll() {
   const isMember = membershipIs() === 'active';
   const uniqueSites = [...new Map(rows.map(r => [r.siteId, r.siteName])).keys()];
   const subscribed = new Set(notifySubscriptions.map(s => s.siteId));
   const allSelected = uniqueSites.length > 0 && uniqueSites.every(id => subscribed.has(id));
-  const target = document.querySelector('#notify-target')?.value?.trim();
-  const platform = notifyPlatform || 'telegram';
+  const saved = notifySavedChannel();
 
   if (allSelected) {
     let removed = 0;
@@ -2406,10 +2516,11 @@ async function handleNotifySelectAll() {
     return;
   }
 
-  if (!target) {
-    showToast('请先填写推送目标', 'error');
+  if (!saved) {
+    showToast('请先保存推送渠道，再订阅站点', 'error');
     return;
   }
+  const { platform, target } = saved;
   let added = 0;
   let failed = false;
   for (const siteId of uniqueSites) {
@@ -2438,10 +2549,15 @@ async function handleNotifySelectAll() {
 async function handleSiteToggle(siteId, checked) {
   siteId = Number(siteId);
   const isMember = membershipIs() === 'active';
-  const platform = notifyPlatform || 'telegram';
-  const target = document.querySelector('#notify-target')?.value?.trim();
 
   if (checked) {
+    // 订阅用的是已保存的渠道，而不是输入框里的草稿——这样“保存渠道”才是唯一事实来源
+    const saved = notifySavedChannel();
+    if (!saved) {
+      showToast('请先保存推送渠道，再订阅站点', 'error');
+      renderCustomizeNotify();
+      return;
+    }
     // Check limit
     if (!isMember) {
       const uniqueSites = new Set(notifySubscriptions.map(s => s.siteId));
@@ -2452,12 +2568,7 @@ async function handleSiteToggle(siteId, checked) {
         return;
       }
     }
-    // Need target
-    if (!target) {
-      showToast('请先填写推送目标', 'error');
-      renderCustomizeNotify();
-      return;
-    }
+    const { platform, target } = saved;
     try {
       const resp = await fetch('/api/v1/me/notification-subscriptions', {
         method: 'POST',
@@ -2465,7 +2576,7 @@ async function handleSiteToggle(siteId, checked) {
         body: JSON.stringify({ siteId, platform, target })
       });
       if (!resp.ok) { const err = await resp.json().catch(() => ({})); showToast(err.message || '订阅失败', 'error'); renderCustomizeNotify(); return; }
-      showToast('已订阅', 'success');
+      showToast(`已订阅 · 推送到 ${platformLabel(platform)}（${maskNotifyTarget(target)}）`, 'success');
       await loadNotifySubscriptions();
       renderCustomizeNotify();
     } catch { showToast('订阅失败', 'error'); renderCustomizeNotify(); }
