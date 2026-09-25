@@ -89,6 +89,48 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]any{"members": members})
 	})))
 
+	// 会员身份：支持按 LinuxDO ID 预登记；用户登录时通过同一 ID 自动匹配
+	mux.Handle("PUT /api/v1/admin/members/{id}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			writeError(writer, http.StatusBadRequest, "无效的 LinuxDO ID")
+			return
+		}
+		var payload struct {
+			ExpiresAt string `json:"expiresAt"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8<<10)).Decode(&payload); err != nil || strings.TrimSpace(payload.ExpiresAt) == "" {
+			writeError(writer, http.StatusBadRequest, "请填写会员到期时间")
+			return
+		}
+		expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.ExpiresAt))
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, "到期时间格式错误")
+			return
+		}
+		member, err := options.Store.SetMembershipByExternalID(request.Context(), store.ProviderLinuxDO, strconv.FormatInt(id, 10), &expiresAt)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(writer, map[string]any{"member": member})
+	}))))
+
+	// 会员身份：清除有效期但保留用户/预登记记录
+	mux.Handle("DELETE /api/v1/admin/members/{id}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			writeError(writer, http.StatusBadRequest, "无效的 LinuxDO ID")
+			return
+		}
+		member, err := options.Store.SetMembershipByExternalID(request.Context(), store.ProviderLinuxDO, strconv.FormatInt(id, 10), nil)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(writer, map[string]any{"member": member})
+	}))))
+
 	// 兑换码：批量生成
 	mux.Handle("POST /api/v1/admin/redeem-codes", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload struct {

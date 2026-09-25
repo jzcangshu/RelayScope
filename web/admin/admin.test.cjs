@@ -229,3 +229,14 @@ test('admin console exposes membership and wish management tabs', () => {
   assert.match(script, /URL\.createObjectURL/);
   assert.doesNotMatch(script, /window\.prompt/);
 });
+
+test('admin console can manage and pre-register memberships by LinuxDO ID', () => {
+  assert.match(html, /id="member-manage-form"/);
+  assert.match(html, /id="member-id"/);
+  assert.match(html, /id="member-expiry"/);
+  assert.match(html, /预登记/);
+  assert.match(script, /\/api\/v1\/admin\/members\/\$\{encodeURIComponent/);
+  assert.match(script, /data-member-edit/);
+  assert.match(script, /data-member-remove/);
+  assert.match(script, /m\.registered/);
+});

@@ -71,6 +71,9 @@ func (store *Store) migrate(ctx context.Context) error {
 	if err := store.ensureSiteSchema(ctx); err != nil {
 		return err
 	}
+	if err := store.ensureUserSchema(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -130,6 +133,52 @@ func (store *Store) ensureSiteSchema(ctx context.Context) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit sites schema reconciliation: %w", err)
+	}
+	return nil
+}
+
+func (store *Store) ensureUserSchema(ctx context.Context) error {
+	rows, err := store.db.QueryContext(ctx, `PRAGMA table_info(users)`)
+	if err != nil {
+		return fmt.Errorf("inspect users schema: %w", err)
+	}
+	columns := make(map[string]struct{})
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return fmt.Errorf("read users schema: %w", err)
+		}
+		columns[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate users schema: %w", err)
+	}
+	rows.Close()
+	if len(columns) == 0 {
+		return nil
+	}
+	if _, ok := columns["registered_at"]; ok {
+		return nil
+	}
+
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin users schema reconciliation: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE users ADD COLUMN registered_at INTEGER`); err != nil {
+		return fmt.Errorf("add users.registered_at: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET registered_at = created_at WHERE registered_at IS NULL`); err != nil {
+		return fmt.Errorf("seed users.registered_at: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit users schema reconciliation: %w", err)
 	}
 	return nil
 }

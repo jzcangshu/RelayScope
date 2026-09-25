@@ -84,7 +84,7 @@ func (registry *Registry) Decode(key string, pricingBody, statusBody []byte) (Ca
 }
 
 func DefaultRegistry() *Registry {
-	registry, err := NewRegistry(NewAPIDecoder{}, ModelMarketDecoder{})
+	registry, err := NewRegistry(NewAPIDecoder{}, ModelMarketDecoder{}, ModelPlazaDecoder{})
 	if err != nil {
 		panic(err)
 	}

@@ -399,6 +399,7 @@ dialog.compact-dialog { width: min(520px, calc(100vw - 40px)); }
 .admin-table .mono { font-family: var(--font-data, ui-monospace, monospace); font-size: var(--font-caption); }
 .admin-table .wish-target-input { width: 90px; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; }
 .admin-table .wish-actions { display: flex; gap: 6px; }
+#members-list td:last-child { display: flex; gap: 6px; }
 .code-block {
   margin: 0;
   padding: 14px 16px;

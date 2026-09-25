@@ -18,7 +18,7 @@ const (
 	defaultDataDir             = "data"
 	defaultShutdownPeriod      = 10 * time.Second
 	defaultHTTPConcurrency     = 3
-	defaultCollectionTimeout   = 3 * time.Minute
+	defaultCollectionTimeout   = 7 * time.Minute
 	defaultHTTPTimeout         = 20 * time.Second
 	defaultMaintenanceInterval = 30 * time.Minute
 )
@@ -41,11 +41,11 @@ type Config struct {
 	PayPID               string
 	PayKey               string
 	// Notification push
-	TelegramToken   string
-	FeishuWebhook   string
-	FeishuSecret    string
-	BarkKey         string
-	BarkBaseURL     string
+	TelegramToken string
+	FeishuWebhook string
+	FeishuSecret  string
+	BarkKey       string
+	BarkBaseURL   string
 }
 
 func Load() (Config, error) {

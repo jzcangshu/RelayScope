@@ -389,8 +389,34 @@ func TestAdminMembershipEndpoints(t *testing.T) {
 	if value, _ := db.GetSetting(context.Background(), "wish_default_target_ldc", "30"); value != "50" {
 		t.Fatalf("setting should persist, got %q", value)
 	}
+	// LD ID 预登记会员：用户未登录时先写入，同一 ID 登录后自动匹配
+	const expiresAt = "2030-01-02T15:04:05Z"
+	if put := adminWrite(http.MethodPut, "/api/v1/admin/members/42", `{"expiresAt":"`+expiresAt+`"}`); put.StatusCode != http.StatusOK {
+		t.Fatalf("member pre-registration = %d", put.StatusCode)
+	}
+	preRegistered, err := db.GetMemberByExternalID(context.Background(), store.ProviderLinuxDO, "42")
+	if err != nil || preRegistered.Registered || preRegistered.MembershipExpiresAt == nil {
+		t.Fatalf("member should be pre-registered: %+v err=%v", preRegistered, err)
+	}
+	if _, err := db.UpsertUser(context.Background(), store.ProviderLinuxDO, "42", "tester", "Tester", "", 2); err != nil {
+		t.Fatal(err)
+	}
+	registered, err := db.GetMemberByExternalID(context.Background(), store.ProviderLinuxDO, "42")
+	if err != nil || !registered.Registered || registered.MembershipExpiresAt == nil {
+		t.Fatalf("LD login should match pre-registration: %+v err=%v", registered, err)
+	}
+	if listed := adminGet("/api/v1/admin/members"); listed.StatusCode != http.StatusOK {
+		t.Fatalf("member list status = %d", listed.StatusCode)
+	}
+	if removed := adminWrite(http.MethodDelete, "/api/v1/admin/members/42", `{}`); removed.StatusCode != http.StatusOK {
+		t.Fatalf("member remove = %d", removed.StatusCode)
+	}
+	removedMember, err := db.GetMemberByExternalID(context.Background(), store.ProviderLinuxDO, "42")
+	if err != nil || removedMember.MembershipExpiresAt != nil {
+		t.Fatalf("membership should be removed: %+v err=%v", removedMember, err)
+	}
 	// 许愿管理
-	user, _ := db.UpsertUser(context.Background(), "linuxdo", "42", "tester", "Tester", "", 2)
+	user, _ := db.UpsertUser(context.Background(), store.ProviderLinuxDO, "42", "tester", "Tester", "", 2)
 	wish, _ := db.CreateWishSite(context.Background(), user.ID, "目标站", "https://t.example.com", true, 30)
 	if listed := adminGet("/api/v1/admin/wishes"); listed.StatusCode != http.StatusOK {
 		t.Fatalf("admin wishes status = %d", listed.StatusCode)

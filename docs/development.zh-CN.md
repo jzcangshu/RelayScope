@@ -40,7 +40,7 @@
 | `RELAYSCOPE_PAY_PID` | 空 | LDC 支付商户 ID；与密钥成对配置后启用会员直充与许愿助力 |
 | `RELAYSCOPE_PAY_KEY` | 空 | LDC 支付商户密钥；只保存在受保护的部署配置中 |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作的最大并发数（1-32） |
-| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集的超时时间 |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `7m` | 单站点计划采集的超时时间 |
 | `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |
 | `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | 历史清理间隔（最小 1m） |
 

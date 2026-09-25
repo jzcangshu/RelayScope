@@ -142,20 +142,23 @@ func run() error {
 	if cfg.PayPID != "" && cfg.PayKey != "" {
 		payProvider = epay.New(epay.Config{Gateway: cfg.PayGateway, PID: cfg.PayPID, Key: cfg.PayKey})
 	}
+	stopContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	handler, err := httpserver.NewHandler(httpserver.Options{
-		Logger:       logger,
-		Version:      version,
-		Commit:       commit,
-		BuildDate:    buildDate,
-		Store:        dbStore,
-		Auth:         auth,
-		Collector:    siteCollector,
-		SessionVault: sessionVault,
-		PublicURL:    cfg.PublicURL,
-		SessionSync:  session.NewSyncManager(time.Now),
-		LinuxDO:      linuxdo.New(linuxdo.Config{ClientID: cfg.OAuthClientID, ClientSecret: cfg.OAuthClientSecret, CallbackURL: cfg.PublicURL + "/api/v1/auth/linuxdo/callback"}, dbStore),
-		Payment:      payProvider,
-		Notifiers:    notifDispatcher.Senders(),
+		Logger:                  logger,
+		Version:                 version,
+		Commit:                  commit,
+		BuildDate:               buildDate,
+		Store:                   dbStore,
+		Auth:                    auth,
+		Collector:               siteCollector,
+		ManualCollectionContext: stopContext,
+		SessionVault:            sessionVault,
+		PublicURL:               cfg.PublicURL,
+		SessionSync:             session.NewSyncManager(time.Now),
+		LinuxDO:                 linuxdo.New(linuxdo.Config{ClientID: cfg.OAuthClientID, ClientSecret: cfg.OAuthClientSecret, CallbackURL: cfg.PublicURL + "/api/v1/auth/linuxdo/callback"}, dbStore),
+		Payment:                 payProvider,
+		Notifiers:               notifDispatcher.Senders(),
 	})
 	if err != nil {
 		return fmt.Errorf("build HTTP handler: %w", err)
@@ -166,7 +169,7 @@ func run() error {
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      2 * time.Minute,
+		WriteTimeout:      8 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 	}
 
@@ -176,8 +179,6 @@ func run() error {
 		serverErrors <- server.ListenAndServe()
 	}()
 
-	stopContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	go runMaintenance(stopContext, dbStore, logger, cfg.MaintenanceInterval)
 	siteScheduler.Start(stopContext)
 	notifDispatcher.Start(stopContext)

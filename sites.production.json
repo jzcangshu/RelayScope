@@ -421,5 +421,17 @@
     "adapter": "newapi-pricing",
     "adapter_config": {},
     "session_required": false
+  },
+  {
+    "name": "虾蹬王",
+    "base_url": "https://api.kunyou.asia",
+    "source_url": "https://api.kunyou.asia/monitor",
+    "adapter": "sub2api-monitor",
+    "adapter_config": {
+      "monitorPath": "/api/v1/channel-monitors",
+      "pricingAdapter": "model-plaza",
+      "pricingPath": "/api/v1/model-plaza"
+    },
+    "session_required": true
   }
 ]

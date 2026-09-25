@@ -536,7 +536,7 @@ async function collectSite(id) {
   toast(`正在采集“${site?.name || id}”…`);
   renderSites();
   try {
-    const response = await fetch(`/api/v1/admin/sites/${id}/collect`, { method: 'POST', headers: { 'X-CSRF-Token': csrf() }, signal: AbortSignal.timeout(240000) });
+    const response = await fetch(`/api/v1/admin/sites/${id}/collect`, { method: 'POST', headers: { 'X-CSRF-Token': csrf() }, signal: AbortSignal.timeout(480000) });
     if (response.ok) toast('采集完成', 'success');
     else toast(await errorMessage(response, '采集失败，已保留上次成功数据'), 'error');
   } catch { toast('连接中断，采集可能仍在执行。请刷新采集记录确认。', 'error'); }
@@ -773,6 +773,13 @@ function formatExpiry(expiresAt) {
   if (diff < 7 * 86400000) return date + `（${Math.ceil(diff / 86400000)} 天后）`;
   return date;
 }
+function formatDateTimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 async function loadMembers() {
   const data = await readJSON('/api/v1/admin/members');
   const members = data.members || [];
@@ -788,14 +795,50 @@ async function loadMembers() {
     const status = m.active
       ? '<span class="chip status-paid">有效</span>'
       : '<span class="chip status-refunded">已过期</span>';
+    const expiry = formatDateTimeLocal(m.membershipExpiresAt);
     return `<tr>
+      <td class="mono">${escapeHTML(String(m.externalId))}</td>
       <td><strong>${escapeHTML(m.name || m.username)}</strong>${m.name ? `<small class="muted"> @${escapeHTML(m.username)}</small>` : ''}</td>
       <td>${TRUST_LEVEL_LABELS[m.trustLevel] || 'L' + m.trustLevel}</td>
+      <td>${m.registered ? '已注册' : '<span class="muted">预登记</span>'}</td>
       <td>${formatExpiry(m.membershipExpiresAt)}</td>
       <td>${status}</td>
+      <td><button type="button" class="btn btn-ghost" data-member-edit="${escapeHTML(String(m.externalId))}" data-member-expiry="${escapeHTML(expiry)}">编辑</button><button type="button" class="btn btn-ghost" data-member-remove="${escapeHTML(String(m.externalId))}">移除会员</button></td>
     </tr>`;
   }).join('');
 }
+
+$('#member-manage-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  await submitForm(event.currentTarget, '正在保存…', async () => {
+    const id = $('#member-id').value.trim();
+    const expiry = $('#member-expiry').value;
+    if (!id || !expiry || Number(id) <= 0) throw new Error('请填写有效的 LinuxDO ID 和会员到期时间。');
+    const expiresAt = new Date(expiry);
+    if (Number.isNaN(expiresAt.getTime())) throw new Error('会员到期时间无效。');
+    await saveRequest(`/api/v1/admin/members/${encodeURIComponent(id)}`, 'PUT', { expiresAt: expiresAt.toISOString() });
+    event.currentTarget.reset();
+    toast('会员身份已保存', 'success');
+    await loadMembers();
+  });
+});
+
+$('#members-list').addEventListener('click', (event) => {
+  const edit = event.target.closest('[data-member-edit]');
+  const remove = event.target.closest('[data-member-remove]');
+  if (edit) {
+    $('#member-id').value = edit.dataset.memberEdit;
+    $('#member-expiry').value = edit.dataset.memberExpiry;
+    $('#member-id').focus();
+  } else if (remove) {
+    runAction(remove, async () => {
+      if (!window.confirm('移除这个会员的有效期？用户或预登记记录会保留。')) return;
+      await saveRequest(`/api/v1/admin/members/${encodeURIComponent(remove.dataset.memberRemove)}`, 'DELETE');
+      toast('会员有效期已移除', 'success');
+      await loadMembers();
+    });
+  }
+});
 
 function renderRedeemCodes() {
   $('#redeem-list').innerHTML = redeemCodes.length ? redeemCodes.map((code) => '<tr>' +

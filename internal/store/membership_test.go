@@ -101,6 +101,79 @@ func TestUserSessionPersistenceAcrossReopen(t *testing.T) {
 	}
 }
 
+func TestSetMembershipByExternalIDPreRegistersUser(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	expiry := time.Now().UTC().AddDate(1, 0, 0).Truncate(time.Millisecond)
+
+	member, err := db.SetMembershipByExternalID(ctx, "linuxdo", "42", &expiry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if member.ExternalID != "42" || member.Registered {
+		t.Fatalf("pre-registered member should be identified but unregistered: %+v", member)
+	}
+	if member.MembershipExpiresAt == nil || !member.MembershipExpiresAt.Equal(expiry) {
+		t.Fatalf("pre-registered membership should keep exact expiry, got %+v", member)
+	}
+
+	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Username != "tester" || user.RegisteredAt == nil {
+		t.Fatalf("LD login should complete pre-registration: %+v", user)
+	}
+	membership, err := db.GetMembership(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !membership.Active || membership.ExpiresAt == nil || !membership.ExpiresAt.Equal(expiry) {
+		t.Fatalf("LD login should preserve membership expiry: %+v", membership)
+	}
+
+	members, err := db.ListMembers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 || members[0].ExternalID != "42" || !members[0].Registered {
+		t.Fatalf("members list should describe matched user: %+v", members)
+	}
+
+	member, err = db.SetMembershipByExternalID(ctx, "linuxdo", "42", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if member.MembershipExpiresAt != nil {
+		t.Fatalf("membership should be removable, got %+v", member)
+	}
+}
+
+func TestUserSchemaReconciliationWhenSchemaVersionIsHigh(t *testing.T) {
+	db := newTestStore(t)
+	ctx := context.Background()
+	user, err := db.UpsertUser(ctx, ProviderLinuxDO, "42", "tester", "Tester", "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.ExecContext(ctx, `ALTER TABLE users DROP COLUMN registered_at`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.ExecContext(ctx, `UPDATE app_meta SET value = '999' WHERE key = 'schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	reconciled, err := db.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reconciled.RegisteredAt == nil {
+		t.Fatalf("existing users should be marked registered, got %+v", reconciled)
+	}
+}
+
 func TestUserSessionLifecycle(t *testing.T) {
 	db := newTestStore(t)
 	ctx := context.Background()

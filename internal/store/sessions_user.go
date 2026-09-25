@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"time"
 )
@@ -25,13 +26,15 @@ func (s *Store) CreateUserSession(ctx context.Context, token string, userID int6
 func (s *Store) UserSessionUser(ctx context.Context, token string, now time.Time) (User, bool, error) {
 	var u User
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT u.id, u.provider, u.external_id, u.username, u.name, u.avatar_url, u.trust_level, u.created_at
+	var registered sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT u.id, u.provider, u.external_id, u.username, u.name, u.avatar_url, u.trust_level, u.registered_at, u.created_at
 		FROM user_sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at > ?`, HashSessionToken(token), unixMilli(now)).
-		Scan(&u.ID, &u.Provider, &u.ExternalID, &u.Username, &u.Name, &u.AvatarURL, &u.TrustLevel, &created)
+		Scan(&u.ID, &u.Provider, &u.ExternalID, &u.Username, &u.Name, &u.AvatarURL, &u.TrustLevel, &registered, &created)
 	if err != nil {
 		return User{}, false, nil
 	}
+	u.RegisteredAt = timePtrFromNullMillis(registered)
 	u.CreatedAt = time.UnixMilli(created).UTC()
 	return u, true, nil
 }

@@ -19,19 +19,20 @@ import (
 )
 
 type Options struct {
-	Logger       *slog.Logger
-	Version      string
-	Commit       string
-	BuildDate    string
-	Now          func() time.Time
-	Store        *store.Store
-	Auth         *admin.Auth
-	Collector    *collector.Collector
-	SessionVault *session.Vault
-	PublicURL    string
-	SessionSync  *session.SyncManager
-	LinuxDO      *linuxdo.Service
-	Payment      payment.Provider
+	Logger                  *slog.Logger
+	Version                 string
+	Commit                  string
+	BuildDate               string
+	Now                     func() time.Time
+	Store                   *store.Store
+	Auth                    *admin.Auth
+	Collector               *collector.Collector
+	ManualCollectionContext context.Context
+	SessionVault            *session.Vault
+	PublicURL               string
+	SessionSync             *session.SyncManager
+	LinuxDO                 *linuxdo.Service
+	Payment                 payment.Provider
 	// Notifiers holds the platform senders (keyed by platform) shared with the
 	// notification dispatcher; used by the user-facing test-push endpoint.
 	Notifiers map[string]notifier.Sender

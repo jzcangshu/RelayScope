@@ -8,21 +8,28 @@ import (
 	"time"
 
 	"relayscope/internal/domain"
+	"relayscope/internal/pricing"
 )
 
 // Sub2MonitorAdapter reads the authenticated, user-facing channel monitor
 // summary from Sub2API. The endpoint reports current status and a bounded
-// timeline; it does not expose token prices, so no synthetic pricing is added.
-type Sub2MonitorAdapter struct{}
+// timeline. Optional pricing sources (for example the public model-plaza
+// endpoint) can be attached through the config without extra probes.
+type Sub2MonitorAdapter struct {
+	PricingRegistry *pricing.Registry
+}
 
 func (Sub2MonitorAdapter) Key() string         { return "sub2api-monitor" }
 func (Sub2MonitorAdapter) DisplayName() string { return "Sub2API 渠道监控" }
 func (Sub2MonitorAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"monitorPath":{"type":"string","default":"/api/v1/channel-monitors"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"monitorPath":{"type":"string","default":"/api/v1/channel-monitors"},"pricingAdapter":{"type":"string"},"pricingPath":{"type":"string"},"pricingOptional":{"type":"boolean"}}}`)
 }
 
 type sub2MonitorConfig struct {
-	MonitorPath string `json:"monitorPath"`
+	MonitorPath     string `json:"monitorPath"`
+	PricingAdapter  string `json:"pricingAdapter"`
+	PricingPath     string `json:"pricingPath"`
+	PricingOptional bool   `json:"pricingOptional"`
 }
 
 type sub2MonitorEnvelope struct {
@@ -57,8 +64,8 @@ type sub2TimelinePoint struct {
 	CheckedAt string `json:"checked_at"`
 }
 
-func (Sub2MonitorAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
-	defaulted, err := ApplyConfigDefaults(Sub2MonitorAdapter{}.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+func (adapter Sub2MonitorAdapter) Collect(ctx context.Context, site Site, fetcher Fetcher, now time.Time) (domain.Collection, error) {
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
 	if err != nil {
 		return domain.Collection{}, fmt.Errorf("apply sub2api-monitor config defaults: %w", err)
 	}
@@ -111,6 +118,13 @@ func (Sub2MonitorAdapter) Collect(ctx context.Context, site Site, fetcher Fetche
 	collection.CatalogRawNames = make([]string, 0, len(collection.Models))
 	for _, model := range collection.Models {
 		collection.CatalogRawNames = append(collection.CatalogRawNames, model.RawName)
+	}
+	if config.PricingAdapter != "" && config.PricingPath != "" {
+		if err := attachPricingSource(ctx, site, fetcher, adapter.PricingRegistry, pricingSource{
+			DecoderKey: config.PricingAdapter, Path: config.PricingPath, Optional: config.PricingOptional,
+		}, &collection); err != nil {
+			return domain.Collection{}, fmt.Errorf("attach sub2api-monitor pricing: %w", err)
+		}
 	}
 	return collection, nil
 }

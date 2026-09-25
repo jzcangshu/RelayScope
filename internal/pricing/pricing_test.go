@@ -106,6 +106,51 @@ func TestModelMarketDecoderNormalizesChannelQuotes(t *testing.T) {
 	}
 }
 
+func TestModelPlazaDecoderNormalizesGroupQuotes(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"code":0,"message":"success","data":{"groups":[
+		{"name":"公益","rate_multiplier":1,"models":[
+			{"name":"gpt-5.6-sol","pricing":{"billing_mode":"token","input_price":0.000002,"output_price":0.000006,"cache_write_price":0,"cache_write_1h_price":0,"cache_read_price":0.0000002}},
+			{"name":"glm-5.2","pricing":{"billing_mode":"token"}}
+		]},
+		{"name":"稳定","rate_multiplier":4,"models":[
+			{"name":"gpt-5.6-sol","pricing":{"billing_mode":"token","input_price":0.000002,"output_price":0.000006,"cache_write_price":null,"cache_write_1h_price":0.00000025,"cache_read_price":0.0000002}}
+		]},
+		{"name":"生图","rate_multiplier":10,"image_rate_independent":true,"image_rate_multiplier":0.5,"models":[
+			{"name":"gpt-image-2","pricing":{"billing_mode":"image","per_request_price":0.05}}
+		]}
+	]}}`)
+	catalog, err := (ModelPlazaDecoder{}).Decode(body, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	free := catalog.GroupPrices["gpt-5.6-sol"]["公益"]
+	if !free.Available || free.InputPerMillion == nil || !closeEnough(*free.InputPerMillion, 2) || free.OutputPerMillion == nil || !closeEnough(*free.OutputPerMillion, 6) || free.CacheReadPerMillion == nil || !closeEnough(*free.CacheReadPerMillion, 0.2) || free.CacheWritePerMillion == nil || *free.CacheWritePerMillion != 0 {
+		t.Fatalf("free quote = %+v", free)
+	}
+	if free.GroupMultiplier == nil || *free.GroupMultiplier != 1 {
+		t.Fatalf("free multiplier = %+v", free.GroupMultiplier)
+	}
+	stable := catalog.GroupPrices["gpt-5.6-sol"]["稳定"]
+	if !stable.Available || stable.InputPerMillion == nil || !closeEnough(*stable.InputPerMillion, 8) || stable.OutputPerMillion == nil || !closeEnough(*stable.OutputPerMillion, 24) {
+		t.Fatalf("stable quote = %+v", stable)
+	}
+	if stable.CacheWritePerMillion == nil || !closeEnough(*stable.CacheWritePerMillion, 1) {
+		t.Fatalf("stable cache write fallback = %+v", stable.CacheWritePerMillion)
+	}
+	if stable.GroupMultiplier == nil || *stable.GroupMultiplier != 4 {
+		t.Fatalf("stable multiplier = %+v", stable.GroupMultiplier)
+	}
+	fixed := catalog.GroupPrices["gpt-image-2"]["生图"]
+	if !fixed.Available || fixed.Mode != "fixed" || fixed.FixedPerRequest == nil || !closeEnough(*fixed.FixedPerRequest, 0.025) || fixed.GroupMultiplier == nil || !closeEnough(*fixed.GroupMultiplier, 0.5) {
+		t.Fatalf("fixed quote = %+v", fixed)
+	}
+	if catalog.GroupPrices["glm-5.2"]["公益"].Available {
+		t.Fatalf("unpriced quote unexpectedly available: %+v", catalog.GroupPrices["glm-5.2"]["公益"])
+	}
+}
+
 func TestRegistryAllowsFuturePricingDecoders(t *testing.T) {
 	decoder := stubDecoder{}
 	registry, err := NewRegistry(decoder)

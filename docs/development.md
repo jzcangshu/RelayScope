@@ -37,7 +37,7 @@ Supported environment variables currently are:
 | `RELAYSCOPE_OAUTH_CLIENT_ID` | empty | OAuth provider client ID; together with the secret enables public login (currently LinuxDo) |
 | `RELAYSCOPE_OAUTH_CLIENT_SECRET` | empty | OAuth provider client secret; keep only in protected deployment configuration |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | Maximum concurrent site HTTP operations (1-32) |
-| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | Per-site scheduled collection timeout |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `7m` | Per-site scheduled collection timeout |
 | `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | Outbound HTTP client timeout |
 | `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | History cleanup interval (minimum 1m) |
 

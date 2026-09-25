@@ -122,7 +122,7 @@ func (s *Service) Callback(ctx context.Context, code, state string) (store.User,
 	if avatar == "" {
 		avatar = profile.ProfilePicture
 	}
-	return s.db.UpsertUser(ctx, "linuxdo", id, profile.Username, profile.Name, avatar, profile.TrustLevel)
+	return s.db.UpsertUser(ctx, store.ProviderLinuxDO, id, profile.Username, profile.Name, avatar, profile.TrustLevel)
 }
 
 // StartSession 落库新会话（token 明文只进 cookie，库存 SHA-256），重启后依然有效。

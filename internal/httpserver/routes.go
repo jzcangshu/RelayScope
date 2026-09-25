@@ -24,6 +24,9 @@ func NewHandler(options Options) (http.Handler, error) {
 	if options.Logger == nil {
 		return nil, fmt.Errorf("logger is required")
 	}
+	if options.ManualCollectionContext == nil {
+		options.ManualCollectionContext = context.Background()
+	}
 	if options.Now == nil {
 		options.Now = time.Now
 	}

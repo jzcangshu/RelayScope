@@ -73,6 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public dashboard is untouched.
 
 ### Fixed
+- 修复计划采集默认超时回落到 3 分钟的问题：主程序此前把配置默认值覆盖掉
+  调度器为挑战型 NewAPI 站点准备的 7 分钟上限，导致已完成的采集在落库前
+  变成 `store_failed: context canceled`。同时让手动采集跟随服务生命周期，
+  浏览器或反向代理断开不再取消落库，并同步延长管理台等待与服务器写超时。
 - 推送标题带上站点名。`ApplyAnnouncements` 返回的新公告从未填充 `SiteName`，
   `renderMessage` 渲染出的标题是孤零零的「📢 」，用户无法分辨消息来自哪个站点。
   现在 store 层在返回前查一次站点名统一填入，标题形如

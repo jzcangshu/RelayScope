@@ -27,7 +27,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("unexpected shutdown timeout: %v", cfg.ShutdownTimeout)
 	}
-	if cfg.HTTPConcurrency != 3 || cfg.CollectionTimeout != 3*time.Minute || cfg.HTTPTimeout != 20*time.Second || cfg.MaintenanceInterval != 30*time.Minute {
+	if cfg.HTTPConcurrency != 3 || cfg.CollectionTimeout != 7*time.Minute || cfg.HTTPTimeout != 20*time.Second || cfg.MaintenanceInterval != 30*time.Minute {
 		t.Fatalf("unexpected operational defaults: %+v", cfg)
 	}
 }

@@ -68,7 +68,7 @@ docker run -d -p 8080:8080 -v relayscope-data:/app/data ghcr.io/jzcangshu/relays
 | `RELAYSCOPE_SESSION_ENCRYPTION_KEY` | _空_ | 加密导入站点会话的密钥 |
 | `RELAYSCOPE_FLARESOLVERR_ENDPOINT` | _空_ | 可选的 FlareSolverr 端点（限环回） |
 | `RELAYSCOPE_HTTP_CONCURRENCY` | `3` | 站点 HTTP 操作最大并发数 |
-| `RELAYSCOPE_COLLECTION_TIMEOUT` | `3m` | 单站点计划采集超时 |
+| `RELAYSCOPE_COLLECTION_TIMEOUT` | `7m` | 单站点计划采集超时 |
 | `RELAYSCOPE_HTTP_TIMEOUT` | `20s` | 出站 HTTP 客户端超时 |
 | `RELAYSCOPE_MAINTENANCE_INTERVAL` | `30m` | 历史清理间隔 |
 
