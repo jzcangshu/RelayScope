@@ -34,6 +34,26 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 
 	nowMs := unixMilli(now)
 	news := make([]SiteAnnouncement, 0, len(anns))
+
+	// The returned announcements feed the notification pipeline, whose push
+	// titles include the site name. Look it up once here so callers never have
+	// to join it back themselves.
+	var siteName string
+	if nameErr := tx.QueryRowContext(ctx, `SELECT name FROM sites WHERE id = ?`, siteID).Scan(&siteName); nameErr != nil && nameErr != sql.ErrNoRows {
+		return nil, fmt.Errorf("lookup site name for announcements: %w", nameErr)
+	}
+
+	// The very first batch collected for a site is a historical backfill, not
+	// news: store every entry but report none as new, otherwise hooking
+	// announcement collection up to an existing site instantly fires one push
+	// per historical announcement at every subscriber.
+	var hadAny bool
+	if anyErr := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM site_announcements WHERE site_id = ?)`, siteID).Scan(&hadAny); anyErr != nil {
+		return nil, fmt.Errorf("check prior announcements: %w", anyErr)
+	}
+	backfill := !hadAny
+
 	for _, ann := range anns {
 		externalID := strings.TrimSpace(ann.ExternalID)
 		if externalID == "" {
@@ -62,8 +82,11 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 				return nil, fmt.Errorf("insert announcement %s: %w", externalID, insertErr)
 			}
 			id, _ := res.LastInsertId()
+			if backfill {
+				continue
+			}
 			news = append(news, SiteAnnouncement{
-				ID: id, SiteID: siteID, ExternalID: externalID,
+				ID: id, SiteID: siteID, SiteName: siteName, ExternalID: externalID,
 				Title: strings.TrimSpace(ann.Title), Content: ann.Content,
 				AnnType: defaultAnnType(ann.AnnType), Extra: strings.TrimSpace(ann.Extra),
 				ContentHash: hash,
@@ -84,7 +107,7 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 			}
 			if existingHash != hash {
 				news = append(news, SiteAnnouncement{
-					ID: existingID, SiteID: siteID, ExternalID: externalID,
+					ID: existingID, SiteID: siteID, SiteName: siteName, ExternalID: externalID,
 					Title: strings.TrimSpace(ann.Title), Content: ann.Content,
 					AnnType: defaultAnnType(ann.AnnType), Extra: strings.TrimSpace(ann.Extra),
 					ContentHash: hash,

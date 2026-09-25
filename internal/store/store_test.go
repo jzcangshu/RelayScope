@@ -1315,11 +1315,21 @@ func TestUpdateSubscriptionChannelAppliesToAllSitesAndRepointsOutbox(t *testing.
 		}
 	}
 	// A queued notification still carries the denormalized old target.
+	// The first batch is a silent backfill, so seed a filler first, then add
+	// the real announcement as a second-batch addition.
+	if _, err := dbStore.ApplyAnnouncements(ctx, siteA.ID, []AnnouncementInput{
+		{ExternalID: "ann-backfill", Content: "older entry", AnnType: "default", PublishedAt: time.Now().UTC()},
+	}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
 	newAnns, err := dbStore.ApplyAnnouncements(ctx, siteA.ID, []AnnouncementInput{
 		{ExternalID: "ann-1", Content: "maintenance window", AnnType: "default", PublishedAt: time.Now().UTC()},
 	}, time.Now().UTC())
 	if err != nil || len(newAnns) != 1 {
 		t.Fatalf("seed announcement: %v %d", err, len(newAnns))
+	}
+	if newAnns[0].SiteName != "A" {
+		t.Fatalf("new announcement SiteName = %q, want A", newAnns[0].SiteName)
 	}
 	if err := dbStore.EnqueueNotification(ctx, 1, newAnns[0].ID, siteA.ID, "telegram", "old-chat-id", "{}"); err != nil {
 		t.Fatal(err)

@@ -73,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public dashboard is untouched.
 
 ### Fixed
+- 推送标题带上站点名。`ApplyAnnouncements` 返回的新公告从未填充 `SiteName`，
+  `renderMessage` 渲染出的标题是孤零零的「📢 」，用户无法分辨消息来自哪个站点。
+  现在 store 层在返回前查一次站点名统一填入，标题形如
+  「📢 咕咕嘎嘎」或「📢 HXI AI | 标题」。
+- 站点首次采集公告按历史回填处理，不再轰炸订阅者。给 4 个适配器接上 NewAPI
+  公告采集后，CoeeApi（48 条）、HXI AI（41 条）等站点的全部历史公告在首个采集
+  周期被当成「新公告」逐条入队，一夜之间把订阅者的手机通知灌满。现在首个批次的
+  公告照常入库但全部视为旧闻不推送，之后采集到的增量才触发通知；公告内容变更
+  仍然推送（有测试固定该语义）。
 - 通知订阅页的配置状态现在一目了然。之前推送目标（Bark key / Chat ID /
   Webhook）只是一个草稿输入框：没有保存按钮、没有已保存回填、刷新即丢，
   站点勾选时悄悄把「当时输入框里有什么」当作目标，用户无从确认配置到底存没存好。
