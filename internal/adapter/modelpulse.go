@@ -159,5 +159,5 @@ func (adapter ModelPulseAdapter) CollectAnnouncements(ctx context.Context, site 
 	if statusPath == "" {
 		statusPath = "/api/status"
 	}
-	return collectNewAPIAnnouncementsFor(ctx, fetcher, site.BaseURL, statusPath, config.AnnouncementMode)
+	return collectNewAPIAnnouncementsFor(ctx, fetcher, site.BaseURL, sourceOriginBaseURL(site.SourceURL), statusPath, config.AnnouncementMode)
 }

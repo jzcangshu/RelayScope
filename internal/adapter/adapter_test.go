@@ -1223,3 +1223,51 @@ func TestAutoModeDisabledByConfig(t *testing.T) {
 		t.Fatalf("disabled mode must collect nothing, got %d", len(anns))
 	}
 }
+
+// TestAutoModeFallsBackToSourceOrigin covers sites like CoeeApi, whose base URL
+// is a fronting status page serving HTML while the monitored NewAPI deployment
+// lives at the source URL's host.
+func TestAutoModeFallsBackToSourceOrigin(t *testing.T) {
+	t.Parallel()
+
+	html := []byte(`<!DOCTYPE html><html><body>status page</body></html>`)
+	status := []byte(`{"data":{"announcements_enabled":true,"announcements":[
+		{"id":11,"content":"维护通知","publishDate":"2026-09-25T01:00:00.000Z","type":"warning"}
+	]}}`)
+	anns, err := (UptimeKumaAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://status.example.test", SourceURL: "https://api.example.test/status"},
+		fakeFetcher{responses: map[string][]byte{
+			"https://status.example.test/api/status": html,
+			"https://api.example.test/api/status":   status,
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anns) != 1 || anns[0].Content != "维护通知" {
+		t.Fatalf("fallback to source origin lost announcement: %+v", anns)
+	}
+}
+
+// TestAutoModeTrustsPrimaryNewAPIPayload guards against the fallback probing an
+// unrelated host once the primary base URL already answers with a valid NewAPI
+// status payload, even when that payload has announcements disabled.
+func TestAutoModeTrustsPrimaryNewAPIPayload(t *testing.T) {
+	t.Parallel()
+
+	primary := []byte(`{"data":{"announcements_enabled":false,"announcements":[]}}`)
+	stranger := []byte(`{"data":{"announcements_enabled":true,"announcements":[
+		{"id":99,"content":"无关站点的公告","publishDate":"2026-09-25T02:00:00.000Z"}
+	]}}`)
+	anns, err := (UptimeKumaAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://api.example.test", SourceURL: "https://other.example.test/status"},
+		fakeFetcher{responses: map[string][]byte{
+			"https://api.example.test/api/status":   primary,
+			"https://other.example.test/api/status": stranger,
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anns != nil {
+		t.Fatalf("valid NewAPI payload with announcements disabled must not fall back, got %d", len(anns))
+	}
+}

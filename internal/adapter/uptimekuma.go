@@ -477,5 +477,5 @@ func (adapter UptimeKumaAdapter) CollectAnnouncements(ctx context.Context, site 
 	if statusPath == "" {
 		statusPath = "/api/status"
 	}
-	return collectNewAPIAnnouncementsFor(ctx, fetcher, baseURL, statusPath, config.AnnouncementMode)
+	return collectNewAPIAnnouncementsFor(ctx, fetcher, baseURL, sourceOriginBaseURL(site.SourceURL), statusPath, config.AnnouncementMode)
 }

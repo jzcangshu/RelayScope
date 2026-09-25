@@ -4,10 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// sourceOriginBaseURL returns the scheme://host of a site's source URL, so an
+// adapter whose base URL is a fronting status page can still reach the NewAPI
+// deployment the source actually points at. Empty when the source URL is
+// missing or unparseable.
+func sourceOriginBaseURL(sourceURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(sourceURL))
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	if parsed.Scheme == "" {
+		parsed.Scheme = "https"
+	}
+	return parsed.Scheme + "://" + parsed.Host
+}
 
 // --- ProbeAdapter (NewAPI系) announcement implementation ---
 
@@ -133,20 +149,38 @@ func parseNewAPITimeline(resp newapiStatusResponse) []Announcement {
 // /api/status timeline; anything that is not a NewAPI status payload — an HTML
 // status page, a 404, another API's error envelope — is skipped silently
 // instead of surfacing as a collection failure.
-func collectNewAPIAnnouncementsAuto(ctx context.Context, fetcher Fetcher, statusBaseURL, statusPath string) ([]Announcement, error) {
-	endpoint, err := resolveSiteURL(statusBaseURL, statusPath)
-	if err != nil {
-		return nil, nil
+//
+// Some sites register the monitor under a different host than the NewAPI
+// deployment it watches (e.g. an Uptime Kuma status page at status.example.com
+// fronting api.example.com). When primaryBaseURL does not answer with a NewAPI
+// payload, fallbackBaseURL — usually the monitored source — is tried before
+// giving up. Both must already be resolved base URLs; an empty fallback skips
+// the second probe.
+func collectNewAPIAnnouncementsAuto(ctx context.Context, fetcher Fetcher, primaryBaseURL, fallbackBaseURL, statusPath string) ([]Announcement, error) {
+	for _, baseURL := range []string{primaryBaseURL, fallbackBaseURL} {
+		if strings.TrimSpace(baseURL) == "" {
+			continue
+		}
+		endpoint, err := resolveSiteURL(baseURL, statusPath)
+		if err != nil {
+			continue
+		}
+		body, _, err := fetcher.GetBytes(ctx, endpoint)
+		if err != nil {
+			continue
+		}
+		var resp newapiStatusResponse
+		if json.Unmarshal(body, &resp) != nil {
+			// Not a NewAPI payload (HTML status page, error envelope, ...).
+			// Try the fallback host before giving up.
+			continue
+		}
+		// A valid NewAPI payload is authoritative: if announcements are
+		// disabled here they are disabled for this site, and probing the
+		// fallback host could pick up an unrelated deployment's timeline.
+		return parseNewAPITimeline(resp), nil
 	}
-	body, _, err := fetcher.GetBytes(ctx, endpoint)
-	if err != nil {
-		return nil, nil
-	}
-	var resp newapiStatusResponse
-	if json.Unmarshal(body, &resp) != nil {
-		return nil, nil
-	}
-	return parseNewAPITimeline(resp), nil
+	return nil, nil
 }
 
 // collectNewAPIAnnouncementsFor dispatches announcement collection for adapters
@@ -156,16 +190,16 @@ func collectNewAPIAnnouncementsAuto(ctx context.Context, fetcher Fetcher, status
 //   - "timeline": require a NewAPI status payload, error otherwise
 //   - "notice_diff": diff the single /api/notice blob
 //   - "disabled": collect nothing
-func collectNewAPIAnnouncementsFor(ctx context.Context, fetcher Fetcher, statusBaseURL, statusPath, mode string) ([]Announcement, error) {
+func collectNewAPIAnnouncementsFor(ctx context.Context, fetcher Fetcher, primaryBaseURL, fallbackBaseURL, statusPath, mode string) ([]Announcement, error) {
 	switch strings.TrimSpace(mode) {
 	case "", "auto":
-		return collectNewAPIAnnouncementsAuto(ctx, fetcher, statusBaseURL, statusPath)
+		return collectNewAPIAnnouncementsAuto(ctx, fetcher, primaryBaseURL, fallbackBaseURL, statusPath)
 	case "disabled":
 		return nil, nil
 	case "notice_diff":
-		return collectNewAPINoticeDiff(ctx, fetcher, statusBaseURL)
+		return collectNewAPINoticeDiff(ctx, fetcher, primaryBaseURL)
 	default: // "timeline"
-		return collectNewAPITimeline(ctx, fetcher, statusBaseURL, statusPath)
+		return collectNewAPITimeline(ctx, fetcher, primaryBaseURL, statusPath)
 	}
 }
 

@@ -218,5 +218,5 @@ func (adapter AIAPIAdapter) CollectAnnouncements(ctx context.Context, site Site,
 	if err := json.Unmarshal(defaulted, &config); err != nil {
 		return nil, fmt.Errorf("decode %s announcement config: %w", adapter.Key(), err)
 	}
-	return collectNewAPIAnnouncementsFor(ctx, fetcher, site.BaseURL, "/api/status", config.AnnouncementMode)
+	return collectNewAPIAnnouncementsFor(ctx, fetcher, site.BaseURL, sourceOriginBaseURL(site.SourceURL), "/api/status", config.AnnouncementMode)
 }

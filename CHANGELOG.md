@@ -103,6 +103,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sites whose `/api/status` is not a NewAPI payload (a genuine Uptime Kuma or
   AIAPI status page, or an HTML status page like CoeeApi), so nothing breaks when
   the endpoint belongs to the adapter's own format.
+- Auto-mode announcement collection now falls back to the source URL's host when
+  the base URL does not answer with a NewAPI payload. Sites like CoeeApi register
+  a fronting status page as the base URL (`status.coee.ccwu.cc`, HTML) while the
+  monitored NewAPI deployment lives at the source URL's host
+  (`api.coee.ccwu.cc`, 48 published announcements) — those announcements were
+  unreachable. Once the primary host answers with a valid NewAPI payload it is
+  treated as authoritative, so a disabled timeline never leaks into probing an
+  unrelated host.
 - NewAPI sites that publish an empty pricing catalog (2xx body with a
   genuinely empty model list, e.g. Ad公益站, which returns vendors but zero
   price rows) no longer fail the collection run. The adapter now reports a
