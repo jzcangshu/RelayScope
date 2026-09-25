@@ -356,6 +356,12 @@ func NewHandler(options Options) (http.Handler, error) {
 			// 站点公告 ID 列表（用于前端显示铃铛图标）
 			if siteAnnIDs, err := options.Store.SiteIDsWithAnnouncements(request.Context()); err == nil && len(siteAnnIDs) > 0 {
 				response["siteAnnouncementSiteIds"] = siteAnnIDs
+				siteAnns, err := options.Store.ListSiteAnnouncementsForSites(request.Context(), siteAnnIDs, 5)
+				if err != nil {
+					writeError(writer, http.StatusInternalServerError, "query site announcements")
+					return
+				}
+				response["siteAnnouncements"] = siteAnns
 			}
 			writeJSON(writer, response)
 		})

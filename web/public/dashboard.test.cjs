@@ -57,6 +57,8 @@ test('dashboard script renders and polls failure announcements', () => {
   assert.match(source, /toggleNCSidebar\(/);
   assert.match(source, /failureCode/);
   assert.match(source, /setInterval\(loadRows, 60000\)/);
+  assert.match(source, /ncSiteAnnouncements = payload\.siteAnnouncements \|\| \[\]/);
+  assert.doesNotMatch(source, /loadSiteAnnouncementsBatch/);
   assert.doesNotMatch(source, /数据未变化/);
   assert.doesNotMatch(source, /announcementCount/);
 });

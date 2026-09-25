@@ -145,6 +145,48 @@ func (store *Store) ListSiteAnnouncements(ctx context.Context, siteID int64, lim
 	return scanSiteAnnouncements(rows)
 }
 
+// ListSiteAnnouncementsForSites returns up to limit recent announcements for
+// each requested site, ordered by site and publication time.
+func (store *Store) ListSiteAnnouncementsForSites(ctx context.Context, siteIDs []int64, limit int) ([]SiteAnnouncement, error) {
+	if len(siteIDs) == 0 {
+		return []SiteAnnouncement{}, nil
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	placeholders := make([]string, len(siteIDs))
+	args := make([]any, len(siteIDs), len(siteIDs)+1)
+	for index, siteID := range siteIDs {
+		placeholders[index] = "?"
+		args[index] = siteID
+	}
+	args = append(args, limit)
+	rows, err := store.db.QueryContext(ctx, `
+		WITH ranked AS (
+			SELECT a.id, a.site_id, s.name, a.external_id, a.title, a.content,
+			       a.ann_type, a.extra, a.published_at, a.first_seen_at,
+			       a.last_seen_at, a.removed_at,
+			       ROW_NUMBER() OVER (
+			           PARTITION BY a.site_id
+			           ORDER BY a.published_at DESC
+			       ) AS rank
+			FROM site_announcements a
+			JOIN sites s ON s.id = a.site_id
+			WHERE a.removed_at IS NULL
+			  AND a.site_id IN (`+strings.Join(placeholders, ",")+`)
+		)
+		SELECT id, site_id, name, external_id, title, content, ann_type, extra,
+		       published_at, first_seen_at, last_seen_at, removed_at
+		FROM ranked
+		WHERE rank <= ?
+		ORDER BY site_id, published_at DESC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list site announcements for sites: %w", err)
+	}
+	defer rows.Close()
+	return scanAllAnnouncements(rows)
+}
+
 // ListAllRecentAnnouncements returns the most recent announcements across all sites.
 func (store *Store) ListAllRecentAnnouncements(ctx context.Context, limit int) ([]SiteAnnouncement, error) {
 	if limit <= 0 {

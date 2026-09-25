@@ -251,6 +251,18 @@ func TestPublicSiteAnnouncementsEndpointReturnsStoredRows(t *testing.T) {
 	if !strings.Contains(index.Body.String(), `"siteAnnouncementSiteIds":[`+strconv.FormatInt(site.ID, 10)+`]`) {
 		t.Fatalf("announcement index did not report the site: %s", index.Body.String())
 	}
+	var announcementIndex struct {
+		SiteAnnouncements []store.SiteAnnouncement `json:"siteAnnouncements"`
+	}
+	if err := json.Unmarshal(index.Body.Bytes(), &announcementIndex); err != nil {
+		t.Fatalf("decode announcement index: %v", err)
+	}
+	if len(announcementIndex.SiteAnnouncements) != 1 {
+		t.Fatalf("announcement index site announcements = %d, want 1", len(announcementIndex.SiteAnnouncements))
+	}
+	if announcementIndex.SiteAnnouncements[0].SiteID != site.ID || announcementIndex.SiteAnnouncements[0].SiteName != site.Name {
+		t.Fatalf("announcement index item = %+v, want site %d/%s", announcementIndex.SiteAnnouncements[0], site.ID, site.Name)
+	}
 }
 
 func TestNotificationTestEndpointUsesConfiguredSender(t *testing.T) {

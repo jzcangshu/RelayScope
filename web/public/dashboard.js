@@ -923,6 +923,7 @@ async function loadRows() {
   try {
     const metaResponse = await fetch('/api/v1/meta', { cache: 'no-store' });
     const meta = metaResponse.ok ? await metaResponse.json() : {};
+    await loadSiteSettings(meta);
     if (revision !== null && meta.revision === revision) {
       await loadAnnouncements();
       return;
@@ -1140,10 +1141,7 @@ async function loadAnnouncements() {
     const changed = nextSignature !== announcementSignature;
     announcements = next;
     announcementSignature = nextSignature;
-    // Load site announcements if we have sites with announcements
-    if (sitesWithAnnouncements.size > 0) {
-      await loadSiteAnnouncementsBatch();
-    }
+    ncSiteAnnouncements = payload.siteAnnouncements || [];
     renderAnnouncements();
     if (changed && announcements.length) {
       let seen = '';
@@ -1154,22 +1152,6 @@ async function loadAnnouncements() {
       }
     }
   } catch (_) {}
-}
-
-async function loadSiteAnnouncementsBatch() {
-  const siteIds = [...sitesWithAnnouncements];
-  const results = await Promise.allSettled(
-    siteIds.map(id => fetch(`/api/v1/public/site-announcements?site_id=${id}&limit=5`).then(r => r.ok ? r.json() : { announcements: [] }))
-  );
-  const siteNameMap = new Map(rows.map(r => [r.siteId, r.siteName]));
-  ncSiteAnnouncements = [];
-  for (let i = 0; i < results.length; i++) {
-    if (results[i].status === 'fulfilled') {
-      for (const ann of (results[i].value.announcements || [])) {
-        ncSiteAnnouncements.push({ ...ann, siteName: siteNameMap.get(siteIds[i]) || ann.siteName || `站点 #${siteIds[i]}` });
-      }
-    }
-  }
 }
 
 // Sidebar toggle — 通知面板是 board-shell 的右侧拓展列，开合会带动整页重新居中
@@ -2075,6 +2057,7 @@ let membership = null;
 let cloudSynced = false;
 let cloudSaveTimer = null;
 let siteSettings = { membershipMonthlyPriceLdc: 15, wishDefaultTargetLdc: 30 };
+let siteSettingsLoaded = false;
 let pledgeCreditAvailable = 0;
 let wishItems = [];
 let pledgeTargetId = null;
@@ -3034,13 +3017,13 @@ function pollOrderStatus(orderNo, attempt = 0) {
     .catch(() => setTimeout(() => pollOrderStatus(orderNo, attempt + 1), 3000));
 }
 
-async function loadSiteSettings() {
+async function loadSiteSettings(meta) {
+  if (siteSettingsLoaded) return;
   try {
-    const response = await fetch('/api/v1/meta', { cache: 'no-store' });
-    if (!response.ok) return;
-    const meta = await response.json();
+    if (!meta) return;
     siteSettings.membershipMonthlyPriceLdc = parseInt(meta.membershipMonthlyPriceLdc, 10) || 15;
     siteSettings.wishDefaultTargetLdc = parseInt(meta.wishDefaultTargetLdc, 10) || 30;
+    siteSettingsLoaded = true;
   } catch { /* 用默认值 */ }
 }
 
@@ -3084,7 +3067,6 @@ document.querySelector('#feedback-form').addEventListener('submit', async (event
 
 initializeTheme();
 loadRows();
-loadSiteSettings();
 // 登录态就绪后再做首次路由渲染，否则 #customize 刷新会因 currentUser 尚为空而误显登录门禁
 loadUser().finally(applyRoute);
 {
