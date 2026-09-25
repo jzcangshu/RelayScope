@@ -21,7 +21,7 @@ type ModelPulseAdapter struct {
 func (ModelPulseAdapter) Key() string         { return "model-pulse" }
 func (ModelPulseAdapter) DisplayName() string { return "模型活动状态" }
 func (ModelPulseAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"pulsePath":{"type":"string","default":"/api/model-pulse"},"pricingAdapter":{"type":"string","default":"newapi"},"pricingPath":{"type":"string","default":"/api/pricing"},"pricingStatusPath":{"type":"string","default":"/api/status"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"pulsePath":{"type":"string","default":"/api/model-pulse"},"pricingAdapter":{"type":"string","default":"newapi"},"pricingPath":{"type":"string","default":"/api/pricing"},"pricingStatusPath":{"type":"string","default":"/api/status"},"announcementMode":{"type":"string","enum":["auto","timeline","notice_diff","disabled"],"default":"auto"}}}`)
 }
 
 type modelPulseConfig struct {
@@ -29,6 +29,7 @@ type modelPulseConfig struct {
 	PricingAdapter    string `json:"pricingAdapter"`
 	PricingPath       string `json:"pricingPath"`
 	PricingStatusPath string `json:"pricingStatusPath"`
+	AnnouncementMode  string `json:"announcementMode"`
 }
 
 type modelPulseResponse struct {
@@ -140,4 +141,23 @@ func modelPulseMetrics(requests, failures int64, reportedRatio, averageMS *float
 
 func modelPulseTime(value int64) time.Time {
 	return adapterutil.ParseFlexibleTime(value)
+}
+
+// CollectAnnouncements implements AnnouncementProvider. Activity-feed sites are
+// NewAPI deployments, so announcements come from the same /api/status the
+// pricing page reads.
+func (adapter ModelPulseAdapter) CollectAnnouncements(ctx context.Context, site Site, fetcher Fetcher) ([]Announcement, error) {
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return nil, fmt.Errorf("apply %s config defaults: %w", adapter.Key(), err)
+	}
+	var config modelPulseConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return nil, fmt.Errorf("decode %s announcement config: %w", adapter.Key(), err)
+	}
+	statusPath := strings.TrimSpace(config.PricingStatusPath)
+	if statusPath == "" {
+		statusPath = "/api/status"
+	}
+	return collectNewAPIAnnouncementsFor(ctx, fetcher, site.BaseURL, statusPath, config.AnnouncementMode)
 }

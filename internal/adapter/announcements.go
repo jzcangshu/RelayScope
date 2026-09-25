@@ -96,8 +96,14 @@ func collectNewAPITimeline(ctx context.Context, fetcher Fetcher, statusBaseURL, 
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decode NewAPI status for announcements: %w", err)
 	}
+	return parseNewAPITimeline(resp), nil
+}
+
+// parseNewAPITimeline turns a decoded /api/status payload into announcements,
+// returning nil when the site has the feature off or nothing published.
+func parseNewAPITimeline(resp newapiStatusResponse) []Announcement {
 	if !resp.Data.AnnouncementsEnabled || len(resp.Data.Announcements) == 0 {
-		return nil, nil
+		return nil
 	}
 	anns := make([]Announcement, 0, len(resp.Data.Announcements))
 	for _, item := range resp.Data.Announcements {
@@ -118,7 +124,49 @@ func collectNewAPITimeline(ctx context.Context, fetcher Fetcher, statusBaseURL, 
 			PublishedAt: pubTime,
 		})
 	}
-	return anns, nil
+	return anns
+}
+
+// collectNewAPIAnnouncementsAuto is the best-effort variant for adapters that
+// sit on top of NewAPI deployments but read models through a different surface
+// (status page, activity feed, probe report). The site is probed for a NewAPI
+// /api/status timeline; anything that is not a NewAPI status payload — an HTML
+// status page, a 404, another API's error envelope — is skipped silently
+// instead of surfacing as a collection failure.
+func collectNewAPIAnnouncementsAuto(ctx context.Context, fetcher Fetcher, statusBaseURL, statusPath string) ([]Announcement, error) {
+	endpoint, err := resolveSiteURL(statusBaseURL, statusPath)
+	if err != nil {
+		return nil, nil
+	}
+	body, _, err := fetcher.GetBytes(ctx, endpoint)
+	if err != nil {
+		return nil, nil
+	}
+	var resp newapiStatusResponse
+	if json.Unmarshal(body, &resp) != nil {
+		return nil, nil
+	}
+	return parseNewAPITimeline(resp), nil
+}
+
+// collectNewAPIAnnouncementsFor dispatches announcement collection for adapters
+// layered on NewAPI sites. Modes:
+//   - "auto" (default): best-effort /api/status, silent when the site is not
+//     NewAPI-shaped
+//   - "timeline": require a NewAPI status payload, error otherwise
+//   - "notice_diff": diff the single /api/notice blob
+//   - "disabled": collect nothing
+func collectNewAPIAnnouncementsFor(ctx context.Context, fetcher Fetcher, statusBaseURL, statusPath, mode string) ([]Announcement, error) {
+	switch strings.TrimSpace(mode) {
+	case "", "auto":
+		return collectNewAPIAnnouncementsAuto(ctx, fetcher, statusBaseURL, statusPath)
+	case "disabled":
+		return nil, nil
+	case "notice_diff":
+		return collectNewAPINoticeDiff(ctx, fetcher, statusBaseURL)
+	default: // "timeline"
+		return collectNewAPITimeline(ctx, fetcher, statusBaseURL, statusPath)
+	}
 }
 
 // collectNewAPINoticeDiff reads the single NewAPI /api/notice payload and

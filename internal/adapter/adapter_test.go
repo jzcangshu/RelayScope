@@ -1164,3 +1164,62 @@ func TestModelMarketDoesNotReuseCatalogAsDetailEndpoint(t *testing.T) {
 		t.Fatalf("model market without a detail endpoint attempted a request: %v", err)
 	}
 }
+
+func TestAutoModeSkipsNonNewAPIStatus(t *testing.T) {
+	t.Parallel()
+
+	html := []byte(`<!DOCTYPE html><html><body>status page</body></html>`)
+	anns, err := (UptimeKumaAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test"},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": html}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anns != nil {
+		t.Fatalf("non-NewAPI status page should be skipped silently, got %d", len(anns))
+	}
+}
+
+func TestAutoModeCollectsNewAPITimeline(t *testing.T) {
+	t.Parallel()
+
+	status := []byte(`{"data":{"announcements_enabled":true,"announcements":[
+		{"id":3,"content":"新分组已上线","publishDate":"2026-09-24T18:21:03.771Z","type":"success"}
+	]}}`)
+	cases := []struct {
+		name    string
+		adapter AnnouncementProvider
+	}{
+		{"model-pulse", ModelPulseAdapter{}},
+		{"model-probe", ModelProbeAdapter{}},
+		{"aiapi-probe", AIAPIAdapter{}},
+		{"uptime-kuma", UptimeKumaAdapter{}},
+	}
+	for _, tc := range cases {
+		adapter := tc.adapter
+		anns, err := adapter.CollectAnnouncements(context.Background(),
+			Site{ID: 1, BaseURL: "https://example.test"},
+			fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if len(anns) != 1 || anns[0].Content != "新分组已上线" || anns[0].ExternalID != "2026-09-24T18:21:03.771Z" {
+			t.Fatalf("%s lost announcement: %+v", tc.name, anns)
+		}
+	}
+}
+
+func TestAutoModeDisabledByConfig(t *testing.T) {
+	t.Parallel()
+
+	status := []byte(`{"data":{"announcements_enabled":true,"announcements":[{"id":3,"content":"x","publishDate":"2026-09-24T18:21:03.771Z"}]}}`)
+	anns, err := (ModelProbeAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test", ConfigJSON: `{"announcementMode":"disabled"}`},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anns != nil {
+		t.Fatalf("disabled mode must collect nothing, got %d", len(anns))
+	}
+}

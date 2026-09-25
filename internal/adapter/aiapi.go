@@ -20,13 +20,14 @@ type AIAPIAdapter struct{}
 func (AIAPIAdapter) Key() string         { return "aiapi-probe" }
 func (AIAPIAdapter) DisplayName() string { return "AIAPI 状态矩阵" }
 func (AIAPIAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"statusPath":{"type":"string","default":"/api/status"},"period":{"type":"string","default":"24h"},"board":{"type":"string","default":"hot"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"statusPath":{"type":"string","default":"/api/status"},"period":{"type":"string","default":"24h"},"board":{"type":"string","default":"hot"},"announcementMode":{"type":"string","enum":["auto","timeline","notice_diff","disabled"],"default":"auto"}}}`)
 }
 
 type aiAPIConfig struct {
-	StatusPath string `json:"statusPath"`
-	Period     string `json:"period"`
-	Board      string `json:"board"`
+	StatusPath       string `json:"statusPath"`
+	Period           string `json:"period"`
+	Board            string `json:"board"`
+	AnnouncementMode string `json:"announcementMode"`
 }
 
 type aiAPIResponse struct {
@@ -203,4 +204,19 @@ func aiAPIRatio(value float64) *float64 {
 		value /= 100
 	}
 	return &value
+}
+
+// CollectAnnouncements implements AnnouncementProvider. AIAPI sites are
+// frequently NewAPI deployments behind a custom status matrix, so the NewAPI
+// timeline is probed automatically and skipped when absent.
+func (adapter AIAPIAdapter) CollectAnnouncements(ctx context.Context, site Site, fetcher Fetcher) ([]Announcement, error) {
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return nil, fmt.Errorf("apply %s config defaults: %w", adapter.Key(), err)
+	}
+	var config aiAPIConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return nil, fmt.Errorf("decode %s announcement config: %w", adapter.Key(), err)
+	}
+	return collectNewAPIAnnouncementsFor(ctx, fetcher, site.BaseURL, "/api/status", config.AnnouncementMode)
 }

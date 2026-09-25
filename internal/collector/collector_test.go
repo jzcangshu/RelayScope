@@ -366,7 +366,10 @@ func TestCollectSiteAcceptsIntentionalEmptyCatalog(t *testing.T) {
 		[]byte(`{"success":true,"data":{"models":[{"model_name":"gemini-3.5-flash","status":"available","window_24h":{"requests":10,"success":10}}]}}`),
 		[]byte(`{"data":[{"model_name":"gemini-3.5-flash","model_ratio":2,"completion_ratio":3,"enable_groups":["free"]}]}`),
 		[]byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_symbol":"$"}}`),
+		// ModelProbeAdapter also collects NewAPI announcements each round.
+		[]byte(`{"data":{"announcements_enabled":false,"announcements":[]}}`),
 		[]byte(`{"success":true,"data":{"models":[]}}`),
+		[]byte(`{"data":{"announcements_enabled":false,"announcements":[]}}`),
 	}}
 	collector, err := New(Options{Store: dbStore, Registry: registry, Fetcher: fetcher, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {

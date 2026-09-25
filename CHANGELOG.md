@@ -95,6 +95,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test pushes, never automatic ones. The adapter now reads the same `/api/status`
   timeline (plus `/api/notice` diff and `disabled`) modes the probe adapter uses,
   through shared collection logic.
+- Four adapters that sit on top of NewAPI now collect its announcements too:
+  `model-pulse`, `model-probe`, `aiapi-probe` and `uptime-kuma` (e.g. 咕咕嘎嘎、
+  简直了、HXI AI all publish real announcements nobody was receiving). Each gains
+  an `announcementMode` config (`auto` default) that shares the same timeline /
+  notice-diff collection as the built-in NewAPI adapters. `auto` silently skips
+  sites whose `/api/status` is not a NewAPI payload (a genuine Uptime Kuma or
+  AIAPI status page, or an HTML status page like CoeeApi), so nothing breaks when
+  the endpoint belongs to the adapter's own format.
 - NewAPI sites that publish an empty pricing catalog (2xx body with a
   genuinely empty model list, e.g. Ad公益站, which returns vendors but zero
   price rows) no longer fail the collection run. The adapter now reports a

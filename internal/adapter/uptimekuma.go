@@ -31,7 +31,7 @@ type UptimeKumaAdapter struct {
 func (UptimeKumaAdapter) Key() string         { return "uptime-kuma" }
 func (UptimeKumaAdapter) DisplayName() string { return "Uptime Kuma 状态页" }
 func (UptimeKumaAdapter) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"slug":{"type":"string"},"statusBaseUrl":{"type":"string"},"statusPath":{"type":"string","default":"/api/status-page/{slug}"},"heartbeatPath":{"type":"string","default":"/api/status-page/heartbeat/{slug}"},"retryAttempts":{"type":"integer","minimum":0,"maximum":3},"monitorNameMode":{"type":"string","enum":["suffix-model"]},"pricingAdapter":{"type":"string"},"pricingBaseUrl":{"type":"string"},"pricingPath":{"type":"string"},"pricingStatusPath":{"type":"string"},"pricingOptional":{"type":"boolean"},"pricingRequiresSession":{"type":"boolean"}}}`)
+	return json.RawMessage(`{"type":"object","properties":{"slug":{"type":"string"},"statusBaseUrl":{"type":"string"},"statusPath":{"type":"string","default":"/api/status-page/{slug}"},"heartbeatPath":{"type":"string","default":"/api/status-page/heartbeat/{slug}"},"retryAttempts":{"type":"integer","minimum":0,"maximum":3},"monitorNameMode":{"type":"string","enum":["suffix-model"]},"pricingAdapter":{"type":"string"},"pricingBaseUrl":{"type":"string"},"pricingPath":{"type":"string"},"pricingStatusPath":{"type":"string"},"pricingOptional":{"type":"boolean"},"pricingRequiresSession":{"type":"boolean"},"announcementMode":{"type":"string","enum":["auto","timeline","notice_diff","disabled"],"default":"auto"}}}`)
 }
 
 type uptimeKumaConfig struct {
@@ -47,6 +47,7 @@ type uptimeKumaConfig struct {
 	PricingStatusPath string `json:"pricingStatusPath"`
 	PricingOptional   bool   `json:"pricingOptional"`
 	PricingNeedsLogin bool   `json:"pricingRequiresSession"`
+	AnnouncementMode  string `json:"announcementMode"`
 }
 
 type uptimeKumaStatusPage struct {
@@ -453,4 +454,28 @@ func maxDuration(left, right time.Duration) time.Duration {
 		return left
 	}
 	return right
+}
+
+// CollectAnnouncements implements AnnouncementProvider. Many Uptime Kuma
+// monitors point at a NewAPI deployment; when they do, the NewAPI
+// /api/status timeline is collected automatically and skipped when the
+// monitored site is something else.
+func (adapter UptimeKumaAdapter) CollectAnnouncements(ctx context.Context, site Site, fetcher Fetcher) ([]Announcement, error) {
+	defaulted, err := ApplyConfigDefaults(adapter.ConfigSchema(), json.RawMessage(site.ConfigJSON))
+	if err != nil {
+		return nil, fmt.Errorf("apply %s config defaults: %w", adapter.Key(), err)
+	}
+	var config uptimeKumaConfig
+	if err := json.Unmarshal(defaulted, &config); err != nil {
+		return nil, fmt.Errorf("decode %s announcement config: %w", adapter.Key(), err)
+	}
+	baseURL := strings.TrimSpace(config.PricingBaseURL)
+	if baseURL == "" {
+		baseURL = site.BaseURL
+	}
+	statusPath := strings.TrimSpace(config.PricingStatusPath)
+	if statusPath == "" {
+		statusPath = "/api/status"
+	}
+	return collectNewAPIAnnouncementsFor(ctx, fetcher, baseURL, statusPath, config.AnnouncementMode)
 }
