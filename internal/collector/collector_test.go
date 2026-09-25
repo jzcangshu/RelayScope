@@ -78,6 +78,7 @@ func TestCollectSiteWritesObservationAndRevision(t *testing.T) {
 	t.Parallel()
 
 	dbStore := openCollectorStore(t)
+	startedAt := time.Now().UTC().Add(-time.Hour)
 	site, err := dbStore.CreateSite(context.Background(), store.Site{Name: "test", BaseURL: "https://example.test", SourceURL: "https://example.test/pricing", AdapterKey: "newapi-pricing", AdapterConfig: `{}`, Enabled: true, Interval: 20 * time.Minute})
 	if err != nil {
 		t.Fatalf("create site: %v", err)
@@ -90,12 +91,19 @@ func TestCollectSiteWritesObservationAndRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collector: %v", err)
 	}
-	if err := collector.CollectSite(context.Background(), site, time.Now().UTC()); err != nil {
+	if err := collector.CollectSite(context.Background(), site, startedAt); err != nil {
 		t.Fatalf("collect site: %v", err)
 	}
 	revision, err := dbStore.Revision(context.Background())
 	if err != nil || revision != 1 {
 		t.Fatalf("revision = %d, err=%v", revision, err)
+	}
+	runs, err := dbStore.ListCollectionRuns(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 || runs[0].Status != "success" || runs[0].FinishedAt == nil || !runs[0].FinishedAt.After(startedAt) {
+		t.Fatalf("successful run timestamps = %+v, want finished after %s", runs, startedAt)
 	}
 }
 
@@ -120,7 +128,8 @@ func TestCollectFailurePersistsAfterContextCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runID, err := dbStore.StartCollectionRun(context.Background(), site.ID, site.AdapterKey, time.Now().UTC())
+	startedAt := time.Now().UTC().Add(-time.Hour)
+	runID, err := dbStore.StartCollectionRun(context.Background(), site.ID, site.AdapterKey, startedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,12 +143,12 @@ func TestCollectFailurePersistsAfterContextCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_ = collector.finishFailure(ctx, site, runID, "collection_cancelled", "context canceled", time.Now().UTC())
+	_ = collector.finishFailure(ctx, site, runID, "collection_cancelled", "context canceled")
 	runs, err := dbStore.ListCollectionRuns(context.Background(), 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(runs) != 1 || runs[0].Status != "failed" || runs[0].ErrorCode != "collection_cancelled" {
+	if len(runs) != 1 || runs[0].Status != "failed" || runs[0].ErrorCode != "collection_cancelled" || runs[0].FinishedAt == nil || !runs[0].FinishedAt.After(startedAt) {
 		t.Fatalf("cancelled run = %+v", runs)
 	}
 }

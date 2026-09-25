@@ -77,13 +77,13 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	var err error
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			returnErr = collector.finishFailure(ctx, site, runID, "collector_panic", "adapter panicked during collection", now)
+			returnErr = collector.finishFailure(ctx, site, runID, "collector_panic", "adapter panicked during collection")
 		}
 	}()
 
 	adapterImpl, ok := collector.registry.Get(site.AdapterKey)
 	if !ok {
-		return collector.finishFailure(ctx, site, 0, "adapter_not_found", "adapter "+site.AdapterKey+" is not registered", now)
+		return collector.finishFailure(ctx, site, 0, "adapter_not_found", "adapter "+site.AdapterKey+" is not registered")
 	}
 	runID, err = collector.store.StartCollectionRun(ctx, site.ID, site.AdapterKey, now)
 	if err != nil {
@@ -101,19 +101,19 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 			// A failed session refresh may be a transient HTTP error rather than a
 			// real credential expiry; classify it the same way as collection-time
 			// fetch errors so only a true 401/403 marks the site login_expired.
-			return collector.finishFailure(ctx, site, runID, classifyFetchError(resolveErr), resolveErr.Error(), now)
+			return collector.finishFailure(ctx, site, runID, classifyFetchError(resolveErr), resolveErr.Error())
 		}
 		fetcher = resolved
 	}
 	if err := collector.acquireHTTP(ctx); err != nil {
-		return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error(), now)
+		return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error())
 	}
 	collection, collectErr := func() (domain.Collection, error) {
 		defer collector.releaseHTTP()
 		return adapterImpl.Collect(ctx, siteDefinition, fetcher, now)
 	}()
 	if collectErr != nil {
-		return collector.finishFailure(ctx, site, runID, classifyFetchError(collectErr), collectErr.Error(), now)
+		return collector.finishFailure(ctx, site, runID, classifyFetchError(collectErr), collectErr.Error())
 	}
 	collection.RunID = runID
 	blockedKeywords := parseBlockedKeywords(siteDefinition.ConfigJSON)
@@ -147,7 +147,7 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	// result and wants absent models marked accordingly; only silent emptiness
 	// stays a failure.
 	if collection.CatalogComplete && len(collection.Models) == 0 && collection.MissingCatalogState == "" {
-		return collector.finishFailure(ctx, site, runID, "catalog_incomplete", "catalog contained no valid models", now)
+		return collector.finishFailure(ctx, site, runID, "catalog_incomplete", "catalog contained no valid models")
 	}
 	filteredModels := make([]domain.ModelObservation, 0, len(collection.Models))
 	matchedNames := make([]string, 0)
@@ -171,28 +171,28 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	collection.Models = filteredModels
 	if detailCollector, ok := adapterImpl.(adapter.DetailCollector); ok {
 		if err := collector.acquireHTTP(ctx); err != nil {
-			return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error(), now)
+			return collector.finishFailure(ctx, site, runID, "collection_cancelled", err.Error())
 		}
 		detailErr := func() error {
 			defer collector.releaseHTTP()
 			return detailCollector.CollectDetails(ctx, siteDefinition, fetcher, &collection, matchedNames, now)
 		}()
 		if detailErr != nil {
-			return collector.finishFailure(ctx, site, runID, classifyFetchError(detailErr), detailErr.Error(), now)
+			return collector.finishFailure(ctx, site, runID, classifyFetchError(detailErr), detailErr.Error())
 		}
 	}
 	if err := collection.Validate(); err != nil {
-		return collector.finishFailure(ctx, site, runID, "invalid_observation", err.Error(), now)
+		return collector.finishFailure(ctx, site, runID, "invalid_observation", err.Error())
 	}
 	revision, affectedRawModels, err := collector.store.ApplyCollection(ctx, collection, normalizeRawName)
 	if err != nil {
-		return collector.finishFailure(ctx, site, runID, "store_failed", err.Error(), now)
+		return collector.finishFailure(ctx, site, runID, "store_failed", err.Error())
 	}
 	collector.matcherMu.RLock()
 	matchErr := collector.store.RefreshMatchesForRawModels(ctx, collector.matcher, affectedRawModels, now)
 	collector.matcherMu.RUnlock()
 	if matchErr != nil {
-		return collector.finishFailure(ctx, site, runID, "match_refresh_failed", matchErr.Error(), now)
+		return collector.finishFailure(ctx, site, runID, "match_refresh_failed", matchErr.Error())
 	}
 	if len(blockedRawNames) > 0 {
 		if err := collector.store.RemoveRawModels(ctx, site.ID, blockedRawNames, now); err != nil {
@@ -237,7 +237,8 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 	}
 	finishCtx, cancelFinish := persistenceContext(ctx)
 	defer cancelFinish()
-	if err := collector.store.FinishCollectionRun(finishCtx, runID, status, collection.CatalogComplete, modelCount, groupCount, code, message, now); err != nil {
+	finishedAt := time.Now().UTC()
+	if err := collector.store.FinishCollectionRun(finishCtx, runID, status, collection.CatalogComplete, modelCount, groupCount, code, message, finishedAt); err != nil {
 		return err
 	}
 	collector.logger.Info("site collection complete", "site_id", site.ID, "models", modelCount, "groups", groupCount, "revision", revision)
@@ -333,11 +334,12 @@ func (collector *Collector) CollectNow(ctx context.Context, siteID int64) error 
 	return fmt.Errorf("site %d not found", siteID)
 }
 
-func (collector *Collector) finishFailure(ctx context.Context, site store.Site, runID int64, code, message string, now time.Time) error {
+func (collector *Collector) finishFailure(ctx context.Context, site store.Site, runID int64, code, message string) error {
 	persistCtx, cancel := persistenceContext(ctx)
 	defer cancel()
+	finishedAt := time.Now().UTC()
 	if runID > 0 {
-		if err := collector.store.FinishCollectionRun(persistCtx, runID, "failed", false, 0, 0, code, message, now); err != nil {
+		if err := collector.store.FinishCollectionRun(persistCtx, runID, "failed", false, 0, 0, code, message, finishedAt); err != nil {
 			collector.logger.Error("finish failed run failed", "site_id", site.ID, "error", err)
 		}
 	}
@@ -350,7 +352,7 @@ func (collector *Collector) finishFailure(ctx context.Context, site store.Site, 
 	case "challenge_failed":
 		state = domain.AcquisitionChallengeFailed
 	}
-	if err := collector.store.SetAcquisitionState(persistCtx, site.ID, state, now); err != nil {
+	if err := collector.store.SetAcquisitionState(persistCtx, site.ID, state, finishedAt); err != nil {
 		collector.logger.Error("set failed acquisition state failed", "site_id", site.ID, "error", err)
 	}
 	collector.logger.Warn("site collection failed", "site_id", site.ID, "code", code, "error", message)

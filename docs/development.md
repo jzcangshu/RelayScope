@@ -63,6 +63,14 @@ adapter keeps both the exact source model name and every source group name.
 Large catalogs are fetched once, then detail requests are made only for names
 that match the configured popular-model rules.
 
+Before detail collection, the adapter requests the active model list through
+`summaryPath` and issues detail requests only for matched models that still
+have traffic in the configured window. If the summary endpoint is missing,
+malformed, or reports a business failure, the adapter falls back to the
+original full-detail behavior; an empty active set skips detail collection.
+`collection_runs.finished_at` now records the actual completion time instead
+of reusing the scheduled start time.
+
 ## Pricing development
 
 Current prices are normalized by `internal/pricing` and stored in the existing

@@ -173,6 +173,16 @@ func (fetcher fakeFetcher) GetBytes(_ context.Context, rawURL string) ([]byte, h
 	return body, http.Header{}, nil
 }
 
+type recordingFetcher struct {
+	fakeFetcher
+	requests []string
+}
+
+func (fetcher *recordingFetcher) GetBytes(ctx context.Context, rawURL string) ([]byte, http.Header, error) {
+	fetcher.requests = append(fetcher.requests, rawURL)
+	return fetcher.fakeFetcher.GetBytes(ctx, rawURL)
+}
+
 type missingResponseError struct{ rawURL string }
 
 func (err *missingResponseError) Error() string { return "missing response: " + err.rawURL }
@@ -410,6 +420,103 @@ func TestNewAPIAdapterCanSkipUnavailableDetails(t *testing.T) {
 	}
 	if !collection.Models[0].HistoryCoverageStart.IsZero() || !collection.Models[0].HistoryCoverageEnd.IsZero() {
 		t.Fatalf("skipped details declared history coverage: %+v", collection.Models[0])
+	}
+}
+
+func TestNewAPIAdapterUsesSummaryToSelectActiveDetails(t *testing.T) {
+	now := time.Date(2026, time.September, 26, 6, 0, 0, 0, time.UTC)
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+		{RawName: "deepseek-v4-pro", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+	}}
+	fetcher := &recordingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/perf-metrics/summary?hours=24":           []byte(`{"success":true,"data":{"models":[{"model_name":"gpt-5.6-sol"}]}}`),
+		"https://example.test/api/perf-metrics?hours=24&model=gpt-5.6-sol": []byte(`{"data":[]}`),
+	}}}
+
+	if err := (NewAPIAdapter{}).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"gpt-5.6-sol", "deepseek-v4-pro"}, now); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"https://example.test/api/perf-metrics/summary?hours=24",
+		"https://example.test/api/perf-metrics?hours=24&model=gpt-5.6-sol",
+	}
+	if len(fetcher.requests) != len(want) {
+		t.Fatalf("requests = %v, want %v", fetcher.requests, want)
+	}
+	for index := range want {
+		if fetcher.requests[index] != want[index] {
+			t.Fatalf("requests = %v, want %v", fetcher.requests, want)
+		}
+	}
+	if !collection.Models[0].HistoryCoverageStart.Equal(now.Add(-24*time.Hour)) || !collection.Models[0].HistoryCoverageEnd.Equal(now) {
+		t.Fatalf("active detail coverage = %+v", collection.Models[0])
+	}
+	if !collection.Models[1].HistoryCoverageStart.IsZero() || !collection.Models[1].HistoryCoverageEnd.IsZero() {
+		t.Fatalf("idle model declared detail coverage: %+v", collection.Models[1])
+	}
+}
+
+func TestNewAPIAdapterSkipsDetailsWhenSummaryHasNoActiveModels(t *testing.T) {
+	collection := domain.Collection{Models: []domain.ModelObservation{{
+		RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}},
+	}}}
+	fetcher := &recordingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/perf-metrics/summary?hours=24": []byte(`{"success":true,"data":{"models":[]}}`),
+	}}}
+
+	if err := (NewAPIAdapter{}).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"gpt-5.6-sol"}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.requests) != 1 || fetcher.requests[0] != "https://example.test/api/perf-metrics/summary?hours=24" {
+		t.Fatalf("requests = %v, want only the summary request", fetcher.requests)
+	}
+	if !collection.Models[0].HistoryCoverageStart.IsZero() || !collection.Models[0].HistoryCoverageEnd.IsZero() {
+		t.Fatalf("skipped details declared history coverage: %+v", collection.Models[0])
+	}
+}
+
+func TestNewAPIAdapterFallsBackToFullDetailsWhenSummaryFails(t *testing.T) {
+	now := time.Date(2026, time.September, 26, 6, 0, 0, 0, time.UTC)
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+		{RawName: "deepseek-v4-pro", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+	}}
+	fetcher := &recordingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/perf-metrics?hours=24&model=gpt-5.6-sol":     []byte(`{"data":[]}`),
+		"https://example.test/api/perf-metrics?hours=24&model=deepseek-v4-pro": []byte(`{"data":[]}`),
+	}}}
+
+	if err := (NewAPIAdapter{}).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"gpt-5.6-sol", "deepseek-v4-pro"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.requests) != 3 || fetcher.requests[0] != "https://example.test/api/perf-metrics/summary?hours=24" {
+		t.Fatalf("requests = %v, want summary plus both details", fetcher.requests)
+	}
+	for _, model := range collection.Models {
+		if !model.HistoryCoverageStart.Equal(now.Add(-24*time.Hour)) || !model.HistoryCoverageEnd.Equal(now) {
+			t.Fatalf("fallback detail coverage = %+v", model)
+		}
+	}
+}
+
+func TestNewAPIAdapterFallsBackToFullDetailsWhenSummaryReportsFailure(t *testing.T) {
+	now := time.Date(2026, time.September, 26, 6, 0, 0, 0, time.UTC)
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "gpt-5.6-sol", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+		{RawName: "deepseek-v4-pro", Groups: []domain.GroupObservation{{RawName: "default", ServiceState: domain.ServiceNoSamples}}},
+	}}
+	fetcher := &recordingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/perf-metrics/summary?hours=24":               []byte(`{"success":false,"message":"metrics disabled"}`),
+		"https://example.test/api/perf-metrics?hours=24&model=gpt-5.6-sol":     []byte(`{"data":[]}`),
+		"https://example.test/api/perf-metrics?hours=24&model=deepseek-v4-pro": []byte(`{"data":[]}`),
+	}}}
+
+	if err := (NewAPIAdapter{}).CollectDetails(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fetcher, &collection, []string{"gpt-5.6-sol", "deepseek-v4-pro"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.requests) != 3 {
+		t.Fatalf("requests = %v, want summary plus both details", fetcher.requests)
 	}
 }
 
@@ -1238,7 +1345,7 @@ func TestAutoModeFallsBackToSourceOrigin(t *testing.T) {
 		Site{ID: 1, BaseURL: "https://status.example.test", SourceURL: "https://api.example.test/status"},
 		fakeFetcher{responses: map[string][]byte{
 			"https://status.example.test/api/status": html,
-			"https://api.example.test/api/status":   status,
+			"https://api.example.test/api/status":    status,
 		}})
 	if err != nil {
 		t.Fatal(err)

@@ -45,19 +45,14 @@ type pricingModel struct {
 }
 
 type summaryResponse struct {
-	Data []summaryModel `json:"data"`
+	Success *bool `json:"success"`
+	Data    struct {
+		Models []summaryModel `json:"models"`
+	} `json:"data"`
 }
 
 type summaryModel struct {
-	Model       string   `json:"model"`
-	Provider    string   `json:"provider"`
-	Group       string   `json:"group"`
-	SuccessRate *float64 `json:"success_rate"`
-	Latency     *float64 `json:"latency"`
-	TPS         *float64 `json:"tps"`
-	Requests    *int64   `json:"requests"`
-	Success     *int64   `json:"success"`
-	Failure     *int64   `json:"failure"`
+	ModelName string `json:"model_name"`
 }
 
 type detailBucket struct {

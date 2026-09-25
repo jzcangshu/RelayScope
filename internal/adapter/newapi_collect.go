@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"relayscope/internal/adapter/adapterutil"
 	"relayscope/internal/domain"
 	"relayscope/internal/pricing"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -140,6 +142,12 @@ func (adapter NewAPIAdapter) CollectDetails(ctx context.Context, site Site, fetc
 	if config.SkipDetails {
 		return nil
 	}
+	if activeNames, ok := summaryActiveModels(ctx, fetcher, site.BaseURL, config.SummaryPath, config.WindowHours, modelNames); ok {
+		if len(activeNames) == 0 {
+			return nil
+		}
+		modelNames = activeNames
+	}
 	endpoint, err := resolveSiteURL(site.BaseURL, config.DetailPath)
 	if err != nil {
 		return err
@@ -147,6 +155,50 @@ func (adapter NewAPIAdapter) CollectDetails(ctx context.Context, site Site, fetc
 	return collectModelDetails(ctx, fetcher, collection, modelNames, now, time.Duration(config.WindowHours)*time.Hour, func(modelName string) (string, error) {
 		return detailQuery(endpoint, modelName, config.WindowHours), nil
 	}, nil)
+}
+
+// summaryActiveModels is a best-effort preflight for detail collection.
+// A missing, malformed, or business-failing summary response falls back to
+// the complete candidate list so the optimization cannot create new failures.
+func summaryActiveModels(ctx context.Context, fetcher Fetcher, baseURL, summaryPath string, windowHours int, candidates []string) ([]string, bool) {
+	if strings.TrimSpace(summaryPath) == "" {
+		return candidates, false
+	}
+	endpoint, err := resolveSiteURL(baseURL, summaryPath)
+	if err != nil {
+		return candidates, false
+	}
+	summaryURL, err := url.Parse(endpoint)
+	if err != nil {
+		return candidates, false
+	}
+	query := summaryURL.Query()
+	query.Set("hours", strconv.Itoa(windowHours))
+	summaryURL.RawQuery = query.Encode()
+	body, _, err := fetcher.GetBytes(ctx, summaryURL.String())
+	if err != nil {
+		return candidates, false
+	}
+	var response summaryResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return candidates, false
+	}
+	if (response.Success != nil && !*response.Success) || response.Data.Models == nil {
+		return candidates, false
+	}
+	activeNames := make(map[string]struct{}, len(response.Data.Models))
+	for _, model := range response.Data.Models {
+		if name := strings.TrimSpace(model.ModelName); name != "" {
+			activeNames[name] = struct{}{}
+		}
+	}
+	active := make([]string, 0, len(candidates))
+	for _, name := range candidates {
+		if _, exists := activeNames[name]; exists {
+			active = append(active, name)
+		}
+	}
+	return active, true
 }
 
 func collectModelDetails(
