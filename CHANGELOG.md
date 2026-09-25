@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Admin membership management by LinuxDO username. Operators can set exact
+  expiry dates, clear membership validity, review registered and pre-registered
+  members, and grant a membership before the user first signs in.
 - Membership system backed by LinuxDO OAuth login. Users sign in through
   LINUX DO Connect; sessions persist in SQLite (SHA-256-hashed tokens) so
   logins survive restarts. Membership validity is extended either by

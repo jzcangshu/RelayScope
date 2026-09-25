@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 )
@@ -66,7 +67,6 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 // MemberUser 描述一个有过会员记录的用户（含过期）。
 type MemberUser struct {
 	ID                  int64      `json:"id"`
-	ExternalID          string     `json:"externalId"`
 	Username            string     `json:"username"`
 	Name                string     `json:"name"`
 	TrustLevel          int        `json:"trustLevel"`
@@ -74,28 +74,31 @@ type MemberUser struct {
 	Active              bool       `json:"active"`
 	RegisteredAt        *time.Time `json:"registeredAt,omitempty"`
 	Registered          bool       `json:"registered"`
+	PreRegistered       bool       `json:"preRegistered"`
 	CreatedAt           time.Time  `json:"createdAt"`
 }
 
-// ListMembers 列出所有曾开通会员的用户（含已过期），按到期时间倒序。
+// ListMembers 列出所有曾开通会员的用户与未登录的预登记记录（含已过期），
+// 按到期时间倒序。
 func (s *Store) ListMembers(ctx context.Context) ([]MemberUser, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, external_id, username, name, trust_level, membership_expires_at, registered_at, created_at FROM users WHERE membership_expires_at IS NOT NULL AND membership_expires_at > 0 ORDER BY membership_expires_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, username, name, trust_level, membership_expires_at, registered_at, created_at FROM users WHERE membership_expires_at IS NOT NULL AND membership_expires_at > 0`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	now := time.Now().UTC()
-	var members []MemberUser
+	members := make([]MemberUser, 0)
 	for rows.Next() {
 		var m MemberUser
 		var expires *int64
 		var created int64
 		var registered sql.NullInt64
-		if err := rows.Scan(&m.ID, &m.ExternalID, &m.Username, &m.Name, &m.TrustLevel, &expires, &registered, &created); err != nil {
+		if err := rows.Scan(&m.ID, &m.Username, &m.Name, &m.TrustLevel, &expires, &registered, &created); err != nil {
 			return nil, err
 		}
 		m.RegisteredAt = timePtrFromNullMillis(registered)
 		m.Registered = m.RegisteredAt != nil
+		m.PreRegistered = !m.Registered
 		m.CreatedAt = time.UnixMilli(created).UTC()
 		if expires != nil && *expires > 0 {
 			expiry := time.UnixMilli(*expires).UTC()
@@ -104,16 +107,54 @@ func (s *Store) ListMembers(ctx context.Context) ([]MemberUser, error) {
 		}
 		members = append(members, m)
 	}
-	return members, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	preRows, err := s.db.QueryContext(ctx, `SELECT username, membership_expires_at, created_at FROM membership_preregistrations WHERE provider = ?`, ProviderLinuxDO)
+	if err != nil {
+		return nil, err
+	}
+	defer preRows.Close()
+	for preRows.Next() {
+		var m MemberUser
+		var expires, created int64
+		if err := preRows.Scan(&m.Username, &expires, &created); err != nil {
+			return nil, err
+		}
+		expiry := time.UnixMilli(expires).UTC()
+		m.MembershipExpiresAt = &expiry
+		m.Active = expiry.After(now)
+		m.PreRegistered = true
+		m.CreatedAt = time.UnixMilli(created).UTC()
+		members = append(members, m)
+	}
+	if err := preRows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(members, func(left, right int) bool {
+		leftExpiry, rightExpiry := members[left].MembershipExpiresAt, members[right].MembershipExpiresAt
+		if leftExpiry == nil {
+			return false
+		}
+		if rightExpiry == nil {
+			return true
+		}
+		return leftExpiry.After(*rightExpiry)
+	})
+	return members, nil
 }
 
-// SetMembershipByExternalID 可先为未注册用户登记外部 ID；LD 登录时复用同一行，
-// 因此登记的会员有效期不会被覆盖。
-func (s *Store) SetMembershipByExternalID(ctx context.Context, provider, externalID string, expiresAt *time.Time) (MemberUser, error) {
+// SetMembershipByUsername 管理员按 LinuxDO 用户名维护会员有效期。
+// 用户已注册时直接更新其会员期；未注册时写入预登记，登录后自动消耗。
+func (s *Store) SetMembershipByUsername(ctx context.Context, provider, rawUsername string, expiresAt *time.Time) (MemberUser, error) {
 	provider = strings.TrimSpace(provider)
-	externalID = strings.TrimSpace(externalID)
-	if provider == "" || externalID == "" || len(provider) > 100 || len(externalID) > 200 {
-		return MemberUser{}, errors.New("invalid external id")
+	username, err := normalizeMembershipUsername(rawUsername)
+	if err != nil {
+		return MemberUser{}, err
+	}
+	if provider == "" || len(provider) > 100 {
+		return MemberUser{}, errors.New("invalid provider")
 	}
 	var expiry any
 	if expiresAt != nil {
@@ -128,41 +169,132 @@ func (s *Store) SetMembershipByExternalID(ctx context.Context, provider, externa
 		return MemberUser{}, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO users(provider, external_id, username, name, avatar_url, trust_level, registered_at, created_at, updated_at) VALUES (?, ?, ?, '', '', 0, NULL, ?, ?) ON CONFLICT(provider, external_id) DO NOTHING`, provider, externalID, externalID, unixMilli(now), unixMilli(now)); err != nil {
+
+	var userID int64
+	err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE provider = ? AND LOWER(username) = ? ORDER BY CASE WHEN registered_at IS NULL THEN 1 ELSE 0 END, id LIMIT 1`, provider, usernameKey(username)).Scan(&userID)
+	switch {
+	case err == nil:
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET membership_expires_at = ?, updated_at = ? WHERE id = ?`, expiry, unixMilli(now), userID); err != nil {
+			return MemberUser{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM membership_preregistrations WHERE provider = ? AND username_key = ?`, provider, usernameKey(username)); err != nil {
+			return MemberUser{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return MemberUser{}, err
+		}
+		return s.GetMemberByUserID(ctx, userID)
+	case errors.Is(err, sql.ErrNoRows):
+		if expiresAt == nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM membership_preregistrations WHERE provider = ? AND username_key = ?`, provider, usernameKey(username)); err != nil {
+				return MemberUser{}, err
+			}
+			if err := tx.Commit(); err != nil {
+				return MemberUser{}, err
+			}
+			return MemberUser{Username: username, CreatedAt: now}, nil
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO membership_preregistrations(provider, username, username_key, membership_expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(provider, username_key) DO UPDATE SET username=excluded.username, membership_expires_at=excluded.membership_expires_at, updated_at=excluded.updated_at`, provider, username, usernameKey(username), expiry, unixMilli(now), unixMilli(now)); err != nil {
+			return MemberUser{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return MemberUser{}, err
+		}
+		return s.GetMembershipPreregistration(ctx, provider, username)
+	default:
 		return MemberUser{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE users SET membership_expires_at = ?, updated_at = ? WHERE provider = ? AND external_id = ?`, expiry, unixMilli(now), provider, externalID)
+}
+
+func (s *Store) GetMemberByUsername(ctx context.Context, provider, rawUsername string) (MemberUser, error) {
+	provider = strings.TrimSpace(provider)
+	username, err := normalizeMembershipUsername(rawUsername)
 	if err != nil {
 		return MemberUser{}, err
 	}
-	if affected, _ := result.RowsAffected(); affected != 1 {
-		return MemberUser{}, errors.New("membership target not found")
+	var userID int64
+	err = s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE provider = ? AND LOWER(username) = ? ORDER BY CASE WHEN registered_at IS NULL THEN 1 ELSE 0 END, id LIMIT 1`, provider, usernameKey(username)).Scan(&userID)
+	if err == nil {
+		return s.GetMemberByUserID(ctx, userID)
 	}
-	if err := tx.Commit(); err != nil {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return MemberUser{}, err
 	}
-	return s.GetMemberByExternalID(ctx, provider, externalID)
+	return s.GetMembershipPreregistration(ctx, provider, username)
 }
 
-func (s *Store) GetMemberByExternalID(ctx context.Context, provider, externalID string) (MemberUser, error) {
-	provider = strings.TrimSpace(provider)
-	externalID = strings.TrimSpace(externalID)
+func (s *Store) GetMemberByUserID(ctx context.Context, userID int64) (MemberUser, error) {
 	var m MemberUser
 	var expires *int64
 	var registered sql.NullInt64
 	var created int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, external_id, username, name, trust_level, membership_expires_at, registered_at, created_at FROM users WHERE provider = ? AND external_id = ?`, provider, externalID).
-		Scan(&m.ID, &m.ExternalID, &m.Username, &m.Name, &m.TrustLevel, &expires, &registered, &created)
+	err := s.db.QueryRowContext(ctx, `SELECT id, username, name, trust_level, membership_expires_at, registered_at, created_at FROM users WHERE id = ?`, userID).
+		Scan(&m.ID, &m.Username, &m.Name, &m.TrustLevel, &expires, &registered, &created)
 	if err != nil {
 		return MemberUser{}, err
 	}
 	m.RegisteredAt = timePtrFromNullMillis(registered)
 	m.Registered = m.RegisteredAt != nil
+	m.PreRegistered = !m.Registered
 	m.CreatedAt = time.UnixMilli(created).UTC()
-	if expires != nil && *expires > 0 {
-		expiry := time.UnixMilli(*expires).UTC()
-		m.MembershipExpiresAt = &expiry
-		m.Active = expiry.After(time.Now().UTC())
-	}
+	applyMemberExpiry(&m, expires, time.Now().UTC())
 	return m, nil
+}
+
+func (s *Store) GetMembershipPreregistration(ctx context.Context, provider, rawUsername string) (MemberUser, error) {
+	provider = strings.TrimSpace(provider)
+	username, err := normalizeMembershipUsername(rawUsername)
+	if err != nil {
+		return MemberUser{}, err
+	}
+	var m MemberUser
+	var expires, created int64
+	err = s.db.QueryRowContext(ctx, `SELECT username, membership_expires_at, created_at FROM membership_preregistrations WHERE provider = ? AND username_key = ?`, provider, usernameKey(username)).
+		Scan(&m.Username, &expires, &created)
+	if err != nil {
+		return MemberUser{}, err
+	}
+	m.PreRegistered = true
+	m.CreatedAt = time.UnixMilli(created).UTC()
+	applyMemberExpiry(&m, &expires, time.Now().UTC())
+	return m, nil
+}
+
+func consumeMembershipPreregistration(ctx context.Context, tx *sql.Tx, provider, username string, userID int64, now time.Time) error {
+	var expires int64
+	err := tx.QueryRowContext(ctx, `SELECT membership_expires_at FROM membership_preregistrations WHERE provider = ? AND username_key = ?`, provider, usernameKey(username)).Scan(&expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET membership_expires_at = MAX(COALESCE(membership_expires_at, 0), ?), updated_at = ? WHERE id = ?`, expires, unixMilli(now), userID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM membership_preregistrations WHERE provider = ? AND username_key = ?`, provider, usernameKey(username))
+	return err
+}
+
+func normalizeMembershipUsername(value string) (string, error) {
+	username := strings.TrimSpace(value)
+	username = strings.TrimPrefix(username, "@")
+	username = strings.TrimSpace(username)
+	if username == "" || len(username) > 200 {
+		return "", errors.New("invalid username")
+	}
+	return username, nil
+}
+
+func usernameKey(username string) string {
+	return strings.ToLower(username)
+}
+
+func applyMemberExpiry(member *MemberUser, expires *int64, now time.Time) {
+	if expires == nil || *expires <= 0 {
+		return
+	}
+	expiry := time.UnixMilli(*expires).UTC()
+	member.MembershipExpiresAt = &expiry
+	member.Active = expiry.After(now)
 }

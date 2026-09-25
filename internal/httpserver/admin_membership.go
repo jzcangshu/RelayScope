@@ -89,13 +89,8 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 		writeJSON(writer, map[string]any{"members": members})
 	})))
 
-	// 会员身份：支持按 LinuxDO ID 预登记；用户登录时通过同一 ID 自动匹配
-	mux.Handle("PUT /api/v1/admin/members/{id}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
-		if err != nil || id <= 0 {
-			writeError(writer, http.StatusBadRequest, "无效的 LinuxDO ID")
-			return
-		}
+	// 会员身份：支持按 LinuxDO 用户名预登记；用户登录时通过同一用户名自动匹配
+	mux.Handle("PUT /api/v1/admin/members/{username}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload struct {
 			ExpiresAt string `json:"expiresAt"`
 		}
@@ -108,7 +103,7 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 			writeError(writer, http.StatusBadRequest, "到期时间格式错误")
 			return
 		}
-		member, err := options.Store.SetMembershipByExternalID(request.Context(), store.ProviderLinuxDO, strconv.FormatInt(id, 10), &expiresAt)
+		member, err := options.Store.SetMembershipByUsername(request.Context(), store.ProviderLinuxDO, request.PathValue("username"), &expiresAt)
 		if err != nil {
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return
@@ -117,13 +112,8 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 	}))))
 
 	// 会员身份：清除有效期但保留用户/预登记记录
-	mux.Handle("DELETE /api/v1/admin/members/{id}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		id, err := strconv.ParseInt(request.PathValue("id"), 10, 64)
-		if err != nil || id <= 0 {
-			writeError(writer, http.StatusBadRequest, "无效的 LinuxDO ID")
-			return
-		}
-		member, err := options.Store.SetMembershipByExternalID(request.Context(), store.ProviderLinuxDO, strconv.FormatInt(id, 10), nil)
+	mux.Handle("DELETE /api/v1/admin/members/{username}", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		member, err := options.Store.SetMembershipByUsername(request.Context(), store.ProviderLinuxDO, request.PathValue("username"), nil)
 		if err != nil {
 			writeError(writer, http.StatusBadRequest, err.Error())
 			return

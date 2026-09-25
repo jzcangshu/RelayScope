@@ -101,20 +101,28 @@ func TestUserSessionPersistenceAcrossReopen(t *testing.T) {
 	}
 }
 
-func TestSetMembershipByExternalIDPreRegistersUser(t *testing.T) {
+func TestSetMembershipByUsernamePreRegistersUser(t *testing.T) {
 	db := newTestStore(t)
 	ctx := context.Background()
 	expiry := time.Now().UTC().AddDate(1, 0, 0).Truncate(time.Millisecond)
 
-	member, err := db.SetMembershipByExternalID(ctx, "linuxdo", "42", &expiry)
+	member, err := db.SetMembershipByUsername(ctx, ProviderLinuxDO, "@Tester", &expiry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if member.ExternalID != "42" || member.Registered {
-		t.Fatalf("pre-registered member should be identified but unregistered: %+v", member)
+	if member.Username != "Tester" || member.Registered || !member.PreRegistered {
+		t.Fatalf("member should be pre-registered by username: %+v", member)
 	}
 	if member.MembershipExpiresAt == nil || !member.MembershipExpiresAt.Equal(expiry) {
 		t.Fatalf("pre-registered membership should keep exact expiry, got %+v", member)
+	}
+
+	members, err := db.ListMembers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(members) != 1 || members[0].Username != "Tester" || members[0].Registered || !members[0].PreRegistered {
+		t.Fatalf("members list should show pre-registration: %+v", members)
 	}
 
 	user, err := db.UpsertUser(ctx, "linuxdo", "42", "tester", "Tester", "", 2)
@@ -132,19 +140,19 @@ func TestSetMembershipByExternalIDPreRegistersUser(t *testing.T) {
 		t.Fatalf("LD login should preserve membership expiry: %+v", membership)
 	}
 
-	members, err := db.ListMembers(ctx)
+	members, err = db.ListMembers(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(members) != 1 || members[0].ExternalID != "42" || !members[0].Registered {
+	if len(members) != 1 || members[0].Username != "tester" || !members[0].Registered || members[0].PreRegistered {
 		t.Fatalf("members list should describe matched user: %+v", members)
 	}
 
-	member, err = db.SetMembershipByExternalID(ctx, "linuxdo", "42", nil)
+	member, err = db.SetMembershipByUsername(ctx, ProviderLinuxDO, "@tester", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if member.MembershipExpiresAt != nil {
+	if member.MembershipExpiresAt != nil || member.PreRegistered {
 		t.Fatalf("membership should be removable, got %+v", member)
 	}
 }

@@ -37,8 +37,22 @@ func (s *Store) UpsertUser(ctx context.Context, provider, externalID, username, 
 		return User{}, errors.New("invalid user")
 	}
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `INSERT INTO users(provider, external_id, username, name, avatar_url, trust_level, registered_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, external_id) DO UPDATE SET username=excluded.username, name=excluded.name, avatar_url=excluded.avatar_url, trust_level=excluded.trust_level, registered_at=COALESCE(users.registered_at, excluded.registered_at), updated_at=excluded.updated_at`, provider, externalID, username, strings.TrimSpace(name), strings.TrimSpace(avatarURL), trustLevel, unixMilli(now), unixMilli(now), unixMilli(now))
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return User{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO users(provider, external_id, username, name, avatar_url, trust_level, registered_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, external_id) DO UPDATE SET username=excluded.username, name=excluded.name, avatar_url=excluded.avatar_url, trust_level=excluded.trust_level, registered_at=COALESCE(users.registered_at, excluded.registered_at), updated_at=excluded.updated_at`, provider, externalID, username, strings.TrimSpace(name), strings.TrimSpace(avatarURL), trustLevel, unixMilli(now), unixMilli(now), unixMilli(now)); err != nil {
+		return User{}, err
+	}
+	var userID int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE provider = ? AND external_id = ?`, provider, externalID).Scan(&userID); err != nil {
+		return User{}, err
+	}
+	if err := consumeMembershipPreregistration(ctx, tx, provider, username, userID, now); err != nil {
+		return User{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return User{}, err
 	}
 	return s.GetUserByExternalID(ctx, provider, externalID)

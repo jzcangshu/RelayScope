@@ -796,14 +796,17 @@ async function loadMembers() {
       ? '<span class="chip status-paid">有效</span>'
       : '<span class="chip status-refunded">已过期</span>';
     const expiry = formatDateTimeLocal(m.membershipExpiresAt);
+    const registration = m.registered
+      ? '已注册'
+      : m.preRegistered ? '<span class="muted">预登记</span>' : '<span class="muted">—</span>';
     return `<tr>
-      <td class="mono">${escapeHTML(String(m.externalId))}</td>
-      <td><strong>${escapeHTML(m.name || m.username)}</strong>${m.name ? `<small class="muted"> @${escapeHTML(m.username)}</small>` : ''}</td>
+      <td class="mono">@${escapeHTML(m.username)}</td>
+      <td>${m.name ? escapeHTML(m.name) : '<span class="muted">—</span>'}</td>
       <td>${TRUST_LEVEL_LABELS[m.trustLevel] || 'L' + m.trustLevel}</td>
-      <td>${m.registered ? '已注册' : '<span class="muted">预登记</span>'}</td>
+      <td>${registration}</td>
       <td>${formatExpiry(m.membershipExpiresAt)}</td>
       <td>${status}</td>
-      <td><button type="button" class="btn btn-ghost" data-member-edit="${escapeHTML(String(m.externalId))}" data-member-expiry="${escapeHTML(expiry)}">编辑</button><button type="button" class="btn btn-ghost" data-member-remove="${escapeHTML(String(m.externalId))}">移除会员</button></td>
+      <td><button type="button" class="btn btn-ghost" data-member-edit="${escapeHTML(m.username)}" data-member-expiry="${escapeHTML(expiry)}">编辑</button><button type="button" class="btn btn-ghost" data-member-remove="${escapeHTML(m.username)}">移除会员</button></td>
     </tr>`;
   }).join('');
 }
@@ -811,12 +814,12 @@ async function loadMembers() {
 $('#member-manage-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   await submitForm(event.currentTarget, '正在保存…', async () => {
-    const id = $('#member-id').value.trim();
+    const username = $('#member-username').value.trim().replace(/^@+/, '');
     const expiry = $('#member-expiry').value;
-    if (!id || !expiry || Number(id) <= 0) throw new Error('请填写有效的 LinuxDO ID 和会员到期时间。');
+    if (!username || !expiry) throw new Error('请填写有效的 LinuxDO 用户名和会员到期时间。');
     const expiresAt = new Date(expiry);
     if (Number.isNaN(expiresAt.getTime())) throw new Error('会员到期时间无效。');
-    await saveRequest(`/api/v1/admin/members/${encodeURIComponent(id)}`, 'PUT', { expiresAt: expiresAt.toISOString() });
+    await saveRequest(`/api/v1/admin/members/${encodeURIComponent(username)}`, 'PUT', { expiresAt: expiresAt.toISOString() });
     event.currentTarget.reset();
     toast('会员身份已保存', 'success');
     await loadMembers();
@@ -827,9 +830,9 @@ $('#members-list').addEventListener('click', (event) => {
   const edit = event.target.closest('[data-member-edit]');
   const remove = event.target.closest('[data-member-remove]');
   if (edit) {
-    $('#member-id').value = edit.dataset.memberEdit;
+    $('#member-username').value = edit.dataset.memberEdit;
     $('#member-expiry').value = edit.dataset.memberExpiry;
-    $('#member-id').focus();
+    $('#member-username').focus();
   } else if (remove) {
     runAction(remove, async () => {
       if (!window.confirm('移除这个会员的有效期？用户或预登记记录会保留。')) return;

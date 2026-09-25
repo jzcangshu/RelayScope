@@ -74,6 +74,9 @@ func (store *Store) migrate(ctx context.Context) error {
 	if err := store.ensureUserSchema(ctx); err != nil {
 		return err
 	}
+	if err := store.ensureMembershipSchema(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -179,6 +182,24 @@ func (store *Store) ensureUserSchema(ctx context.Context) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit users schema reconciliation: %w", err)
+	}
+	return nil
+}
+
+func (store *Store) ensureMembershipSchema(ctx context.Context) error {
+	if _, err := store.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS membership_preregistrations (
+		provider TEXT NOT NULL,
+		username TEXT NOT NULL,
+		username_key TEXT NOT NULL,
+		membership_expires_at INTEGER NOT NULL CHECK (membership_expires_at > 0),
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		UNIQUE(provider, username_key)
+	)`); err != nil {
+		return fmt.Errorf("create membership pre-registrations: %w", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS membership_preregistrations_expiry_idx ON membership_preregistrations(membership_expires_at DESC)`); err != nil {
+		return fmt.Errorf("create membership pre-registrations index: %w", err)
 	}
 	return nil
 }

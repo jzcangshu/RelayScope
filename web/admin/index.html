@@ -228,13 +228,13 @@
 
           <section id="members-panel" class="panel" hidden>
             <div class="card">
-              <div class="card-head"><h2>会员身份管理</h2><span class="card-hint">按 LinuxDO ID（LD 用户 ID）直接设置有效期</span></div>
+              <div class="card-head"><h2>会员身份管理</h2><span class="card-hint">按 LinuxDO 用户名（@ 后面的内容）直接设置有效期</span></div>
               <div class="card-body">
                 <form id="member-manage-form" class="stack-form">
-                  <label class="field"><span>LinuxDO ID（LD 用户 ID）</span><input id="member-id" type="number" min="1" step="1" placeholder="例如：123456" required></label>
+                  <label class="field"><span>LinuxDO 用户名（可带 @）</span><input id="member-username" type="text" maxlength="201" placeholder="例如：example" required></label>
                   <label class="field"><span>会员到期时间（本地时间）</span><input id="member-expiry" type="datetime-local" required></label>
                   <div class="form-actions-inline"><button class="btn btn-primary" type="submit">保存会员身份</button><button class="btn btn-ghost" type="reset">清空</button></div>
-                  <p class="muted">未注册的 ID 会先预登记；对方之后通过 LD 登录会自动匹配这段会员期。</p>
+                  <p class="muted">未注册的用户名会先预登记；对方之后通过 LD 登录会自动匹配这段会员期。</p>
                   <p class="form-error" data-form-error role="alert" tabindex="-1" hidden></p>
                 </form>
               </div>
@@ -244,7 +244,7 @@
               <div class="card-body flush">
                 <div class="admin-table-wrap">
                   <table class="admin-table" id="members-table">
-                    <thead><tr><th>LD ID</th><th>用户</th><th>信任等级</th><th>注册状态</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead>
+                    <thead><tr><th>LinuxDO 用户名</th><th>名称</th><th>信任等级</th><th>注册状态</th><th>到期时间</th><th>状态</th><th>操作</th></tr></thead>
                     <tbody id="members-list"></tbody>
                   </table>
                 </div>
