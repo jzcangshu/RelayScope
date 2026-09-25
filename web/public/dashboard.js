@@ -74,6 +74,7 @@ let historyBuckets = [];
 let historyEnd = Date.now();
 let view = 'model';
 let revision = null;
+let dataReady = false;
 let currentPage = 1;
 let pageSize = 20;
 let announcements = [];
@@ -852,6 +853,7 @@ function bindPagination() {
 }
 
 function render() {
+  if (!dataReady) return;
   // 标签可能在数据加载后才就绪，渲染前刷新 card.tagNames
   for (const card of cards) card.tagNames = cardTagsOf(card.siteName);
   const query = searchElement.value.trim().toLowerCase();
@@ -929,6 +931,7 @@ async function loadRows() {
       return;
     }
     revision = meta.revision ?? revision;
+    const announcementsPromise = loadAnnouncements();
     const dashboardResponse = await fetch('/api/v1/public/dashboard', { cache: 'no-store' });
     if (!dashboardResponse.ok) throw new Error('dashboard not ready');
     const dashboard = await dashboardResponse.json();
@@ -936,9 +939,10 @@ async function loadRows() {
     rows = dashboard.rows || [];
     historyBuckets = dashboard.buckets || [];
     historyEnd = meta.serverTime ? Date.parse(meta.serverTime) : Date.now();
-    await loadAnnouncements();
+    await announcementsPromise;
     await new Promise((resolve) => setTimeout(resolve, 0));
     buildCards();
+    dataReady = true;
     render();
   } catch {}
 }
