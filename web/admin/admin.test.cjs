@@ -240,6 +240,9 @@ test('admin console can manage and pre-register memberships by LinuxDO username'
   assert.match(script, /data-member-remove/);
   assert.match(script, /m\.registered/);
   assert.match(script, /m\.username/);
+  assert.match(script, /const form = event\.currentTarget;/);
+  assert.match(script, /form\.reset\(\)/);
+  assert.doesNotMatch(script, /event\.currentTarget\.reset\(\)/);
   assert.doesNotMatch(html, /LinuxDO ID/);
   assert.doesNotMatch(script, /Number\(username\)/);
 });

@@ -813,14 +813,15 @@ async function loadMembers() {
 
 $('#member-manage-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  await submitForm(event.currentTarget, '正在保存…', async () => {
+  const form = event.currentTarget;
+  await submitForm(form, '正在保存…', async () => {
     const username = $('#member-username').value.trim().replace(/^@+/, '');
     const expiry = $('#member-expiry').value;
     if (!username || !expiry) throw new Error('请填写有效的 LinuxDO 用户名和会员到期时间。');
     const expiresAt = new Date(expiry);
     if (Number.isNaN(expiresAt.getTime())) throw new Error('会员到期时间无效。');
     await saveRequest(`/api/v1/admin/members/${encodeURIComponent(username)}`, 'PUT', { expiresAt: expiresAt.toISOString() });
-    event.currentTarget.reset();
+    form.reset();
     toast('会员身份已保存', 'success');
     await loadMembers();
   });
