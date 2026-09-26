@@ -62,6 +62,10 @@ func TestAdminSessionBatchImportMatchesByOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	siteThree, err := db.CreateSite(context.Background(), store.Site{Name: "three", BaseURL: "https://three.example.test", SourceURL: "https://three.example.test/pricing", AdapterKey: "test", Enabled: true, SessionRequired: false})
+	if err != nil {
+		t.Fatal(err)
+	}
 	auth, err := admin.NewAuth("this-is-a-long-test-password")
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +103,7 @@ func TestAdminSessionBatchImportMatchesByOrigin(t *testing.T) {
 		{"site_name":"One","site_url":"https://one.example.test/pricing","authType":"access_token","account_info":{"id":"504","access_token":"token-one"}},
 		{"site_name":"One again","site_url":"https://one.example.test","authType":"access_token","account_info":{"id":"504","access_token":"token-one-new"}},
 		{"site_name":"Two","site_url":"https://two.example.test","authType":"cookie","cookieAuth":{"sessionCookie":"session=abc; other=def"}},
+		{"site_name":"Three","site_url":"https://three.example.test","authType":"access_token","account_info":{"id":"7","access_token":"t3"}},
 		{"site_name":"Ghost","site_url":"https://ghost.example.test","authType":"access_token","account_info":{"id":"9","access_token":"t9"}}]}}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/session-import", strings.NewReader(export))
 	request.AddCookie(adminCookie)
@@ -116,8 +121,8 @@ func TestAdminSessionBatchImportMatchesByOrigin(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.Imported != 2 || report.NoMatch != 1 {
-		t.Fatalf("report = %+v, want imported 2 noMatch 1", report)
+	if report.Imported != 3 || report.NoMatch != 1 {
+		t.Fatalf("report = %+v, want imported 3 noMatch 1", report)
 	}
 	loaded, _, err := vault.Load(context.Background(), db, siteOne.ID)
 	if err != nil || loaded.AccessToken != "token-one-new" || loaded.UserID != "504" {
@@ -126,5 +131,12 @@ func TestAdminSessionBatchImportMatchesByOrigin(t *testing.T) {
 	loadedTwo, _, err := vault.Load(context.Background(), db, siteTwo.ID)
 	if err != nil || len(loadedTwo.Cookies) != 2 || loadedTwo.Cookies[0].Value != "abc" {
 		t.Fatalf("site two session = %+v, err = %v", loadedTwo, err)
+	}
+	updated, err := db.GetSite(context.Background(), siteThree.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.SessionRequired {
+		t.Fatal("importing credentials must enable the session-required flag")
 	}
 }

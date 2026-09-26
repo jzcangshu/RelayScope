@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -15,6 +16,19 @@ type sessionImportResult struct {
 	SiteURL  string `json:"siteUrl"`
 	Status   string `json:"status"` // imported | no_match | skipped
 	Detail   string `json:"detail,omitempty"`
+}
+
+// ensureSessionRequired flips the site's session flag when credentials are
+// imported for a site not marked as requiring login. Importing credentials is
+// explicit evidence that the collector should use them, and the extension's
+// pending list only offers session-required sites, so leaving the flag off
+// would silently ignore everything that was just imported.
+func ensureSessionRequired(ctx context.Context, db *store.Store, site store.Site) error {
+	if site.SessionRequired {
+		return nil
+	}
+	required := true
+	return db.UpdateSite(ctx, site.ID, site.Name, site.AdapterKey, site.AdapterConfig, site.Enabled, &required, site.Interval, site.Jitter)
 }
 
 // importSessionPayload accepts both RelayScope's own session JSON and All

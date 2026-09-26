@@ -215,6 +215,10 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, payloadErr.Error())
 				return
 			}
+			if err := ensureSessionRequired(request.Context(), options.Store, site); err != nil {
+				writeError(writer, http.StatusInternalServerError, "启用登录采集标志失败")
+				return
+			}
 			if err := options.SessionVault.Save(request.Context(), options.Store, id, payload, nil); err != nil {
 				writeError(writer, http.StatusBadRequest, "save session")
 				return
@@ -279,6 +283,12 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				}
 				result.Status = "imported"
 				result.SiteName = site.Name
+				if err := ensureSessionRequired(request.Context(), options.Store, site); err != nil {
+					result.Status = "skipped"
+					result.Detail = "启用登录采集标志失败"
+					results = append(results, result)
+					continue
+				}
 				item := session.BatchItem{SiteID: site.ID, Data: data}
 				if index, seen := byOrigin[strings.ToLower(origin)]; seen {
 					entries[index] = importEntry{item: item}
