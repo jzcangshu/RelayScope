@@ -116,6 +116,14 @@ func decodeStatus(body []byte) statusInfo {
 	}
 	if strings.EqualFold(status.Currency, "USD") {
 		status.CurrencySymbol = "$"
+	} else if !strings.EqualFold(status.Currency, "CUSTOM") {
+		switch strings.TrimSpace(status.CurrencySymbol) {
+		case "", "$", "¤":
+			// custom_currency_symbol is only meaningful for the CUSTOM display
+			// type; preset currencies carry the untouched '¤' placeholder (or
+			// this decoder's '$' default), so derive the real symbol instead.
+			status.CurrencySymbol = currencySymbol(status.Currency)
+		}
 	}
 	return status
 }

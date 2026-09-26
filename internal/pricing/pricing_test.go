@@ -54,6 +54,33 @@ func TestNewAPIDecoderNormalizesFixedPriceAndCurrency(t *testing.T) {
 	}
 }
 
+func TestNewAPIDecoderDerivesSymbolForPresetCurrencies(t *testing.T) {
+	cases := []struct {
+		name         string
+		status       string
+		wantCurrency string
+		wantSymbol   string
+	}{
+		{"cny placeholder", `{"data":{"quota_per_unit":500000,"quota_display_type":"CNY","custom_currency_symbol":"¤","custom_currency_exchange_rate":1}}`, "CNY", "¥"},
+		{"cny leftover default", `{"data":{"quota_per_unit":500000,"quota_display_type":"CNY","custom_currency_exchange_rate":1}}`, "CNY", "¥"},
+		{"cny explicit symbol kept", `{"data":{"quota_per_unit":500000,"quota_display_type":"CNY","custom_currency_symbol":"￥","custom_currency_exchange_rate":1}}`, "CNY", "￥"},
+		{"custom symbol kept", `{"data":{"quota_per_unit":500000,"quota_display_type":"CUSTOM","custom_currency_symbol":"🍰","custom_currency_exchange_rate":1}}`, "CUSTOM", "🍰"},
+		{"usd placeholder forced dollar", `{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_symbol":"¤","custom_currency_exchange_rate":1}}`, "USD", "$"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"data":[{"model_name":"m","quota_type":1,"model_price":1,"enable_groups":["default"]}]}`), []byte(testCase.status))
+			if err != nil {
+				t.Fatal(err)
+			}
+			price := PricesForModel(catalog.Models["m"])["default"]
+			if price.Currency != testCase.wantCurrency || price.CurrencySymbol != testCase.wantSymbol {
+				t.Fatalf("currency = %q, symbol = %q, want %q / %q", price.Currency, price.CurrencySymbol, testCase.wantCurrency, testCase.wantSymbol)
+			}
+		})
+	}
+}
+
 func TestPriceFromModelExtensionUsesLowestAvailableGroup(t *testing.T) {
 	first := 2.0
 	second := 1.0

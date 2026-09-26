@@ -76,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public dashboard is untouched.
 
 ### Fixed
+- 修复 NewAPI v1.0 站点人民币符号显示成 `¤` 的问题。new-api 的
+  `quota_display_type` 是货币预设（USD/CNY/CUSTOM），`custom_currency_symbol`
+  只对 CUSTOM 类型有意义，但预设为 CNY 的站点该字段残留着未填写的占位符
+  `¤`，价格解码器无条件采用了它，YiMingTalk、Ad公益站、南梁 API 等 5 个站
+  的价格全部显示成「¤0.042」。现在非 USD/CUSTOM 货币遇到占位符、空值或
+  解码默认的 `$` 时，按货币代码推导真实符号（CNY→¥），站点显式设置的自定义
+  符号（含表情符号）原样保留。
 - 修复计划采集默认超时回落到 3 分钟的问题：主程序此前把配置默认值覆盖掉
   调度器为挑战型 NewAPI 站点准备的 7 分钟上限，导致已完成的采集在落库前
   变成 `store_failed: context canceled`。同时让手动采集跟随服务生命周期，
