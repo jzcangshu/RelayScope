@@ -96,6 +96,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the public dashboard is untouched.
 
 ### Fixed
+- 修复使用「阶梯表达式计费」（`billing_mode: tiered_expr`）的 NewAPI 站点
+  价格完全失真的问题。这类站点的真实价格写在 `billing_expr` 表达式里
+  （`tier("base", p * 2 + c * 8 + cr * 0.6)`，系数即美元/百万 tokens），而
+  `model_ratio` 往往是未配置的兜底值 37.5；解码器此前只从表达式提取
+  `cr`/`cc` 缓存系数，输入/输出价仍按倍率计算，dudu公益站、HappyCoding 的
+  `deepseek-v4.1-flash` 因此显示成 $75/M（实际 $2/M、$0.3/M），差 12~250
+  倍。新增 `internal/pricing/expr.go` 线性表达式解析器：取 `base`/`standard`
+  档（无则取第一档）归约出 `p`/`c`/`cr`/`cc` 系数，支持条件分档、
+  `fixed(N)` 按次计费、常量系数（如 PigeonW 的 `(p * 4 + c * 20) * 0.5`），
+  忽略时段/参数等运行期倍率；表达式不可解析时不再显示价格而不是退回必然
+  错误的倍率价。全站扫描确认 13 个站点 77 个模型受影响，已全部重扫修复；
+  `quota_type: 1`（按次计费）仍优先于表达式（hkai 的 step-5-preview 同挂
+  两种计费属站点配置矛盾）。决策记录见
+  `docs/decisions/0002-billing-expression-pricing.md`。
 - 修复 NewAPI v1.0 站点人民币符号显示成 `¤` 的问题。new-api 的
   `quota_display_type` 是货币预设（USD/CNY/CUSTOM），`custom_currency_symbol`
   只对 CUSTOM 类型有意义，但预设为 CNY 的站点该字段残留着未填写的占位符

@@ -41,7 +41,13 @@ type ModelPrice struct {
 	CacheWritePrice  *float64           `json:"cacheWritePrice,omitempty"`
 	QuotaPerUnit     *float64           `json:"quotaPerUnit,omitempty"`
 	GroupMultipliers map[string]float64 `json:"groupMultipliers,omitempty"`
-	ExchangeRate     float64            `json:"-"`
+	// ExpressionBilling marks tiered-expression models whose price comes
+	// from billing_expr instead of the legacy ratio fields. When the
+	// expression cannot be reduced to coefficients no group price is
+	// offered at all — the ratio-derived number would be wrong.
+	ExpressionBilling bool               `json:"expressionBilling,omitempty"`
+	ExprCoefficients  map[string]float64 `json:"exprCoefficients,omitempty"`
+	ExchangeRate      float64            `json:"-"`
 }
 
 type Catalog struct {

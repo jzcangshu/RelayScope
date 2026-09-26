@@ -3,20 +3,8 @@ package pricing
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 )
-
-var expressionCoefficientPatterns = map[string][]*regexp.Regexp{
-	"cr": {
-		regexp.MustCompile(`(?i)\bcr\s*\*\s*([0-9]+(?:\.[0-9]+)?)`),
-		regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*\*\s*cr\b`),
-	},
-	"cc": {
-		regexp.MustCompile(`(?i)\bcc\s*\*\s*([0-9]+(?:\.[0-9]+)?)`),
-		regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*\*\s*cc\b`),
-	},
-}
 
 type NewAPIDecoder struct{}
 
@@ -60,11 +48,16 @@ func (NewAPIDecoder) Decode(pricingBody, statusBody []byte) (Catalog, error) {
 			ExchangeRate:     status.ExchangeRate,
 		}
 		billingExpression := firstString(object, "billing_expr", "billingExpr")
-		if model.CacheRatio == nil {
-			model.CacheReadPrice = expressionCoefficient(billingExpression, "cr")
-		}
-		if model.CacheCreateRatio == nil {
-			model.CacheWritePrice = expressionCoefficient(billingExpression, "cc")
+		if billingExpression != "" && model.Mode != "fixed" {
+			model.ExpressionBilling = true
+			if result, ok := parseBillingExpression(billingExpression); ok {
+				if result.fixed != nil {
+					model.Mode = "fixed"
+					model.ModelPrice = result.fixed
+				} else {
+					model.ExprCoefficients = result.coefficients
+				}
+			}
 		}
 		groups := stringSlice(object, "enable_groups", "groups", "group_names")
 		if len(groups) == 0 {
@@ -163,6 +156,29 @@ func displayPrice(model ModelPrice, group string) DisplayPrice {
 			price.FixedPerRequest = &value
 			price.Available = true
 		}
+		return price
+	}
+	if model.ExpressionBilling {
+		coefficients := model.ExprCoefficients
+		if coefficients == nil {
+			// Tiered-expression billing whose expression could not be
+			// reduced: the legacy ratio fields do not apply, so no quote.
+			return price
+		}
+		rate := modelExchangeRate(model)
+		input := coefficients["p"] * multiplier * rate
+		output := coefficients["c"] * multiplier * rate
+		price.InputPerMillion = &input
+		price.OutputPerMillion = &output
+		if coefficients["cr"] > 0 {
+			value := coefficients["cr"] * multiplier * rate
+			price.CacheReadPerMillion = &value
+		}
+		if coefficients["cc"] > 0 {
+			value := coefficients["cc"] * multiplier * rate
+			price.CacheWritePerMillion = &value
+		}
+		price.Available = true
 		return price
 	}
 	if model.ModelRatio == nil || model.QuotaPerUnit == nil || *model.QuotaPerUnit <= 0 {
@@ -316,20 +332,6 @@ func asFloat(value any) (float64, bool) {
 		}
 	}
 	return 0, false
-}
-
-func expressionCoefficient(expression, variable string) *float64 {
-	for _, pattern := range expressionCoefficientPatterns[variable] {
-		matches := pattern.FindStringSubmatch(expression)
-		if len(matches) != 2 {
-			continue
-		}
-		var value float64
-		if _, err := fmt.Sscanf(matches[1], "%f", &value); err == nil {
-			return &value
-		}
-	}
-	return nil
 }
 
 func floatPointer(value float64) *float64 { return &value }

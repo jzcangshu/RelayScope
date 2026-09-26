@@ -41,7 +41,143 @@ func TestNewAPIDecoderReadsStandardCachePricesFromBillingExpression(t *testing.T
 		price.CacheWritePerMillion == nil || !closeEnough(*price.CacheWritePerMillion, 1.5625) {
 		t.Fatalf("tiered cache prices = %+v", price)
 	}
+	if price.InputPerMillion == nil || !closeEnough(*price.InputPerMillion, 1.25) ||
+		price.OutputPerMillion == nil || !closeEnough(*price.OutputPerMillion, 7.5) {
+		t.Fatalf("tiered token prices = %+v", price)
+	}
 }
+
+func TestNewAPIDecoderIgnoresLegacyRatioForExpressionBilling(t *testing.T) {
+	// dudu公益站 ships deepseek-v4.1-flash with the unconfigured fallback
+	// model_ratio 37.5; only the billing expression describes the price.
+	catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"group_ratio":{"default":1},"data":[{"model_name":"deepseek-v4.1-flash","quota_type":0,"model_ratio":37.5,"model_price":0,"completion_ratio":1,"enable_groups":["default"],"billing_mode":"tiered_expr","billing_expr":"tier(\"base\", p * 2 + c * 8 + cr * 0.6)"}]}`), []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_symbol":"¤","custom_currency_exchange_rate":1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := PricesForModel(catalog.Models["deepseek-v4.1-flash"])["default"]
+	if !price.Available {
+		t.Fatalf("expression price unavailable: %+v", price)
+	}
+	if price.InputPerMillion == nil || !closeEnough(*price.InputPerMillion, 2) ||
+		price.OutputPerMillion == nil || !closeEnough(*price.OutputPerMillion, 8) {
+		t.Fatalf("expression token prices = %+v", price)
+	}
+	if price.CacheReadPerMillion == nil || !closeEnough(*price.CacheReadPerMillion, 0.6) {
+		t.Fatalf("expression cache read price = %+v", price)
+	}
+}
+
+func TestNewAPIDecoderExpressionGroupMultiplierAndConstantFactors(t *testing.T) {
+	catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"group_ratio":{"default":1,"half":0.5},"data":[{"model_name":"gpt-5.6-sol","quota_type":0,"model_ratio":8,"completion_ratio":2.5,"enable_groups":["default","half"],"billing_mode":"tiered_expr","billing_expr":"param(\"stream\") == true ? (len <= 272000 ? tier(\"stream_0.5x_standard\", (p * 4 + c * 20 + cr * 0.4) * 0.5) : tier(\"stream_0.5x_long_context\", (p * 8 + c * 30 + cr * 0.8) * 0.5)) : (len <= 272000 ? tier(\"nonstream_0.5x_standard\", (p * 4 + c * 20 + cr * 0.4) * 0.5) : tier(\"nonstream_0.5x_long_context\", (p * 8 + c * 30 + cr * 0.8) * 0.5))"}]}`), []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_exchange_rate":1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prices := PricesForModel(catalog.Models["gpt-5.6-sol"])
+	if prices["default"].InputPerMillion == nil || !closeEnough(*prices["default"].InputPerMillion, 2) ||
+		prices["default"].OutputPerMillion == nil || !closeEnough(*prices["default"].OutputPerMillion, 10) {
+		t.Fatalf("default expression prices = %+v", prices["default"])
+	}
+	if prices["half"].InputPerMillion == nil || !closeEnough(*prices["half"].InputPerMillion, 1) {
+		t.Fatalf("half group expression price = %+v", prices["half"])
+	}
+}
+
+func TestNewAPIDecoderExpressionFixedTier(t *testing.T) {
+	catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"group_ratio":{"default":1},"data":[{"model_name":"grok-imagine-image","quota_type":0,"model_ratio":37.5,"enable_groups":["default"],"billing_mode":"tiered_expr","billing_expr":"tier(\"request\", fixed(1))"}]}`), []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_exchange_rate":1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := PricesForModel(catalog.Models["grok-imagine-image"])["default"]
+	if price.Mode != "fixed" || price.FixedPerRequest == nil || !closeEnough(*price.FixedPerRequest, 1) {
+		t.Fatalf("fixed expression price = %+v", price)
+	}
+	if price.InputPerMillion != nil {
+		t.Fatalf("fixed expression should not carry token prices: %+v", price)
+	}
+}
+
+func TestNewAPIDecoderUnparseableExpressionHidesPrice(t *testing.T) {
+	catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"group_ratio":{"default":1},"data":[{"model_name":"odd","quota_type":0,"model_ratio":37.5,"completion_ratio":1,"enable_groups":["default"],"billing_mode":"tiered_expr","billing_expr":"tier(\"base\", ceil(p / 1000) * 0.002)"}]}`), []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD","custom_currency_exchange_rate":1}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	price := PricesForModel(catalog.Models["odd"])["default"]
+	if price.Available || price.InputPerMillion != nil || price.OutputPerMillion != nil {
+		t.Fatalf("unparseable expression must not surface ratio prices: %+v", price)
+	}
+}
+
+func TestParseBillingExpressionShapes(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		wantP   float64
+		wantC   float64
+		wantCR  float64
+		wantCC  float64
+		wantFix *float64
+	}{
+		{"plain base tier", `tier("base", p * 2 + c * 8 + cr * 0.6)`, 2, 8, 0.6, 0, nil},
+		{"happycoding", `tier("base", p * 0.3 + c * 1.2 + cr * 0.006)`, 0.3, 1.2, 0.006, 0, nil},
+		{"conditional standard tier", `len <= 272000 ? tier("standard", p * 2.5 + c * 15 + cr * 0.25 + cc * 3.125) : tier("long_context", p * 5 + c * 22.5 + cr * 0.5 + cc * 6.25)`, 2.5, 15, 0.25, 3.125, nil},
+		{"first tier fallback", `len <= 200000 ? tier("0_200k", p * 2 + c * 6 + cr * 0.5) : tier("200k_plus", p * 4 + c * 12 + cr * 1)`, 2, 6, 0.5, 0, nil},
+		{"probe conditional picks base", `(((((p <= 50)))) && (((((c <= 100))) && ((c > 0))))) ? (tier(" 探测", fixed(0.3))) : (tier("base", p * 4 + c * 10 + cr * 0.8))`, 4, 10, 0.8, 0, nil},
+		{"runtime multipliers ignored", `(tier("base", p * 4.5 + c * 13.5 + cr * 0.15)) * (hour("UTC") >= 1 && hour("UTC") < 4 ? 2 : 1) * (hour("UTC") >= 6 && hour("UTC") < 10 ? 2 : 1)`, 4.5, 13.5, 0.15, 0, nil},
+		{"multiline conditional", "len <= 272000\n\t? tier(\"0_272k\", p * 12.5 + c * 75 + cr * 1.25 + cc * 15.625)\n\t: tier(\"272k_plus\", p * 25 + c * 112.5 + cr * 2.5 + cc * 31.25)", 12.5, 75, 1.25, 15.625, nil},
+		{"image variables tolerated", `tier("base", p * 5 + c * 10 + cr * 1.25 + img * 8 + img_o * 32)`, 5, 10, 1.25, 0, nil},
+		{"cache write one hour tolerated", `tier("base", p * 2 + c * 6 + cr * 1 + cc * 1 + cc1h * 1)`, 2, 6, 1, 1, nil},
+		{"embedding input only", `tier("base", p * 0.02)`, 0.02, 0, 0, 0, nil},
+		{"constant factor inside tier", `tier("base", (p * 4 + c * 20 + cr * 0.4) * 0.5)`, 2, 10, 0.2, 0, nil},
+	}
+	fixed := 1.0
+	cases = append(cases, struct {
+		name    string
+		raw     string
+		wantP   float64
+		wantC   float64
+		wantCR  float64
+		wantCC  float64
+		wantFix *float64
+	}{"fixed request tier", `tier("request", fixed(1))`, 0, 0, 0, 0, &fixed})
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, ok := parseBillingExpression(testCase.raw)
+			if !ok {
+				t.Fatalf("parse failed for %s", testCase.raw)
+			}
+			if testCase.wantFix != nil {
+				if result.fixed == nil || !closeEnough(*result.fixed, *testCase.wantFix) {
+					t.Fatalf("fixed = %+v, want %v", result.fixed, *testCase.wantFix)
+				}
+				return
+			}
+			if result.fixed != nil {
+				t.Fatalf("unexpected fixed price: %v", *result.fixed)
+			}
+			for name, want := range map[string]float64{"p": testCase.wantP, "c": testCase.wantC, "cr": testCase.wantCR, "cc": testCase.wantCC} {
+				if !closeEnough(result.coefficients[name], want) {
+					t.Fatalf("coefficient %s = %v, want %v (all: %v)", name, result.coefficients[name], want, result.coefficients)
+				}
+			}
+		})
+	}
+}
+
+func TestParseBillingExpressionRejectsNonLinearShapes(t *testing.T) {
+	for _, raw := range []string{
+		`tier("base", ceil(p / 1000) * 0.002)`,
+		`tier("base", p * c)`,
+		`tier("base", -p)`,
+		`tier("base", p * 2 + 1)`,
+		`tier("base", )`,
+		``,
+	} {
+		if _, ok := parseBillingExpression(raw); ok {
+			t.Fatalf("expected rejection for %q", raw)
+		}
+	}
+}
+
 
 func TestNewAPIDecoderNormalizesFixedPriceAndCurrency(t *testing.T) {
 	catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"group_ratio":{"default":1.5},"data":[{"model_name":"gpt-5-nano","quota_type":1,"model_price":2,"enable_groups":["default"]}]}`), []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"CNY","custom_currency_symbol":"¥","custom_currency_exchange_rate":7}}`))
