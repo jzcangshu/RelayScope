@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 )
 
 // AllAPIHubAccount mirrors one account entry of an All API Hub export file
@@ -16,6 +17,14 @@ type AllAPIHubAccount struct {
 		ID          string `json:"id"`
 		AccessToken string `json:"access_token"`
 	} `json:"account_info"`
+	// Sub2APIAuth carries the extension's supplemental refresh-token
+	// credential for Sub2API sites ("sub2api_refresh_token" profile). Both
+	// spellings of the token field are accepted; the file is user-supplied.
+	Sub2APIAuth struct {
+		RefreshToken   string `json:"refreshToken"`
+		RefreshTokenSn string `json:"refresh_token"`
+		TokenExpiresAt int64  `json:"tokenExpiresAt"`
+	} `json:"sub2apiAuth"`
 	CookieAuth struct {
 		SessionCookie string `json:"sessionCookie"`
 	} `json:"cookieAuth"`
@@ -81,16 +90,34 @@ func decodeAllAPIHubAccount(object map[string]any) (AllAPIHubAccount, error) {
 // DataFromAllAPIHub converts an All API Hub account entry into session
 // credentials; ok is false when the entry carries no usable credentials.
 // Access-token accounts keep All API Hub's own auth style (system token plus
-// user ID) so RelayScope authenticates exactly like the extension does.
+// user ID) so RelayScope authenticates exactly like the extension does. When
+// the entry carries the extension's Sub2API supplemental refresh token, the
+// credentials become Sub2API tokens so RelayScope can rotate them itself; a
+// missing expiry starts below the proactive-refresh threshold so the first
+// collection rotates the pair and records a real expiry.
 func DataFromAllAPIHub(account AllAPIHubAccount) (Data, bool) {
 	switch account.AuthType {
 	case "access_token":
 		token := strings.TrimSpace(account.AccountInfo.AccessToken)
 		userID := strings.TrimSpace(account.AccountInfo.ID)
-		if token == "" || userID == "" {
+		refreshToken := strings.TrimSpace(account.Sub2APIAuth.RefreshToken)
+		if refreshToken == "" {
+			refreshToken = strings.TrimSpace(account.Sub2APIAuth.RefreshTokenSn)
+		}
+		if refreshToken != "" && strings.ContainsAny(refreshToken, "\r\n") {
 			return Data{}, false
 		}
-		return Data{AuthType: legacyAccessToken, AccessToken: token, UserID: userID}, true
+		if token != "" && userID != "" {
+			if refreshToken != "" {
+				expiresAt := account.Sub2APIAuth.TokenExpiresAt
+				if expiresAt <= 0 {
+					expiresAt = time.Now().Add(-time.Minute).UnixMilli()
+				}
+				return Data{AuthType: AuthTypeSub2APIToken, AccessToken: token, UserID: userID, RefreshToken: refreshToken, TokenExpiresAt: expiresAt}, true
+			}
+			return Data{AuthType: legacyAccessToken, AccessToken: token, UserID: userID}, true
+		}
+		return Data{}, false
 	case "cookie":
 		cookies := ParseCookieHeader(account.CookieAuth.SessionCookie)
 		if len(cookies) == 0 {

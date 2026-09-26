@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Sub2API 站点登录态长效续期补全。此前已有「access token 临期主动刷新」
+  （提前 2 分钟，与 All API Hub 一致），但缺两块：站点提前吊销 access
+  token（重启、他处轮换、家族撤销）时采集直接 401 记 `login_expired`，等
+  用户手动重新登录；以及没有只拿得到 refresh token 的导入通道。现在
+  `sub2api_token` 会话的请求收到 401 时会用库里保存的 refresh token 强制
+  轮换一次并原路重试（并发场景下发现库里已轮换则直接复用，不重复请求），
+  刷新被站点拒绝仍按 `login_expired` 上报；管理台「导入登录态」支持只粘贴
+  `{"refreshToken":"rt_..."}`——服务端先向上游 `/api/v1/auth/refresh` 换发
+  出完整凭据对再入库（上游轮换语义：提交的 refresh token 立即作废，必须
+  立即持久化换出的一对）；All API Hub 导入解析 `sub2apiAuth.refreshToken`
+  补充凭据，识别为 Sub2API 账号。上游语义依据 Wei-Shaw/sub2api
+  `auth_service.go`（token 家族轮转、refresh token 默认 30 天、access
+  token 默认 24 小时、会话 IP/UA 绑定默认关闭）。注意：同一个账号的
+  refresh token 只能有一个持有方自动续期——浏览器里的 All API Hub 与
+  RelayScope 同时轮换会互相作废对方的令牌。
 - 管理台支持 All API Hub 批量导入登录态。站点页新增「批量导入」对话框，选择
   All API Hub 导出的账号备份文件（或粘贴其内容）后，后端按站点地址自动匹配
   已接入的站点，把 `account_info.access_token`/`account_info.id` 换算成

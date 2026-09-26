@@ -210,7 +210,7 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid session payload")
 				return
 			}
-			payload, payloadErr := importSessionPayload(body, site)
+			payload, payloadErr := importSessionPayload(request.Context(), body, site)
 			if payloadErr != nil {
 				writeError(writer, http.StatusBadRequest, payloadErr.Error())
 				return

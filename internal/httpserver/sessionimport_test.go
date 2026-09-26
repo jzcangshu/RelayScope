@@ -18,11 +18,11 @@ import (
 )
 
 func TestImportSessionPayloadAcceptsOwnFormat(t *testing.T) {
-	payload, err := importSessionPayload([]byte(`{"authType":"access_token","accessToken":"tok","userId":"504"}`), store.Site{BaseURL: "https://api.example.com"})
+	payload, err := importSessionPayload(context.Background(), []byte(`{"authType":"access_token","accessToken":"tok","userId":"504"}`), store.Site{BaseURL: "https://api.example.com"})
 	if err != nil || payload.AccessToken != "tok" || payload.UserID != "504" {
 		t.Fatalf("payload = %+v, err = %v", payload, err)
 	}
-	payload, err = importSessionPayload([]byte(`{"cookies":[{"name":"session","value":"abc"}]}`), store.Site{BaseURL: "https://api.example.com"})
+	payload, err = importSessionPayload(context.Background(), []byte(`{"cookies":[{"name":"session","value":"abc"}]}`), store.Site{BaseURL: "https://api.example.com"})
 	if err != nil || len(payload.Cookies) != 1 {
 		t.Fatalf("cookie payload = %+v, err = %v", payload, err)
 	}
@@ -32,7 +32,7 @@ func TestImportSessionPayloadAcceptsAllAPIHubExport(t *testing.T) {
 	export := []byte(`{"version":"4.0","type":"accounts","accounts":{"accounts":[
 		{"site_name":"Other","site_url":"https://other.example.com","authType":"access_token","account_info":{"id":"7","access_token":"t7"}},
 		{"site_name":"Mine","site_url":"https://api.example.com/pricing","authType":"access_token","account_info":{"id":"504","access_token":"tok"}}]}}`)
-	payload, err := importSessionPayload(export, store.Site{BaseURL: "https://api.example.com"})
+	payload, err := importSessionPayload(context.Background(), export, store.Site{BaseURL: "https://api.example.com"})
 	if err != nil || payload.AccessToken != "tok" || payload.UserID != "504" || payload.AuthType != "access_token" {
 		t.Fatalf("payload = %+v, err = %v", payload, err)
 	}
@@ -40,10 +40,10 @@ func TestImportSessionPayloadAcceptsAllAPIHubExport(t *testing.T) {
 
 func TestImportSessionPayloadRejectsForeignAccounts(t *testing.T) {
 	export := []byte(`{"accounts":{"accounts":[{"site_name":"Other","site_url":"https://other.example.com","authType":"access_token","account_info":{"id":"7","access_token":"t7"}}]}}`)
-	if _, err := importSessionPayload(export, store.Site{BaseURL: "https://api.example.com"}); err == nil {
+	if _, err := importSessionPayload(context.Background(), export, store.Site{BaseURL: "https://api.example.com"}); err == nil {
 		t.Fatal("expected error for export without this site")
 	}
-	if _, err := importSessionPayload([]byte(`{"foo":1}`), store.Site{BaseURL: "https://api.example.com"}); err == nil {
+	if _, err := importSessionPayload(context.Background(), []byte(`{"foo":1}`), store.Site{BaseURL: "https://api.example.com"}); err == nil {
 		t.Fatal("expected error for unrecognized payload")
 	}
 }
@@ -138,5 +138,32 @@ func TestAdminSessionBatchImportMatchesByOrigin(t *testing.T) {
 	}
 	if !updated.SessionRequired {
 		t.Fatal("importing credentials must enable the session-required flag")
+	}
+}
+
+func TestImportSessionPayloadExchangesBareRefreshToken(t *testing.T) {
+	exchange := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/auth/refresh" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write([]byte(`{"code":0,"data":{"access_token":"site-access","refresh_token":"rt_rotated","expires_in":86400}}`))
+	}))
+	defer exchange.Close()
+
+	payload, err := importSessionPayload(context.Background(), []byte(`{"refreshToken":"rt_pasted"}`), store.Site{BaseURL: exchange.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.AuthType != session.AuthTypeSub2APIToken || payload.AccessToken != "site-access" || payload.RefreshToken != "rt_rotated" || payload.TokenExpiresAt <= 0 {
+		t.Fatalf("exchanged payload = %+v", payload)
+	}
+
+	// A complete pair is stored as-is without another rotation.
+	complete := []byte(`{"authType":"sub2api_token","accessToken":"a","refreshToken":"r","tokenExpiresAt":1790000000000}`)
+	payload, err = importSessionPayload(context.Background(), complete, store.Site{BaseURL: exchange.URL})
+	if err != nil || payload.AccessToken != "a" || payload.RefreshToken != "r" {
+		t.Fatalf("complete pair = %+v err=%v", payload, err)
 	}
 }

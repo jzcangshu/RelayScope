@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -357,3 +358,221 @@ func TestProviderRefreshFailureClassifiesCredentialRejection(t *testing.T) {
 		})
 	}
 }
+
+func TestProviderRecoversSub2API401WithRotatedCredentials(t *testing.T) {
+	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	refreshes := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/v1/auth/refresh":
+			refreshes++
+			if request.Header.Get("Authorization") != "" {
+				t.Errorf("refresh request must not carry the rejected access token")
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			writer.Write([]byte(`{"code":0,"data":{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":7200}}`))
+		case "/api/v1/channel-monitors":
+			if request.Header.Get("Authorization") != "Bearer fresh-access" {
+				http.Error(writer, "stale token", http.StatusUnauthorized)
+				return
+			}
+			writer.Write([]byte(`{"code":0,"data":{"items":[]}}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	site, err := db.CreateSite(context.Background(), store.Site{Name: "sub2api", BaseURL: server.URL, SourceURL: server.URL + "/monitor", AdapterKey: "sub2api-monitor", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := make([]byte, 32)
+	rand.Read(key)
+	vault, _ := NewVault(base64.RawURLEncoding.EncodeToString(key))
+	now := time.Date(2026, time.September, 26, 12, 0, 0, 0, time.UTC)
+	// Token far from its recorded expiry: only the passive 401 path recovers.
+	if err := vault.Save(context.Background(), db, site.ID, Data{AuthType: AuthTypeSub2APIToken, AccessToken: "stale-access", RefreshToken: "stale-refresh", TokenExpiresAt: now.Add(time.Hour).UnixMilli()}, nil); err != nil {
+		t.Fatal(err)
+	}
+	provider := Provider{Store: db, Vault: vault, Base: adapter.HTTPFetcher{Client: server.Client()}, Now: func() time.Time { return now }}
+	fetcher, err := provider.FetcherForSite(context.Background(), adapter.Site{ID: site.ID, BaseURL: server.URL, SessionRequired: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, err := fetcher.GetBytes(context.Background(), server.URL+"/api/v1/channel-monitors")
+	if err != nil || string(body) != `{"code":0,"data":{"items":[]}}` {
+		t.Fatalf("request was not recovered after 401: body=%s err=%v", body, err)
+	}
+	if refreshes != 1 {
+		t.Fatalf("refresh calls = %d, want 1", refreshes)
+	}
+	stored, _, err := vault.Load(context.Background(), db, site.ID)
+	if err != nil || stored.AccessToken != "fresh-access" || stored.RefreshToken != "fresh-refresh" {
+		t.Fatalf("rotated credentials were not persisted: %+v err=%v", stored, err)
+	}
+	// A follow-up request uses the rotated token without another refresh.
+	if _, _, err := fetcher.GetBytes(context.Background(), server.URL+"/api/v1/channel-monitors"); err != nil {
+		t.Fatal(err)
+	}
+	if refreshes != 1 {
+		t.Fatalf("refresh calls after retry = %d, want 1", refreshes)
+	}
+}
+
+func TestProviderPassiveRefreshRejectionKeepsLoginRequired(t *testing.T) {
+	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	refreshes := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/v1/auth/refresh":
+			refreshes++
+			http.Error(writer, `{"code":401,"message":"invalid refresh token"}`, http.StatusUnauthorized)
+		case "/api/v1/channel-monitors":
+			http.Error(writer, "unauthorized", http.StatusUnauthorized)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	site, err := db.CreateSite(context.Background(), store.Site{Name: "sub2api", BaseURL: server.URL, SourceURL: server.URL + "/monitor", AdapterKey: "sub2api-monitor", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := make([]byte, 32)
+	rand.Read(key)
+	vault, _ := NewVault(base64.RawURLEncoding.EncodeToString(key))
+	now := time.Date(2026, time.September, 26, 12, 0, 0, 0, time.UTC)
+	if err := vault.Save(context.Background(), db, site.ID, Data{AuthType: AuthTypeSub2APIToken, AccessToken: "stale-access", RefreshToken: "dead-refresh", TokenExpiresAt: now.Add(time.Hour).UnixMilli()}, nil); err != nil {
+		t.Fatal(err)
+	}
+	provider := Provider{Store: db, Vault: vault, Base: adapter.HTTPFetcher{Client: server.Client()}, Now: func() time.Time { return now }}
+	fetcher, err := provider.FetcherForSite(context.Background(), adapter.Site{ID: site.ID, BaseURL: server.URL, SessionRequired: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = fetcher.GetBytes(context.Background(), server.URL+"/api/v1/channel-monitors")
+	var fetchErr *adapter.FetchError
+	if !errors.As(err, &fetchErr) || fetchErr.StatusCode != http.StatusUnauthorized || !fetchErr.LoginRequired {
+		t.Fatalf("expected login-required fetch error, got %v", err)
+	}
+	if refreshes != 1 {
+		t.Fatalf("refresh calls = %d, want exactly 1 (no retry loop)", refreshes)
+	}
+	stored, _, err := vault.Load(context.Background(), db, site.ID)
+	if err != nil || stored.RefreshToken != "dead-refresh" {
+		t.Fatalf("rejected refresh token must not be replaced: %+v err=%v", stored, err)
+	}
+}
+
+func TestProviderPassiveRefreshReusesConcurrentRotation(t *testing.T) {
+	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	refreshes := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/api/v1/auth/refresh":
+			refreshes++
+			writer.Header().Set("Content-Type", "application/json")
+			writer.Write([]byte(`{"code":0,"data":{"access_token":"other-access","refresh_token":"other-refresh","expires_in":3600}}`))
+		case "/api/v1/channel-monitors":
+			if request.Header.Get("Authorization") != "Bearer concurrent-access" {
+				http.Error(writer, "stale token", http.StatusUnauthorized)
+				return
+			}
+			writer.Write([]byte(`{"code":0,"data":{"items":[]}}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+	site, err := db.CreateSite(context.Background(), store.Site{Name: "sub2api", BaseURL: server.URL, SourceURL: server.URL + "/monitor", AdapterKey: "sub2api-monitor", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := make([]byte, 32)
+	rand.Read(key)
+	vault, _ := NewVault(base64.RawURLEncoding.EncodeToString(key))
+	now := time.Date(2026, time.September, 26, 12, 0, 0, 0, time.UTC)
+	seeded := Data{AuthType: AuthTypeSub2APIToken, AccessToken: "seed-access", RefreshToken: "seed-refresh", TokenExpiresAt: now.Add(time.Hour).UnixMilli()}
+	if err := vault.Save(context.Background(), db, site.ID, seeded, nil); err != nil {
+		t.Fatal(err)
+	}
+	provider := Provider{Store: db, Vault: vault, Base: adapter.HTTPFetcher{Client: server.Client()}, Now: func() time.Time { return now }}
+	fetcher, err := provider.FetcherForSite(context.Background(), adapter.Site{ID: site.ID, BaseURL: server.URL, SessionRequired: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another collector rotates the credentials before the request fires.
+	concurrent := Data{AuthType: AuthTypeSub2APIToken, AccessToken: "concurrent-access", RefreshToken: "concurrent-refresh", TokenExpiresAt: now.Add(2 * time.Hour).UnixMilli()}
+	if err := vault.Save(context.Background(), db, site.ID, concurrent, nil); err != nil {
+		t.Fatal(err)
+	}
+	body, _, err := fetcher.GetBytes(context.Background(), server.URL+"/api/v1/channel-monitors")
+	if err != nil || string(body) != `{"code":0,"data":{"items":[]}}` {
+		t.Fatalf("concurrent rotation was not reused: body=%s err=%v", body, err)
+	}
+	if refreshes != 0 {
+		t.Fatalf("refresh calls = %d, want 0 (stored rotation already newer)", refreshes)
+	}
+}
+
+func TestExchangeSub2APITokenBuildsStorableCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/v1/auth/refresh" {
+			http.NotFound(writer, request)
+			return
+		}
+		var payload struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil || payload.RefreshToken != "rt_input" {
+			http.Error(writer, "bad payload", http.StatusBadRequest)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write([]byte(`{"code":0,"data":{"access_token":"exchanged-access","refresh_token":"rt_next","expires_in":86400}}`))
+	}))
+	defer server.Close()
+
+	vault, err := NewVault(base64.RawURLEncoding.EncodeToString(make([]byte, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := ExchangeSub2APIToken(context.Background(), server.Client(), server.URL, Data{RefreshToken: "rt_input"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.AuthType != AuthTypeSub2APIToken || data.AccessToken != "exchanged-access" || data.RefreshToken != "rt_next" || data.TokenExpiresAt <= 0 {
+		t.Fatalf("exchanged data = %+v", data)
+	}
+	if _, _, err := vault.Encrypt(data); err != nil {
+		t.Fatalf("exchanged credentials must pass validation: %v", err)
+	}
+
+	// Rejection envelopes surface as login-required failures.
+	rejecting := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write([]byte(`{"code":"SESSION_BINDING_MISMATCH","message":"session network fingerprint changed"}`))
+	}))
+	defer rejecting.Close()
+	if _, err := ExchangeSub2APIToken(context.Background(), rejecting.Client(), rejecting.URL, Data{RefreshToken: "rt_input"}); err == nil {
+		t.Fatal("expected binding mismatch rejection")
+	} else {
+		var fetchErr *adapter.FetchError
+		if !errors.As(err, &fetchErr) || !fetchErr.LoginRequired {
+			t.Fatalf("binding mismatch must be login-required: %v", err)
+		}
+	}
+}
+

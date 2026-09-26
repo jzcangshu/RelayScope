@@ -4,11 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
+	"time"
 
 	"relayscope/internal/session"
 	"relayscope/internal/store"
 )
+
+// sessionExchangeClient performs the refresh-token exchange during imports.
+// Imports are interactive admin requests, so a bounded client keeps a slow
+// site from holding the request open indefinitely.
+var sessionExchangeClient = &http.Client{Timeout: 30 * time.Second}
 
 // sessionImportResult reports the outcome for one All API Hub account entry.
 type sessionImportResult struct {
@@ -31,11 +38,28 @@ func ensureSessionRequired(ctx context.Context, db *store.Store, site store.Site
 	return db.UpdateSite(ctx, site.ID, site.Name, site.AdapterKey, site.AdapterConfig, site.Enabled, &required, site.Interval, site.Jitter)
 }
 
-// importSessionPayload accepts both RelayScope's own session JSON and All
-// API Hub export data (whole file or a single account entry); for All API
-// Hub data the account entry matching the site's origin is used.
-func importSessionPayload(body []byte, site store.Site) (session.Data, error) {
+// importSessionPayload accepts RelayScope's own session JSON (including
+// Sub2API refresh-token payloads), All API Hub export data (whole file or a
+// single account entry), and bare Sub2API refresh tokens. A refresh token
+// without a usable access token is exchanged for a full credential pair
+// against the site before storage, so an import stays valid even though the
+// pasted refresh token is single-use.
+func importSessionPayload(ctx context.Context, body []byte, site store.Site) (session.Data, error) {
 	var payload session.Data
+	if err := json.Unmarshal(body, &payload); err == nil && strings.TrimSpace(payload.RefreshToken) != "" {
+		if payload.AuthType == "" {
+			payload.AuthType = session.AuthTypeSub2APIToken
+		}
+		if payload.AuthType == session.AuthTypeSub2APIToken && strings.TrimSpace(payload.AccessToken) != "" && payload.TokenExpiresAt > 0 {
+			return payload, nil
+		}
+		data, err := session.ExchangeSub2APIToken(ctx, sessionExchangeClient, site.BaseURL, payload)
+		if err != nil {
+			return session.Data{}, errors.New("换发 refresh token 失败：" + err.Error())
+		}
+		return data, nil
+	}
+	payload = session.Data{}
 	if err := json.Unmarshal(body, &payload); err == nil && (payload.AccessToken != "" || len(payload.Cookies) > 0) {
 		return payload, nil
 	}

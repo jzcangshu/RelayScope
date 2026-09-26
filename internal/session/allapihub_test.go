@@ -1,6 +1,9 @@
 package session
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestParseAllAPIHubAccountsAcceptsWholeExport(t *testing.T) {
 	body := []byte(`{"version":"4.0","type":"accounts","accounts":{"accounts":[{"site_name":"蛙蛙公益站","site_url":"https://api.feixingwawa.cn","authType":"access_token","account_info":{"id":"504","access_token":"tok"}},{"site_name":"Any","site_url":"https://anyrouter.top","authType":"cookie","cookieAuth":{"sessionCookie":"session=abc; other=def"}}]}}`)
@@ -63,5 +66,33 @@ func TestParseCookieHeader(t *testing.T) {
 	cookies := ParseCookieHeader("a=1; b=2=3; broken; ; c=")
 	if len(cookies) != 2 || cookies[0].Name != "a" || cookies[0].Value != "1" || cookies[1].Name != "b" || cookies[1].Value != "2=3" {
 		t.Fatalf("cookies = %+v", cookies)
+	}
+}
+
+func TestDataFromAllAPIHubSub2APIRefreshToken(t *testing.T) {
+	account := AllAPIHubAccount{}
+	account.AuthType = "access_token"
+	account.AccountInfo.ID = "77"
+	account.AccountInfo.AccessToken = "jwt-access"
+	account.Sub2APIAuth.RefreshToken = "rt_stored"
+	account.Sub2APIAuth.TokenExpiresAt = 1790000000000
+	data, ok := DataFromAllAPIHub(account)
+	if !ok || data.AuthType != AuthTypeSub2APIToken || data.RefreshToken != "rt_stored" || data.TokenExpiresAt != 1790000000000 {
+		t.Fatalf("sub2api account data = %+v ok=%t", data, ok)
+	}
+
+	// Missing expiry: start below the proactive-refresh threshold.
+	account.Sub2APIAuth.TokenExpiresAt = 0
+	data, ok = DataFromAllAPIHub(account)
+	if !ok || data.TokenExpiresAt >= time.Now().UnixMilli() {
+		t.Fatalf("missing expiry should force first-use rotation: %+v", data)
+	}
+
+	// Without the supplemental refresh token the account stays a plain
+	// access-token credential.
+	account.Sub2APIAuth.RefreshToken = ""
+	data, ok = DataFromAllAPIHub(account)
+	if !ok || data.AuthType != legacyAccessToken || data.RefreshToken != "" {
+		t.Fatalf("plain access account = %+v ok=%t", data, ok)
 	}
 }
