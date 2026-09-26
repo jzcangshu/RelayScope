@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 管理台支持 All API Hub 批量导入登录态。站点页新增「批量导入」对话框，选择
+  All API Hub 导出的账号备份文件（或粘贴其内容）后，后端按站点地址自动匹配
+  已接入的站点，把 `account_info.access_token`/`account_info.id` 换算成
+  RelayScope 会话格式批量加密写入；cookie 认证账号解析 `sessionCookie` 头。
+  单站点的「导入登录态」对话框同样兼容：直接粘贴整份导出文件会自动挑出本站
+  账号。导入结果逐项列出成功与跳过原因，未接入的站点不会被自动创建。
+- 公开看板默认隐藏 24 小时内没有任何样本的模型入口，避免休眠站点淹没有效
+  数据；在搜索框输入名称时这些入口仍会出现，全部被隐藏时的空态改用
+  「暂无有效样本」文案并说明搜索可用，不再误报为「内容已被屏蔽」。
 - Admin membership management by LinuxDO username. Operators can set exact
   expiry dates, clear membership validity, review registered and pre-registered
   members, and grant a membership before the user first signs in.

@@ -623,3 +623,11 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(source, /saveSorting/);
   assert.match(source, /relayscope-sorting/);
 });
+
+test('24h 无样本卡片默认隐藏，搜索时放开', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  assert.match(source, /function displayCards\(query = ''\)/);
+  assert.match(source, /return query \? customized : customized\.filter\(\(card\) => card\.serviceState !== 'no_samples'\)/);
+  assert.match(source, /const visibleCards = displayCards\(query\)/);
+  assert.match(source, /renderFilters\(query\)/);
+});

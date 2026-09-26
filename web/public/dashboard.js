@@ -693,8 +693,8 @@ function updateFilterSelection(category, value, selectAll) {
   else selected.add(value);
 }
 
-function renderFilters() {
-  const visibleCards = cards.filter((card) => !isHiddenCard(card));
+function renderFilters(query = '') {
+  const visibleCards = displayCards(query);
   filterPanel.innerHTML = activeFilterDefinitions().map((definition) => {
     const available = visibleCards.filter((card) => cardMatchesFilters(card, definition.key));
     const counts = new Map();
@@ -852,25 +852,35 @@ function bindPagination() {
   });
 }
 
+// 24h 无样本的卡片默认不展示，避免休眠入口淹没有效数据；搜索时放开，
+// 保证用户仍能查到长期无流量的模型入口。
+function displayCards(query = '') {
+  const customized = cards.filter((card) => !isHiddenCard(card));
+  return query ? customized : customized.filter((card) => card.serviceState !== 'no_samples');
+}
+
 function render() {
   if (!dataReady) return;
   // 标签可能在数据加载后才就绪，渲染前刷新 card.tagNames
   for (const card of cards) card.tagNames = cardTagsOf(card.siteName);
   const query = searchElement.value.trim().toLowerCase();
-  const visibleCards = cards.filter((card) => !isHiddenCard(card));
+  const visibleCards = displayCards(query);
   const filtered = visibleCards.filter((card) => cardMatchesFilters(card)
     && (!healthyOnly.checked || (card.serviceState === 'healthy' && card.acquisitionState === 'fresh'))
     && (!query || card.searchText.includes(query)));
   const groupCount = filtered.reduce((total, card) => total + card.groups.length, 0);
-  const hiddenCount = cards.length - visibleCards.length;
+  const hiddenCount = cards.length - cards.filter((card) => !isHiddenCard(card)).length;
   summaryElement.innerHTML = `<span><strong>${filtered.length}</strong> / ${visibleCards.length} 个模型入口 · ${groupCount} 个站内分组${hiddenCount ? ` <button type="button" class="customize-hint" data-open-customize>已屏蔽 ${hiddenCount} 项</button>` : ''}</span><span class="timeline-legend" aria-label="状态条图例"><i class="healthy"></i>健康<i class="degraded"></i>降级<i class="failed"></i>故障<i class="no_samples"></i>无样本</span>`;
-  renderFilters();
+  renderFilters(query);
 
   if (!filtered.length) {
     currentPage = 1;
-    contentElement.innerHTML = visibleCards.length
-      ? '<div class="empty"><h1>暂无匹配数据</h1><p>当前没有符合筛选条件的已采集记录，或站点还没有成功采集。</p></div>'
-      : '<div class="empty"><h1>内容已被屏蔽</h1><p>顶栏「定制」中可以恢复被屏蔽的站点、供应商或模型。</p><button type="button" class="customize-hint" data-open-customize>打开定制</button></div>';
+    const customizedCount = cards.filter((card) => !isHiddenCard(card)).length;
+    contentElement.innerHTML = !customizedCount
+      ? '<div class="empty"><h1>内容已被屏蔽</h1><p>顶栏「定制」中可以恢复被屏蔽的站点、供应商或模型。</p><button type="button" class="customize-hint" data-open-customize>打开定制</button></div>'
+      : visibleCards.length
+        ? '<div class="empty"><h1>暂无匹配数据</h1><p>当前没有符合筛选条件的已采集记录，或站点还没有成功采集。</p></div>'
+        : '<div class="empty"><h1>暂无有效样本</h1><p>所有模型入口在 24 小时内都没有样本数据；在搜索框输入名称仍可查看这些入口。</p></div>';
     return;
   }
 

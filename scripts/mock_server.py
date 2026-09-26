@@ -211,6 +211,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"status": "ok"})
         if path == "/api/v1/feedback":
             return self._json({"status": "ok"})
+        if path == "/api/v1/admin/session-import":
+            return self._json({"imported": 2, "noMatch": 1, "results": [
+                {"siteName": "星云中转", "siteUrl": "https://example.com", "status": "imported"},
+                {"siteName": "紫电API", "siteUrl": "https://zi.example.org", "status": "imported"},
+                {"siteName": "神秘站点", "siteUrl": "https://secret.example.org", "status": "no_match", "detail": "未在站点列表中找到该站点"},
+            ]})
         if path.startswith("/api/v1/admin/"):
             return self._json({"status": "ok", "revoked": 1, "codes": ["RS-MOCK-0000-0000"]})
         return self._json({}, status=404)

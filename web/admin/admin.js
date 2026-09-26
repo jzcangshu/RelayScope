@@ -557,6 +557,32 @@ $('#session-form').addEventListener('submit', async (event) => {
   await loadSites().catch(reportLoadError);
   });
 });
+function openImportDialog() { $('#import-payload').value = ''; $('#import-file').value = ''; const results = $('#import-results'); results.hidden = true; results.innerHTML = ''; formError($('#import-form')); $('#import-dialog').showModal(); }
+$('#session-import').addEventListener('click', openImportDialog);
+$('#import-file').addEventListener('change', (event) => {
+  const file = event.currentTarget.files?.[0];
+  if (!file) return;
+  file.text().then((text) => { $('#import-payload').value = text; }).catch(() => formError($('#import-form'), '读取文件失败，请直接粘贴导出内容。'));
+});
+$('#import-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  await submitForm(event.currentTarget, '正在导入…', async () => {
+  const raw = $('#import-payload').value.trim();
+  if (!raw) throw new Error('请选择 All API Hub 导出文件，或把文件内容粘贴到文本框。');
+  let payload;
+  try { payload = JSON.parse(raw); } catch { throw new Error('内容不是有效的 JSON，请确认选择的是 All API Hub 导出文件。'); }
+  const response = await saveRequest('/api/v1/admin/session-import', 'POST', payload);
+  const report = await response.json();
+  const misses = (report.results || []).filter((item) => item.status !== 'imported');
+  const results = $('#import-results');
+  results.innerHTML = misses.length
+    ? `<p><strong>已写入 ${report.imported} 个站点的登录态。</strong>以下 ${misses.length} 项被跳过：</p><ul>${misses.map((item) => `<li><span class="mono">${escapeHTML(item.siteName || item.siteUrl || '未知站点')}</span> — ${escapeHTML(item.detail || '未匹配')}</li>`).join('')}</ul>`
+    : `<p><strong>已写入 ${report.imported} 个站点的登录态，没有需要处理的遗漏。</strong></p>`;
+  results.hidden = false;
+  toast(`批量导入完成：成功 ${report.imported} 个${misses.length ? `，跳过 ${misses.length} 个` : ''}`, 'success');
+  await loadSites().catch(reportLoadError);
+  });
+});
 async function createPairing() {
   if (pairingPending) return;
   pairingPending = true;

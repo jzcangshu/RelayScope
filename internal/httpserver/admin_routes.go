@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -199,13 +200,19 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid site id")
 				return
 			}
-			if _, err := options.Store.GetSite(request.Context(), id); err != nil {
+			site, err := options.Store.GetSite(request.Context(), id)
+			if err != nil {
 				writeError(writer, http.StatusNotFound, "site not found")
 				return
 			}
-			var payload session.Data
-			if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 64<<10)).Decode(&payload); err != nil {
+			body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, 8<<20))
+			if err != nil {
 				writeError(writer, http.StatusBadRequest, "invalid session payload")
+				return
+			}
+			payload, payloadErr := importSessionPayload(body, site)
+			if payloadErr != nil {
+				writeError(writer, http.StatusBadRequest, payloadErr.Error())
 				return
 			}
 			if err := options.SessionVault.Save(request.Context(), options.Store, id, payload, nil); err != nil {
@@ -213,6 +220,95 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				return
 			}
 			writeJSON(writer, map[string]string{"status": "ok"})
+		}))))
+		mux.Handle("POST /api/v1/admin/session-import", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if options.SessionVault == nil {
+				writeError(writer, http.StatusNotImplemented, "session vault unavailable")
+				return
+			}
+			body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, 8<<20))
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, "invalid import payload")
+				return
+			}
+			accounts, err := session.ParseAllAPIHubAccounts(body)
+			if err != nil {
+				writeError(writer, http.StatusBadRequest, "无法识别 All API Hub 导出内容："+err.Error())
+				return
+			}
+			sites, err := options.Store.ListAllSites(request.Context())
+			if err != nil {
+				writeError(writer, http.StatusInternalServerError, "query sites")
+				return
+			}
+			origins := make(map[string]store.Site, len(sites))
+			for _, site := range sites {
+				if site.DeletedAt != nil {
+					continue
+				}
+				if origin, err := session.NormalizeOrigin(site.BaseURL); err == nil {
+					origins[strings.ToLower(origin)] = site
+				}
+			}
+			type importEntry struct {
+				item session.BatchItem
+			}
+			results := make([]sessionImportResult, 0, len(accounts))
+			entries := make([]importEntry, 0, len(accounts))
+			byOrigin := make(map[string]int, len(accounts))
+			for _, account := range accounts {
+				result := sessionImportResult{SiteName: account.SiteName, SiteURL: account.SiteURL, Status: "no_match", Detail: "未在站点列表中找到该站点"}
+				origin, err := session.NormalizeOrigin(account.SiteURL)
+				if err != nil {
+					result.Status = "skipped"
+					result.Detail = "站点地址无法解析"
+					results = append(results, result)
+					continue
+				}
+				site, ok := origins[strings.ToLower(origin)]
+				if !ok {
+					results = append(results, result)
+					continue
+				}
+				data, ok := session.DataFromAllAPIHub(account)
+				if !ok {
+					result.Status = "skipped"
+					result.Detail = "账号缺少可用凭据"
+					results = append(results, result)
+					continue
+				}
+				result.Status = "imported"
+				result.SiteName = site.Name
+				item := session.BatchItem{SiteID: site.ID, Data: data}
+				if index, seen := byOrigin[strings.ToLower(origin)]; seen {
+					entries[index] = importEntry{item: item}
+					results[index] = result
+					continue
+				}
+				byOrigin[strings.ToLower(origin)] = len(entries)
+				entries = append(entries, importEntry{item: item})
+				results = append(results, result)
+			}
+			items := make([]session.BatchItem, 0, len(entries))
+			for _, entry := range entries {
+				items = append(items, entry.item)
+			}
+			if len(items) > 0 {
+				if err := options.SessionVault.SaveBatch(request.Context(), options.Store, items, nil); err != nil {
+					writeError(writer, http.StatusBadRequest, "save session batch")
+					return
+				}
+			}
+			imported, noMatch := 0, 0
+			for _, result := range results {
+				switch result.Status {
+				case "imported":
+					imported++
+				case "no_match":
+					noMatch++
+				}
+			}
+			writeJSON(writer, map[string]any{"imported": imported, "noMatch": noMatch, "results": results})
 		}))))
 		mux.Handle("DELETE /api/v1/admin/sites/{id}/session", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			if options.SessionVault == nil {

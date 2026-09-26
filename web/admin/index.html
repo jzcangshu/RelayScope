@@ -124,6 +124,7 @@
                 <option value="disabled">已停用</option>
               </select>
               <span class="spacer"></span>
+              <button id="session-import" class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>批量导入</button>
               <button id="session-sync" class="btn" type="button"><svg class="icon" aria-hidden="true"><use href="#i-pair"/></svg>浏览器同步</button>
               <button id="add-site" class="btn btn-accent" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新增站点</button>
             </div>
@@ -389,12 +390,34 @@
         <p class="dialog-intro">推荐先使用浏览器同步；已有导出内容时，也可以在此手动导入。</p>
         <label class="field"><span>会话 JSON</span>
           <textarea id="session-payload" rows="8" class="mono" spellcheck="false" placeholder='{"userAgent":"…","cookies":[…]}'></textarea>
-          <span class="field-hint">请粘贴扩展或站点导出的完整会话内容。需要自动续期的站点应同时包含刷新凭据；不修改时点击取消。</span>
+          <span class="field-hint">请粘贴扩展或站点导出的完整会话内容；也支持直接粘贴 All API Hub 导出文件（自动匹配本站点账号）。需要自动续期的站点应同时包含刷新凭据；不修改时点击取消。</span>
         </label>
       </div>
       <div class="dialog-actions">
         <button class="btn" type="button" data-close="session-dialog">取消</button>
         <button class="btn btn-primary" type="submit">保存登录态</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="import-dialog" class="admin-dialog" aria-labelledby="import-form-title">
+    <form id="import-form" method="dialog">
+      <div class="dialog-head"><h2 id="import-form-title">批量导入登录态</h2><button class="btn btn-ghost btn-icon" type="button" data-close="import-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+      <div class="dialog-body">
+        <p class="form-error" data-form-error role="alert" tabindex="-1" hidden></p>
+        <p class="dialog-intro">选择 All API Hub 导出的账号备份文件，按站点地址自动匹配已有站点并写入登录态；文件里没有接入的站点会跳过并列出。</p>
+        <label class="field"><span>备份文件</span>
+          <input id="import-file" type="file" accept=".json,application/json">
+          <span class="field-hint">也可以直接把导出文件内容粘贴到下方文本框。</span>
+        </label>
+        <label class="field"><span>备份内容</span>
+          <textarea id="import-payload" rows="10" class="mono" spellcheck="false" placeholder='{"version":"4.0","type":"accounts","accounts":{…}}'></textarea>
+        </label>
+        <div id="import-results" class="import-results" hidden></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-close="import-dialog">取消</button>
+        <button class="btn btn-primary" type="submit">批量导入</button>
       </div>
     </form>
   </dialog>
