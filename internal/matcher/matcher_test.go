@@ -2,25 +2,67 @@ package matcher
 
 import "testing"
 
-func TestNormalizeAndBoundaryMatching(t *testing.T) {
+func TestSubstringMatchingDistinguishesVersions(t *testing.T) {
 	t.Parallel()
 
-	if got := Normalize(" OpenAI/gpt_5.6-SOL (thinking) "); got != "openai gpt 5 6 sol thinking" {
-		t.Fatalf("Normalize() = %q", got)
+	engine, err := New([]Rule{{
+		Provider:      "Anthropic",
+		CanonicalName: "claude-opus-5-5",
+		RequiredTerms: []string{"Opus"},
+		AnyTerms:      []string{"5-5", "5.5"},
+		Enabled:       true,
+	}})
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
 	}
+	if preview := engine.Preview("claude-opus-5-5"); len(preview.Matches) != 1 {
+		t.Fatalf("claude-opus-5-5 should match: %+v", preview)
+	}
+	if preview := engine.Preview("Claude-Opus-5.5-thinking"); len(preview.Matches) != 1 {
+		t.Fatalf("variant spellings listed in anyTerms should match, case-insensitively: %+v", preview)
+	}
+	// The base version lacks the "5-5"/"5.5" substring and must not match.
+	if preview := engine.Preview("claude-opus-5"); len(preview.Matches) != 0 {
+		t.Fatalf("claude-opus-5 must not match the 5-5 rule: %+v", preview)
+	}
+}
+
+func TestSubstringMatchingIsLiteralAboutPunctuation(t *testing.T) {
+	t.Parallel()
+
+	engine, err := New([]Rule{{
+		CanonicalName: "glm-5",
+		RequiredTerms: []string{"glm"},
+		AnyTerms:      []string{"5-5"},
+		Enabled:       true,
+	}})
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	// Terms are literal substrings: "5-5" does not appear in "glm-55".
+	if preview := engine.Preview("glm-55"); len(preview.Matches) != 0 {
+		t.Fatalf("glm-55 must not match a 5-5 term: %+v", preview)
+	}
+}
+
+func TestExcludedTermsCarveOutSubstringOverlaps(t *testing.T) {
+	t.Parallel()
+
 	engine, err := New([]Rule{{
 		CanonicalName: "gpt-5.6-sol",
 		RequiredTerms: []string{"5.6", "sol"},
+		ExcludedTerms: []string{"solid"},
 		Enabled:       true,
 	}})
 	if err != nil {
 		t.Fatalf("new engine: %v", err)
 	}
 	if preview := engine.Preview("provider/gpt-5.6-sol-thinking"); len(preview.Matches) != 1 {
-		t.Fatalf("expected suffix variant to match: %+v", preview)
+		t.Fatalf("suffix variant should match: %+v", preview)
 	}
+	// Substring matching hits "sol" inside "solid"; the excluded term carves it out.
 	if preview := engine.Preview("provider/gpt-5.6-solid"); len(preview.Matches) != 0 {
-		t.Fatalf("solid must not match sol: %+v", preview)
+		t.Fatalf("solid must be carved out by the excluded term: %+v", preview)
 	}
 }
 

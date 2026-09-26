@@ -438,12 +438,12 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				writeError(writer, http.StatusBadRequest, "invalid rule payload")
 				return
 			}
-			matches, err := options.Store.PreviewRule(request.Context(), rule, 500)
+			matches, scanned, err := options.Store.PreviewRule(request.Context(), rule, 500)
 			if err != nil {
 				writeError(writer, http.StatusBadRequest, "preview rule")
 				return
 			}
-			writeJSON(writer, map[string]any{"matches": matches})
+			writeJSON(writer, map[string]any{"matches": matches, "scanned": scanned})
 		}))))
 		mux.Handle("POST /api/v1/admin/rules", options.Auth.Middleware(csrfMiddleware(options.Auth, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			var rule matcher.Rule

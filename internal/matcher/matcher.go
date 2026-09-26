@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"unicode"
 )
 
 type Rule struct {
@@ -29,10 +28,9 @@ type Match struct {
 }
 
 type Preview struct {
-	RawName    string
-	Normalized string
-	Matches    []Match
-	Ambiguous  bool
+	RawName   string
+	Matches   []Match
+	Ambiguous bool
 }
 
 type Engine struct {
@@ -47,6 +45,11 @@ type compiledRule struct {
 	excludedTerms []string
 }
 
+// New compiles rules for matching. Terms are case-insensitive literal
+// substrings of the raw model name: punctuation is significant, so "5-5" and
+// "5.5" are different terms and upstream spellings must be listed separately.
+// Rules that need boundary precision (e.g. "5" must not hit "5.5") should use
+// Pattern, a Go regex applied to the raw name.
 func New(rules []Rule) (*Engine, error) {
 	compiled := make([]compiledRule, 0, len(rules))
 	for _, rule := range rules {
@@ -55,9 +58,9 @@ func New(rules []Rule) (*Engine, error) {
 		}
 		entry := compiledRule{
 			rule:          rule,
-			requiredTerms: normalizeTerms(rule.RequiredTerms),
-			anyTerms:      normalizeTerms(append(append([]string{}, rule.AnyTerms...), rule.Aliases...)),
-			excludedTerms: normalizeTerms(rule.ExcludedTerms),
+			requiredTerms: compileTerms(rule.RequiredTerms),
+			anyTerms:      compileTerms(append(append([]string{}, rule.AnyTerms...), rule.Aliases...)),
+			excludedTerms: compileTerms(rule.ExcludedTerms),
 		}
 		if rule.Pattern != "" {
 			pattern, err := regexp.Compile(rule.Pattern)
@@ -72,13 +75,12 @@ func New(rules []Rule) (*Engine, error) {
 }
 
 func (engine *Engine) Preview(rawName string) Preview {
-	normalized := Normalize(rawName)
-	preview := Preview{RawName: rawName, Normalized: normalized}
+	preview := Preview{RawName: rawName}
 	for _, compiled := range engine.rules {
 		if !compiled.rule.Enabled {
 			continue
 		}
-		if matched, explanation := matchRule(compiled, rawName, normalized); matched {
+		if matched, explanation := matchRule(compiled, rawName); matched {
 			preview.Matches = append(preview.Matches, Match{Rule: compiled.rule, Explanation: explanation})
 		}
 	}
@@ -96,27 +98,11 @@ func (engine *Engine) Preview(rawName string) Preview {
 	return preview
 }
 
-func Normalize(value string) string {
-	var builder strings.Builder
-	spacePending := false
-	for _, character := range strings.ToLower(value) {
-		if unicode.IsLetter(character) || unicode.IsDigit(character) {
-			if spacePending && builder.Len() > 0 {
-				builder.WriteByte(' ')
-			}
-			builder.WriteRune(character)
-			spacePending = false
-			continue
-		}
-		spacePending = builder.Len() > 0
-	}
-	return strings.TrimSpace(builder.String())
-}
-
-func matchRule(compiled compiledRule, rawName, normalized string) (bool, string) {
+func matchRule(compiled compiledRule, rawName string) (bool, string) {
+	haystack := strings.ToLower(rawName)
 	matchedRequired := make([]string, 0, len(compiled.requiredTerms))
 	for _, term := range compiled.requiredTerms {
-		if !containsTerm(normalized, term) {
+		if !strings.Contains(haystack, term) {
 			return false, ""
 		}
 		matchedRequired = append(matchedRequired, term)
@@ -124,7 +110,7 @@ func matchRule(compiled compiledRule, rawName, normalized string) (bool, string)
 	if len(compiled.anyTerms) > 0 {
 		matchedAny := ""
 		for _, term := range compiled.anyTerms {
-			if containsTerm(normalized, term) {
+			if strings.Contains(haystack, term) {
 				matchedAny = term
 				break
 			}
@@ -135,7 +121,7 @@ func matchRule(compiled compiledRule, rawName, normalized string) (bool, string)
 		matchedRequired = append(matchedRequired, "any:"+matchedAny)
 	}
 	for _, term := range compiled.excludedTerms {
-		if containsTerm(normalized, term) {
+		if strings.Contains(haystack, term) {
 			return false, ""
 		}
 	}
@@ -148,27 +134,21 @@ func matchRule(compiled compiledRule, rawName, normalized string) (bool, string)
 	return true, fmt.Sprintf("required=%s", strings.Join(matchedRequired, ","))
 }
 
-func containsTerm(normalized, term string) bool {
-	if term == "" {
-		return false
-	}
-	needle := " " + term + " "
-	return strings.Contains(" "+normalized+" ", needle)
-}
-
-func normalizeTerms(terms []string) []string {
+// compileTerms lowercases and deduplicates match terms, keeping punctuation
+// verbatim — terms are literal substrings of the raw model name.
+func compileTerms(terms []string) []string {
 	result := make([]string, 0, len(terms))
 	seen := make(map[string]struct{}, len(terms))
 	for _, term := range terms {
-		normalized := Normalize(term)
-		if normalized == "" {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term == "" {
 			continue
 		}
-		if _, exists := seen[normalized]; exists {
+		if _, exists := seen[term]; exists {
 			continue
 		}
-		seen[normalized] = struct{}{}
-		result = append(result, normalized)
+		seen[term] = struct{}{}
+		result = append(result, term)
 	}
 	return result
 }

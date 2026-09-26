@@ -158,31 +158,41 @@ func (store *Store) ListMatchConflicts(ctx context.Context, limit int) ([]MatchC
 	return conflicts, nil
 }
 
-func (store *Store) PreviewRule(ctx context.Context, rule matcher.Rule, limit int) ([]MatchPreviewRow, error) {
+// PreviewRule evaluates the draft rule against every discovered model and
+// returns the hits plus the total number of models scanned. The result list is
+// capped at limit, but the scan itself is unbounded: capping the query rows
+// would silently skip sites that sort after the limit window and report misses
+// for rules that actually match.
+func (store *Store) PreviewRule(ctx context.Context, rule matcher.Rule, limit int) ([]MatchPreviewRow, int, error) {
 	engine, err := matcher.New([]matcher.Rule{rule})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if limit <= 0 || limit > 1000 {
 		limit = 300
 	}
-	rows, err := store.db.QueryContext(ctx, `SELECT sites.name, raw_models.raw_name FROM raw_models JOIN sites ON sites.id = raw_models.site_id WHERE raw_models.removed_at IS NULL AND sites.deleted_at IS NULL ORDER BY sites.name, raw_models.raw_name LIMIT ?`, limit)
+	rows, err := store.db.QueryContext(ctx, `SELECT sites.name, raw_models.raw_name FROM raw_models JOIN sites ON sites.id = raw_models.site_id WHERE raw_models.removed_at IS NULL AND sites.deleted_at IS NULL ORDER BY sites.name, raw_models.raw_name`)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	result := make([]MatchPreviewRow, 0)
+	scanned := 0
 	for rows.Next() {
 		var row MatchPreviewRow
 		if err := rows.Scan(&row.SiteName, &row.RawModelName); err != nil {
-			return nil, err
+			return nil, 0, err
+		}
+		scanned++
+		if len(result) >= limit {
+			continue
 		}
 		row.Matched = len(engine.Preview(row.RawModelName).Matches) > 0
 		if row.Matched {
 			result = append(result, row)
 		}
 	}
-	return result, rows.Err()
+	return result, scanned, rows.Err()
 }
 
 func (store *Store) ListRules(ctx context.Context) ([]matcher.Rule, error) {

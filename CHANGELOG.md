@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refunds). Payment endpoints answer 501 until credentials are configured.
 
 ### Changed
+- 模型匹配规则的关键词语义从「归一化整词」改为「大小写不敏感的子串」：模型名
+  包含关键词即命中，标点原样参与匹配（5-5 与 5.5 是不同写法，需分开填），
+  不再要求把模型名在脑内拆词。正则表达式仍作用于原始模型名，承担边界精度
+  需求（如「5 不得命中 5.5」）。规则编辑对话框文案同步说明该语义。
+- 规则「预览命中」改为全量扫描已发现模型并返回扫描总数：此前查询按站点名
+  排序后只取前 500 行，中文站名在字节序中排后，导致命中的模型落在窗口之外
+  时预览始终误报「没有命中项，请调整匹配条件」。前端空结果与命中结果均显示
+  扫描数，可区分「扫到 0 条」与「扫了 N 条未命中」。
 - Membership recharge is monthly-only (admin-configured price, default 15
   LDC per 30-day month). Active members receive a monthly free wish credit
   (default 10 LDC, granted lazily once per calendar month via a unique

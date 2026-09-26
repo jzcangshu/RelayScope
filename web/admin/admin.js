@@ -636,9 +636,11 @@ $('#preview-rule').onclick = async () => {
   $('#rule-preview').innerHTML = '<p>正在读取匹配结果…</p>';
   try {
     const response = await saveRequest('/api/v1/admin/rules/preview', 'POST', rulePayload());
-    const matches = (await response.json()).matches || [];
+    const payload = await response.json();
+    const matches = payload.matches || [];
+    const scanned = payload.scanned || 0;
     if (requestId !== rulePreviewRequestId || !$('#rule-dialog').open) return;
-    $('#rule-preview').innerHTML = matches.length ? `<p>命中 ${matches.length} 项</p>` + matches.map((item) => `<div>${escapeHTML(item.siteName)} · <span class="mono">${escapeHTML(item.rawModelName)}</span></div>`).join('') : '<p>当前已发现模型中没有命中项，请调整匹配条件。</p>';
+    $('#rule-preview').innerHTML = matches.length ? `<p>命中 ${matches.length} 项（共扫描 ${scanned} 个已发现模型）</p>` + matches.map((item) => `<div>${escapeHTML(item.siteName)} · <span class="mono">${escapeHTML(item.rawModelName)}</span></div>`).join('') : `<p>共扫描 ${scanned} 个已发现模型，没有命中项。</p>`;
   } catch (error) {
     if (requestId === rulePreviewRequestId) $('#rule-preview').innerHTML = `<p>${escapeHTML(error.message || '预览失败，请重试。')}</p>`;
   } finally { button.disabled = false; }

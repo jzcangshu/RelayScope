@@ -357,15 +357,15 @@
       <div class="dialog-head"><h2 id="rule-form-title">编辑匹配规则</h2><button class="btn btn-ghost btn-icon" type="button" data-close="rule-dialog" aria-label="关闭"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></div>
       <div class="dialog-body">
         <p class="form-error" data-form-error role="alert" tabindex="-1" hidden></p>
-        <p class="dialog-intro">将上游不同命名归入同一标准模型。保存前可预览实际命中的模型。</p>
+        <p class="dialog-intro">将上游不同命名归入同一标准模型。关键词按大小写不敏感的子串匹配模型名，标点需原样一致（如 5-5 与 5.5 是不同写法，要分开填）；别名与任选关键词等价，包含其一即命中。保存前可预览实际命中的模型。</p>
         <input id="rule-id" type="hidden">
         <div class="form-grid">
           <label class="field"><span>供应商</span><input id="rule-provider" required></label>
           <label class="field"><span>标准模型名</span><input id="rule-name" required></label>
-          <label class="field"><span>必选关键词（逗号分隔）</span><input id="rule-required"></label>
-          <label class="field"><span>任选关键词（逗号分隔）</span><input id="rule-any"></label>
-          <label class="field"><span>排除关键词（逗号分隔）</span><input id="rule-excluded"></label>
-          <label class="field"><span>别名（逗号分隔）</span><input id="rule-aliases"></label>
+          <label class="field"><span>必选关键词（逗号分隔，需全部包含）</span><input id="rule-required" placeholder="如：opus"></label>
+          <label class="field"><span>任选关键词（逗号分隔，包含其一即可）</span><input id="rule-any" placeholder="如：5-5, 5.5"></label>
+          <label class="field"><span>排除关键词（逗号分隔，包含则不命中）</span><input id="rule-excluded" placeholder="如：mini"></label>
+          <label class="field"><span>别名（逗号分隔，等同任选关键词）</span><input id="rule-aliases"></label>
           <label class="field span-2"><span>正则表达式</span><input id="rule-pattern" class="mono"></label>
           <label class="field"><span>优先级</span><input id="rule-priority" type="number" value="100"></label>
           <div class="field field-inline"><label class="check"><input id="rule-enabled" type="checkbox" checked> 启用</label></div>
