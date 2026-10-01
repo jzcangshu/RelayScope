@@ -631,3 +631,24 @@ test('24h 无样本卡片默认隐藏，搜索时放开', () => {
   assert.match(source, /const visibleCards = displayCards\(query\)/);
   assert.match(source, /renderFilters\(query\)/);
 });
+
+test('dashboard script never ships inline event handlers (CSP)', () => {
+  // 生产 CSP 为 default-src 'self'，无 'unsafe-inline'，内联 onclick 会被静默
+  // 拦截——按钮「点不动」。新增交互必须 data 属性 + addEventListener。
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  assert.doesNotMatch(source, /\son(click|change|input|submit)=/);
+  const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /\son(click|change|input|submit)=/);
+});
+
+test('通知中心长文折叠以 CSS 截断为准', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  // 按钮由渲染后实测溢出挂载，而非字符数阈值（窄面板下两者会不一致）
+  assert.match(source, /function bindNCExpandButtons\(container\)/);
+  assert.match(source, /textEl\.scrollHeight <= textEl\.clientHeight \+ 1/);
+  assert.doesNotMatch(source, /truncateContent/);
+  // JS 展开类名必须与 CSS 解除 clamp 的选择器一致，否则按钮切换了但视觉不展开
+  assert.match(css, /\.nc-text\.nc-text-expanded/);
+  assert.match(source, /classList\.toggle\('nc-text-expanded'\)/);
+});

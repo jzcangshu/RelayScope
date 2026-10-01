@@ -348,7 +348,7 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.nc-text.expanded { -webkit-line-clamp: unset; overflow: visible; }
+.nc-text.nc-text-expanded { -webkit-line-clamp: unset; overflow: visible; }
 .nc-expand-btn {
   display: inline-block;
   margin-top: 3px;
@@ -3361,7 +3361,7 @@ body.public-dashboard > main { flex: 1 1 auto; width: 100%; }
 .public-dashboard .detail-site-filter[hidden] { display: none; }
 
 /* 卡片标题可点击（有站点公告时） */
-.card-title .card-title-text[onclick] { cursor: pointer; }
+.card-title .card-title-text[data-ann-site-id] { cursor: pointer; }
 
 /* ===== 通知订阅面板（标题复用 .pref-head 体系，仅保留本页特有的额度徽标/配置卡） ===== */
 .notify-panel { padding: 0; }

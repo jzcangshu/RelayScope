@@ -85,6 +85,27 @@ def _site_name(site_id):
             return r["siteName"]
     return ""
 
+def site_announcements():
+    """站点公告（生产 /api/v1/public/announcements 的 siteAnnouncements 与
+    /api/v1/public/site-announcements 共用同一数据源，字段对齐 store.SiteAnnouncement）。"""
+    now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+    return {
+        1: [
+            {"id": 1, "siteId": 1, "externalId": "a1", "title": "上线 glm-5.3-flash", "content": "Translate 分组扩容，现已支持 GLM-5.3-flash 模型，倍率 0.5。请勿高并发使用。", "annType": "success", "extra": "", "publishedAt": now_ts - 3600000 * 2, "firstSeenAt": now_ts - 3600000 * 2, "lastSeenAt": now_ts},
+            {"id": 2, "siteId": 1, "externalId": "a2", "title": "", "content": "由于学业繁重，且本人为住宿生，故维护频率会降低。GLM5.2 空回复/429 稍等重试即可。", "annType": "warning", "extra": "", "publishedAt": now_ts - 86400000 * 2, "firstSeenAt": now_ts - 86400000 * 2, "lastSeenAt": now_ts},
+            {"id": 9, "siteId": 1, "externalId": "a9", "title": "", "content": "站点上线一周年，感谢大家支持。历史公告比 24h/7d 都旧，用于验证默认范围自动适配。", "annType": "default", "extra": "", "publishedAt": now_ts - 86400000 * 45, "firstSeenAt": now_ts - 86400000 * 45, "lastSeenAt": now_ts},
+        ],
+        2: [
+            {"id": 3, "siteId": 2, "externalId": "a3", "title": "关于账号封禁问题的说明", "content": "由于目前资源紧张，当天token资源分配完毕后将不再继续分配，请求也不会被处理。请大家留意以下几点：正常使用者请自查，若发现大量 429 错误建议立即停止使用。", "annType": "warning", "extra": "", "publishedAt": now_ts - 7200000, "firstSeenAt": now_ts - 7200000, "lastSeenAt": now_ts},
+        ],
+        3: [
+            {"id": 4, "siteId": 3, "externalId": "a4", "title": "", "content": "complimentary分组glm-5.2模型目前有几率降级路由至glm-5.1，glm-5以提升可用性。", "annType": "default", "extra": "", "publishedAt": now_ts - 86400000, "firstSeenAt": now_ts - 86400000, "lastSeenAt": now_ts},
+            # 超过 150 字：验证通知中心「展开全文/收起」按钮
+            {"id": 5, "siteId": 3, "externalId": "a5", "title": "关于近期服务稳定性与限流策略调整的完整说明", "content": "近期由于上游供应商波动，部分模型在高峰时段出现超时与 5xx 错误。我们已完成以下调整：一、complimentary 分组接入双通道自动降级，优先保障 glm 系列可用性；二、对单 key 并发限制从 5 调整为 3，建议客户端启用指数退避重试；三、24 小时成功率低于 90% 的模型会自动摘除负载均衡权重，恢复后自动加回。由此带来的不便敬请谅解，如有问题欢迎通过社区群反馈。", "annType": "warning", "extra": "", "publishedAt": now_ts - 86400000 * 3, "firstSeenAt": now_ts - 86400000 * 3, "lastSeenAt": now_ts},
+        ],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -116,27 +137,15 @@ class Handler(BaseHTTPRequestHandler):
                 {"siteId": 2, "siteName": "紫电API", "failureCode": "collection_failed", "reason": "请求超时（7 分钟内未响应）"},
             ]
             site_ann_ids = [1, 2, 3]
+            # 与生产一致：有公告站点时附带 siteAnnouncements（每站最多 5 条，供通知中心时间线用）
+            site_anns = [ann for sid in site_ann_ids for ann in site_announcements().get(sid, [])[:5]]
+            payload = {"announcements": fail_anns, "revision": "mock-1", "siteAnnouncementSiteIds": site_ann_ids, "siteAnnouncements": site_anns}
             if LOGGED_IN:
-                notice = {"markdown": "# 欢迎使用 RelayScope\n\n- 数据每 **5 分钟** 自动刷新\n\n- 问题请通过反馈提交", "updatedAt": NOW}
-                return self._json({"announcements": fail_anns, "revision": "mock-1", "notice": notice, "siteAnnouncementSiteIds": site_ann_ids})
-            return self._json({"announcements": fail_anns, "revision": "mock-1", "siteAnnouncementSiteIds": site_ann_ids})
+                payload["notice"] = {"markdown": "# 欢迎使用 RelayScope\n\n- 数据每 **5 分钟** 自动刷新\n\n- 问题请通过反馈提交", "updatedAt": NOW}
+            return self._json(payload)
         if path.startswith("/api/v1/public/site-announcements"):
             site_id = int(self.path.split("site_id=")[-1].split("&")[0]) if "site_id=" in self.path else 0
-            now_ts = int(datetime.now(timezone.utc).timestamp() * 1000)
-            anns_by_site = {
-                1: [
-                    {"id": 1, "siteId": 1, "externalId": "a1", "title": "上线 glm-5.3-flash", "content": "Translate 分组扩容，现已支持 GLM-5.3-flash 模型，倍率 0.5。请勿高并发使用。", "annType": "success", "extra": "", "publishedAt": now_ts - 3600000 * 2, "firstSeenAt": now_ts - 3600000 * 2, "lastSeenAt": now_ts},
-                    {"id": 2, "siteId": 1, "externalId": "a2", "title": "", "content": "由于学业繁重，且本人为住宿生，故维护频率会降低。GLM5.2 空回复/429 稍等重试即可。", "annType": "warning", "extra": "", "publishedAt": now_ts - 86400000 * 2, "firstSeenAt": now_ts - 86400000 * 2, "lastSeenAt": now_ts},
-                    {"id": 9, "siteId": 1, "externalId": "a9", "title": "", "content": "站点上线一周年，感谢大家支持。历史公告比 24h/7d 都旧，用于验证默认范围自动适配。", "annType": "default", "extra": "", "publishedAt": now_ts - 86400000 * 45, "firstSeenAt": now_ts - 86400000 * 45, "lastSeenAt": now_ts},
-                ],
-                2: [
-                    {"id": 3, "siteId": 2, "externalId": "a3", "title": "关于账号封禁问题的说明", "content": "由于目前资源紧张，当天token资源分配完毕后将不再继续分配，请求也不会被处理。请大家留意以下几点：正常使用者请自查，若发现大量 429 错误建议立即停止使用。", "annType": "warning", "extra": "", "publishedAt": now_ts - 7200000, "firstSeenAt": now_ts - 7200000, "lastSeenAt": now_ts},
-                ],
-                3: [
-                    {"id": 4, "siteId": 3, "externalId": "a4", "title": "", "content": "complimentary分组glm-5.2模型目前有几率降级路由至glm-5.1，glm-5以提升可用性。", "annType": "default", "extra": "", "publishedAt": now_ts - 86400000, "firstSeenAt": now_ts - 86400000, "lastSeenAt": now_ts},
-                ],
-            }
-            return self._json({"announcements": anns_by_site.get(site_id, [])})
+            return self._json({"announcements": site_announcements().get(site_id, [])})
         if path == "/api/v1/public/details":
             return self._json({"buckets": BUCKETS, "groups": [g for g in ROWS if g["siteName"] == "星云中转" or g["groupName"] == "官方"]})
         if path == "/api/v1/auth/me":

@@ -120,6 +120,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrow screens. Still dependency-free vanilla JS/CSS with no build step;
   the public dashboard is untouched.
 
+### Fixed
+- 修复通知中心「展开全文」按钮及同批因 CSP 失效的内联交互。生产 CSP 为
+  `default-src 'self'`（无 `unsafe-inline`），内联事件处理器会被浏览器静默
+  拦截——按钮渲染正常但点击毫无反应。受影响的有四处：通知中心「展开全文/
+  收起」、卡片标题点开站点公告、卡片「访问站点主页」链接的 stopPropagation、
+  通知订阅面板的「开通会员」按钮，全部改为 data 属性 + 渲染后
+  addEventListener 绑定。顺带修复展开功能的两个潜伏缺陷（此前被 CSP 拦截
+  从未暴露）：JS 展开类名与 CSS 解除三行截断的选择器不一致，导致按钮切换
+  但视觉上不展开；按钮显隐按「超过 150 字符」判断而省略号按 CSS 三行截断
+  判断，窄面板下出现「被截断却没有按钮」。现在统一以 CSS 截断为准，渲染后
+  实测溢出（scrollHeight 超出 clientHeight）才挂按钮。mock server 补齐
+  `/api/v1/public/announcements` 缺失的 `siteAnnouncements` 字段（生产
+  handler 有返回，mock 一直没有——通知中心公告时间线在 mock 里从未渲染过，
+  这正是该 bug 一直没被发现的原因），并新增超过 150 字的公告样例。
 - 修复使用「阶梯表达式计费」（`billing_mode: tiered_expr`）的 NewAPI 站点
   价格完全失真的问题。这类站点的真实价格写在 `billing_expr` 表达式里
   （`tier("base", p * 2 + c * 8 + cr * 0.6)`，系数即美元/百万 tokens），而

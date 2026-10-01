@@ -750,8 +750,10 @@ function homepageOf(siteName, url) {
 
 function renderCard(card) {
   const homeUrl = homepageOf(card.siteName, card.siteUrl);
-  const homeLink = homeUrl ? `<a class="site-home-link" href="${escapeHTML(homeUrl)}" target="_blank" rel="noopener" title="访问站点主页" onclick="event.stopPropagation()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2h5v5"/><path d="M14 2L7 9"/><path d="M2 5v7a2 2 0 0 0 2 2h7"/></svg></a>` : '';
-  const annAttr = card.hasAnnouncements ? ` onclick="event.stopPropagation();showSiteAnnouncements(${card.siteId},'${escapeHTML(card.siteName)}')"` : '';
+  const homeLink = homeUrl ? `<a class="site-home-link" href="${escapeHTML(homeUrl)}" target="_blank" rel="noopener" title="访问站点主页"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2h5v5"/><path d="M14 2L7 9"/><path d="M2 5v7a2 2 0 0 0 2 2h7"/></svg></a>` : '';
+  // 生产 CSP 禁止内联事件处理器（default-src 'self'），站点公告入口只能用
+  // data 属性 + 渲染后 addEventListener 绑定（见 render() 的卡片绑定段）。
+  const annAttr = card.hasAnnouncements ? ` data-ann-site-id="${card.siteId}" data-ann-site-name="${escapeHTML(card.siteName)}" title="查看站点公告"` : '';
   const title = view === 'model'
     ? `<strong class="card-title"><span class="card-title-text"${annAttr}>${escapeHTML(card.siteName)}</span><small class="card-title-text"> · ${escapeHTML(card.rawModelName)}</small>${homeLink}</strong>`
     : `<strong class="card-title"><span class="card-title-text"${annAttr}>${escapeHTML(card.rawModelName)}</span>${homeLink}</strong>`;
@@ -927,6 +929,11 @@ function render() {
       currentPage = 1;
       render();
     }));
+    element.querySelectorAll('.site-home-link').forEach((link) => link.addEventListener('click', (event) => event.stopPropagation()));
+    element.querySelectorAll('.card-title-text[data-ann-site-id]').forEach((span) => span.addEventListener('click', (event) => {
+      event.stopPropagation();
+      showSiteAnnouncements(Number(span.dataset.annSiteId), span.dataset.annSiteName);
+    }));
   });
   bindPagination();
 }
@@ -1064,6 +1071,7 @@ function renderNotificationCenter() {
     ncRange = btn.dataset.range;
     renderNotificationCenter();
   });
+  bindNCExpandButtons(container);
 }
 
 function renderNCTimelineItem(item) {
@@ -1073,10 +1081,6 @@ function renderNCTimelineItem(item) {
   const badgeClass = isFailure ? 'nc-badge-error' : `nc-badge-${item.annType || 'default'}`;
   const badgeLabel = isFailure ? item.code : ({ default: '', success: '成功', warning: '警告', error: '错误', ongoing: '进行中' }[item.annType] || '');
   const titleHTML = item.title ? `<div class="nc-title-line">${escapeHTML(item.title)}</div>` : '';
-  const contentPreview = truncateContent(item.content || '', 150);
-  const needsExpand = (item.content || '').length > 150;
-  const expandBtn = needsExpand ? `<button class="nc-expand-btn" onclick="ncExpandContent(this)">展开全文</button>` : '';
-  const fullContent = escapeHTML(item.content || '');
 
   return `<div class="nc-item ${isFailure ? 'nc-item--failure' : ''}">
     <div class="nc-avatar">${escapeHTML(initial)}</div>
@@ -1087,30 +1091,31 @@ function renderNCTimelineItem(item) {
         <span class="nc-time">${escapeHTML(timeStr)}</span>
       </div>
       ${titleHTML}
-      <div class="nc-text" data-full="${fullContent}">${escapeHTML(contentPreview)}</div>
-      ${expandBtn}
+      <div class="nc-text">${escapeHTML(item.content || '')}</div>
     </div>
   </div>`;
+}
+
+// 长文折叠以 CSS 三行截断为准：渲染后实测溢出才补「展开全文」按钮。
+// 字符数阈值（旧实现 >150 字才给按钮）在窄面板/中英文混排下会和视觉
+// 省略号对不上——被截断的没有按钮、有按钮的看不出展开。
+function bindNCExpandButtons(container) {
+  container.querySelectorAll('.nc-item:not(.nc-item--failure) .nc-text').forEach((textEl) => {
+    if (textEl.scrollHeight <= textEl.clientHeight + 1) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'nc-expand-btn';
+    btn.textContent = '展开全文';
+    textEl.after(btn);
+    btn.addEventListener('click', () => ncExpandContent(btn));
+  });
 }
 
 function ncExpandContent(btn) {
   const textEl = btn.previousElementSibling;
   if (!textEl) return;
-  const full = textEl.dataset.full;
-  if (textEl.classList.contains('nc-text-expanded')) {
-    textEl.textContent = truncateContent(full, 150);
-    textEl.classList.remove('nc-text-expanded');
-    btn.textContent = '展开全文';
-  } else {
-    textEl.textContent = full;
-    textEl.classList.add('nc-text-expanded');
-    btn.textContent = '收起';
-  }
-}
-
-function truncateContent(text, max) {
-  if (text.length <= max) return text;
-  return text.substring(0, max) + '…';
+  const expanded = textEl.classList.toggle('nc-text-expanded');
+  btn.textContent = expanded ? '收起' : '展开全文';
 }
 
 function formatDateKey(date) {
@@ -2383,7 +2388,7 @@ function renderCustomizeNotify() {
 
   // Upgrade CTA for non-members at limit
   if (!isMember && subCount >= NOTIFY_FREE_LIMIT) {
-    html += '<div class="notify-upgrade"><span class="notify-upgrade-icon">✦</span><span>升级会员解锁无限站点订阅</span><button class="btn btn-primary btn-sm" type="button" onclick="showUpgradeGate()">开通会员</button></div>';
+    html += '<div class="notify-upgrade"><span class="notify-upgrade-icon">✦</span><span>升级会员解锁无限站点订阅</span><button class="btn btn-primary btn-sm" type="button" data-notify-upgrade>开通会员</button></div>';
   }
 
   html += '</div>';
@@ -2402,6 +2407,7 @@ function renderCustomizeNotify() {
   customizeNotifyPanel.querySelector('[data-notify-test]')?.addEventListener('click', handleNotifyTest);
   customizeNotifyPanel.querySelector('[data-notify-channel-save]')?.addEventListener('click', handleNotifyChannelSave);
   customizeNotifyPanel.querySelector('[data-notify-select-all]')?.addEventListener('click', handleNotifySelectAll);
+  customizeNotifyPanel.querySelector('[data-notify-upgrade]')?.addEventListener('click', showUpgradeGate);
 }
 
 // 渠道状态行：不重渲染，只更新文本/按钮，避免输入时丢焦点
