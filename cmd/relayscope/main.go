@@ -82,6 +82,7 @@ func run() error {
 		adapter.ModelMarketAdapter(),
 		adapter.ModelPulseAdapter{},
 		adapter.ModelProbeAdapter{},
+		adapter.ModelStatusAdapter{},
 		adapter.Sub2MonitorAdapter{},
 		adapter.UptimeKumaAdapter{},
 		adapter.XAPIPoolAdapter{},

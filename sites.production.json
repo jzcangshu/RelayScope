@@ -433,5 +433,13 @@
       "pricingPath": "/api/v1/model-plaza"
     },
     "session_required": true
+  },
+  {
+    "name": "Venlacy",
+    "base_url": "https://ai.venlacy.com",
+    "source_url": "https://ai.venlacy.com/model-status",
+    "adapter": "newapi-model-status",
+    "adapter_config": {},
+    "session_required": false
   }
 ]

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 新增 `newapi-model-status` 适配器，接入增强版 NewAPI 的公开「模型状态」
+  页面（首发站点 ai.venlacy.com，无需登录）。数据源为
+  `/api/enhancements/model-status/embed/status/all`：每个（模型，分组）一行，
+  携带 24h 窗口聚合指标与 48 个 30 分钟时间槽。绿灯/黄灯/红灯映射
+  healthy/degraded/failed，`avg_use_time`、首响应时长与出 token 速度分别
+  换算为平均延迟、首 token 延迟与 token 速率；时间槽原样作为有边界的历史
+  桶入库，窗口完整且最新槽在 1 小时内时声明 24h 历史覆盖（与 model-probe
+  同一新鲜度规则），使卡片参与「过期样本隐藏」策略。定价与公告复用
+  NewAPI 通道（`/api/pricing` + `/api/status`，timeline 模式），同源三个
+  端点全部公开访问。
 - Sub2API 站点登录态长效续期补全。此前已有「access token 临期主动刷新」
   （提前 2 分钟，与 All API Hub 一致），但缺两块：站点提前吊销 access
   token（重启、他处轮换、家族撤销）时采集直接 401 记 `login_expired`，等
@@ -110,7 +120,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrow screens. Still dependency-free vanilla JS/CSS with no build step;
   the public dashboard is untouched.
 
-### Fixed
 - 修复使用「阶梯表达式计费」（`billing_mode: tiered_expr`）的 NewAPI 站点
   价格完全失真的问题。这类站点的真实价格写在 `billing_expr` 表达式里
   （`tier("base", p * 2 + c * 8 + cr * 0.6)`，系数即美元/百万 tokens），而
