@@ -742,10 +742,11 @@ document.addEventListener('keydown', (event) => {
 });
 document.querySelectorAll('.admin-dialog').forEach((dialog) => {
   dialog.addEventListener('cancel', (event) => { if (dialog.querySelector('form[aria-busy="true"]')) event.preventDefault(); });
-  dialog.addEventListener('click', (event) => {
-    const bounds = dialog.getBoundingClientRect();
-    if (event.target === dialog && !dialog.querySelector('form[aria-busy="true"]') && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) dialog.close();
-  });
+  // 不做「点击弹窗外即关闭」：弹窗承载表单数据，快速点击按钮时鼠标稍带滑动、
+  // 拖拽到外部释放（浏览器把 click 重定向到按下/释放点的共同祖先——正好是
+  // dialog 本身）、或弹窗内容增删导致高度变化重新居中后原地一击，都会把
+  // 一次无意的点击变成关闭，已填内容全部丢失。关闭走 Escape / 右上角 ✕ /
+  // 取消按钮 / 保存成功这四条显式路径。
   dialog.addEventListener('invalid', (event) => { let element = event.target.parentElement; while (element && element !== dialog) { if (element.tagName === 'DETAILS') element.open = true; element = element.parentElement; } }, true);
 });
 $('#copy-pair-code').onclick = async () => {

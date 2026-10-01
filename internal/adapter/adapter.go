@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -167,6 +168,9 @@ func (registry *Registry) List() []Adapter {
 	for _, adapter := range registry.adapters {
 		result = append(result, adapter)
 	}
+	// map 遍历顺序随机，管理台按返回顺序渲染下拉框，不排序会导致每次刷新
+	// 选项顺序变化、新增站点的默认适配器漂移。
+	sort.Slice(result, func(i, j int) bool { return result[i].Key() < result[j].Key() })
 	return result
 }
 
