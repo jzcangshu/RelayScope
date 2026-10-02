@@ -86,8 +86,8 @@ const TAG_COLORS = ['mint', 'blue', 'violet', 'amber', 'rose', 'slate'];
 const TAG_COLOR_LABELS = { mint: '薄荷绿', blue: '天蓝', violet: '紫罗兰', amber: '琥珀', rose: '玫红', slate: '石板灰' };
 const CUSTOMIZE_DIMENSIONS = [
   { key: 'sites', title: '站点', valueOf: (card) => card.siteName },
-  { key: 'providers', title: '模型供应商', valueOf: (card) => card.provider || '未归类' },
-  { key: 'models', title: '标准模型', valueOf: (card) => card.ruleName || card.rawModelName }
+  { key: 'providers', title: '模型供应商', valueOf: (card) => card.provider || '未归类', note: '隐藏供应商会同时屏蔽其全部模型' },
+  { key: 'models', title: '标准模型', valueOf: (card) => card.ruleName || card.rawModelName, note: '已整体隐藏的供应商会在底部单独标出' }
 ];
 const HIDDEN_KEYS = { site: 'sites', provider: 'providers', model: 'models' };
 
@@ -100,8 +100,7 @@ let openSiteMenu = null;
 let openColorMenu = null;
 let tagStatus = { text: '', undo: null };
 let tagFocusAfterRender = null;
-let customizeSearches = { sites: '', providers: '', models: '', tagSites: '' };
-let searchFocusKey = null;
+let modelGroupFocus = null; // 就地取消隐藏后应聚焦的供应商分组名
 let sortMode = { model: 'default', site: 'default' };
 
 const selectedFilters = { provider: new Set(), model: new Set(), site: new Set(), tag: new Set() };
@@ -1388,18 +1387,10 @@ function renderCustomize() {
   if (customizeTab === 'display') renderCustomizeDisplay();
   else if (customizeTab === 'sites') renderChipGrid(CUSTOMIZE_DIMENSIONS[0], customizeSitesPanel);
   else if (customizeTab === 'providers') renderChipGrid(CUSTOMIZE_DIMENSIONS[1], customizeProvidersPanel);
-  else if (customizeTab === 'models') renderChipGrid(CUSTOMIZE_DIMENSIONS[2], customizeModelsPanel);
+  else if (customizeTab === 'models') renderModelChipGroups(CUSTOMIZE_DIMENSIONS[2], customizeModelsPanel);
   else if (customizeTab === 'tags') renderCustomizeTags();
   else if (customizeTab === 'notify') renderCustomizeNotify();
   updateNavBadges();
-  if (searchFocusKey && !tagFocusAfterRender) {
-    const panel = customizeTab === 'display' ? customizeSettingsPanel : customizeTab === 'tags' ? customizeTagsPanel : (customizeTab === 'sites' ? customizeSitesPanel : customizeTab === 'providers' ? customizeProvidersPanel : customizeModelsPanel);
-    const input = panel.querySelector(`[data-pref-search="${searchFocusKey}"]`);
-    if (input) {
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-    }
-  }
 }
 
 const CUSTOMIZE_PANEL_BY_TAB = { display: customizeSettingsPanel, sites: customizeSitesPanel, providers: customizeProvidersPanel, models: customizeModelsPanel, tags: customizeTagsPanel, notify: customizeNotifyPanel };
@@ -1415,8 +1406,12 @@ function updateNavBadges() {
 }
 
 function setCustomizeTab(tab) {
-  // 非会员（含已过期）永远停留在门禁页，禁止通过切换标签渲染出定制内容（通知订阅除外）
-  if (membershipIs() !== 'active' && tab !== 'notify') { enterCustomize(); return; }
+  // 非会员（含已过期）无法查看会员专属 tab：重置到门禁页并拦截，通知订阅除外
+  if (membershipIs() !== 'active' && tab !== 'notify') {
+    customizeTab = 'display';
+    enterCustomize();
+    return;
+  }
   customizeTab = tab;
   customizeNav.querySelectorAll('[data-customize-tab]').forEach((button) => {
     button.setAttribute('aria-selected', String(button.dataset.customizeTab === tab));
@@ -1534,15 +1529,67 @@ function renderCustomizeDisplay() {
 
 function renderChipGrid(definition, panel) {
   const key = definition.key;
-  const query = customizeSearches[key].trim().toLowerCase();
-  const chips = dimensionCounts(definition)
-    .filter((item) => !query || item.value.toLowerCase().includes(query))
-    .map((item) => {
-      const visible = !hidden[key].has(item.value);
-      return `<button type="button" class="hide-chip${visible ? '' : ' hidden'}" data-pref-toggle data-pref-key="${key}" data-pref-value="${escapeHTML(item.value)}" aria-pressed="${visible ? 'true' : 'false'}" title="${escapeHTML(item.value)}（${item.count} 个模型入口）"><span class="hide-chip-name">${escapeHTML(item.value)}</span><span class="hide-chip-count">${item.count}</span></button>`;
-    }).join('');
-  const hiddenCount = hidden[key].size;
-  panel.innerHTML = `<section class="pref-section chip-grid-section"><div class="pref-head"><h3>屏蔽${definition.title}</h3><span class="pref-note">点击胶囊切换显示；已隐藏的会变暗并带删除线</span></div><div class="chip-grid-head"><label class="pref-search"><span>搜索${definition.title}</span><input type="search" data-pref-search="${key}" value="${escapeHTML(customizeSearches[key])}" placeholder="筛选${definition.title}"></label>${hiddenCount ? `<button type="button" class="pref-reset" data-pref-reset="${key}">全部显示</button>` : ''}</div><div class="chip-grid" data-pref-list="${key}">${chips || '<p class="pref-empty">没有匹配的条目</p>'}</div></section>`;
+  const chips = dimensionCounts(definition).map((item) => hideChipHTML(key, item)).join('');
+  panel.innerHTML = `<section class="pref-section chip-grid-section"><div class="pref-head"><h3>屏蔽${definition.title}</h3>${definition.note ? `<span class="pref-note">${definition.note}</span>` : ''}</div><div class="chip-grid" data-pref-list="${key}">${chips || '<p class="pref-empty">没有匹配的条目</p>'}</div></section>`;
+}
+
+function hideChipHTML(key, item, options = {}) {
+  const name = escapeHTML(item.value);
+  const visible = !hidden[key].has(item.value);
+  if (options.inert) {
+    // 所属供应商被整体隐藏：胶囊只作展示，不可点击（点击也不会生效）
+    return `<span class="hide-chip is-inert${visible ? '' : ' hidden'}" title="${name} 属于已整体隐藏的供应商，不会显示"><span class="hide-chip-name">${name}</span><span class="hide-chip-count">${item.count}</span></span>`;
+  }
+  return `<button type="button" class="hide-chip${visible ? '' : ' hidden'}" data-pref-toggle data-pref-key="${key}" data-pref-value="${name}" aria-pressed="${visible ? 'true' : 'false'}" title="${name}（${item.count} 个模型入口）"><span class="hide-chip-name">${name}</span><span class="hide-chip-count">${item.count}</span></button>`;
+}
+
+// ---- 模型分组（纯函数，供面板与测试共用） ----
+const MODEL_GROUP_FALLBACK = '未归类';
+
+function modelProviderGroups(cardList, hiddenProviders) {
+  const groups = new Map();
+  for (const card of cardList) {
+    const provider = card.provider || MODEL_GROUP_FALLBACK;
+    const model = card.ruleName || card.rawModelName;
+    if (!groups.has(provider)) groups.set(provider, new Map());
+    const models = groups.get(provider);
+    models.set(model, (models.get(model) || 0) + 1);
+  }
+  return [...groups.entries()].map(([name, models]) => ({
+    name,
+    hidden: hiddenProviders.has(name),
+    models: [...models.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'zh-CN'))
+  })).sort((a, b) => (Number(a.hidden) - Number(b.hidden))
+    || (Number(a.name === MODEL_GROUP_FALLBACK) - Number(b.name === MODEL_GROUP_FALLBACK))
+    || a.name.localeCompare(b.name, 'zh-CN'));
+}
+// ---- 模型分组结束 ----
+
+function modelGroupHTML(group) {
+  const name = escapeHTML(group.name);
+  const count = `${group.models.length} 个模型`;
+  const head = group.hidden
+    ? `<span class="chip-group-name">${name}</span><span class="chip-group-badge">整体已隐藏</span><span class="chip-group-count">${count}</span><span class="chip-group-rule" aria-hidden="true"></span><button type="button" class="chip-group-restore" data-pref-unhide-provider="${name}">取消隐藏</button>`
+    : `<span class="chip-group-name">${name}</span><span class="chip-group-count">${count}</span><span class="chip-group-rule" aria-hidden="true"></span>`;
+  const label = `${group.name}，${count}${group.hidden ? '，供应商已整体隐藏，其中的模型不会显示' : ''}`;
+  return `<div class="chip-group${group.hidden ? ' is-muted' : ''}" role="group" aria-label="${escapeHTML(label)}" data-provider-name="${name}"><div class="chip-group-head" data-group-head="${name}" tabindex="-1">${head}</div><div class="chip-grid">${group.models.map((item) => hideChipHTML('models', item, { inert: group.hidden })).join('')}</div></div>`;
+}
+
+function renderModelChipGroups(definition, panel) {
+  const key = definition.key;
+  const groups = modelProviderGroups(cards, hidden.providers);
+  const visible = groups.filter((group) => !group.hidden).map((group) => modelGroupHTML(group)).join('');
+  const muted = groups.filter((group) => group.hidden).map((group) => modelGroupHTML(group)).join('');
+  const empty = cards.length ? '' : '<p class="pref-empty">暂无模型数据。</p>';
+  panel.innerHTML = `<section class="pref-section chip-grid-section"><div class="pref-head"><h3>屏蔽${definition.title}</h3><span class="pref-note">${definition.note}</span></div><div class="chip-groups" data-pref-list="${key}">${visible}<div class="chip-group-dead" data-dead-groups${muted ? '' : ' hidden'}><p class="chip-group-dead-title">已整体隐藏的供应商 · 其中的模型不会显示</p>${muted}</div>${empty}</div></section>`;
+  if (modelGroupFocus) {
+    const head = [...panel.querySelectorAll('[data-group-head]')].find((node) => node.dataset.groupHead === modelGroupFocus);
+    modelGroupFocus = null;
+    if (head) {
+      head.classList.add('is-restored');
+      head.focus();
+    }
+  }
 }
 
 function siteTagCount(site) {
@@ -1684,9 +1731,8 @@ function renderCustomizeTags() {
   const taggedSites = new Set();
   for (const tag of tags.values()) for (const site of tag.sites) taggedSites.add(site);
   const allSites = [...new Set([...cards.map((card) => card.siteName), ...taggedSites])].sort((a, b) => a.localeCompare(b, 'zh-CN'));
-  const query = customizeSearches.tagSites.trim().toLowerCase();
-  const siteRows = allSites.filter((name) => !query || name.toLowerCase().includes(query)).map(siteTagRowHTML).join('');
-  customizeTagsPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>我的标签</h3><span class="pref-note">点名称重命名 · 点色块换颜色 · 删除可随时撤销</span></div>${tagStatusHTML()}${tagList}</section><section class="pref-section"><div class="pref-head"><h3>站点标签</h3><span class="pref-count" data-tagged-count>已标记 ${taggedSites.size} 个站点</span></div><label class="pref-search"><span>搜索站点</span><input type="search" data-pref-search="tagSites" value="${escapeHTML(customizeSearches.tagSites)}" placeholder="筛选站点"></label><div class="pref-list" data-pref-list="tagSites">${siteRows || `<p class="pref-empty">${allSites.length ? '没有匹配的站点' : '暂无站点数据。'}</p>`}</div></section>`;
+  const siteRows = allSites.map(siteTagRowHTML).join('');
+  customizeTagsPanel.innerHTML = `<section class="pref-section"><div class="pref-head"><h3>我的标签</h3><span class="pref-note">点名称重命名 · 点色块换颜色 · 删除可随时撤销</span></div>${tagStatusHTML()}${tagList}</section><section class="pref-section"><div class="pref-head"><h3>站点标签</h3><span class="pref-count" data-tagged-count>已标记 ${taggedSites.size} 个站点</span></div><div class="pref-list" data-pref-list="tagSites">${siteRows || '<p class="pref-empty">暂无站点数据。</p>'}</div></section>`;
   bindTagPanelBehaviors();
   if (openSiteMenu) {
     const menu = customizeTagsPanel.querySelector('.site-tag-menu:not([hidden])');
@@ -1720,7 +1766,7 @@ function cancelTagEditor() {
 }
 
 function handleCustomizeClick(event) {
-  const target = event.target.closest('[data-pref-reset],[data-pref-toggle],[data-customize-sort],[data-customize-sort-dropdown] .sort-option,[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo],[data-notify-platform-trigger],[data-notify-platform-dropdown] .sort-option');
+  const target = event.target.closest('[data-pref-unhide-provider],[data-pref-toggle],[data-customize-sort],[data-customize-sort-dropdown] .sort-option,[data-tag-new],[data-tag-cancel],[data-tag-delete],[data-tag-rename],[data-tag-swatch],[data-tag-color-option],[data-tag-add],[data-site-tag-remove],[data-tag-menu-item],[data-tag-undo],[data-notify-platform-trigger],[data-notify-platform-dropdown] .sort-option');
   if (!target) return;
 
   if (target.matches('[data-notify-platform-trigger]')) {
@@ -1775,10 +1821,13 @@ function handleCustomizeClick(event) {
     return;
   }
 
-  if (target.matches('[data-pref-reset]')) {
-    hidden[target.dataset.prefReset].clear();
+  if (target.matches('[data-pref-unhide-provider]')) {
+    const provider = target.dataset.prefUnhideProvider;
+    if (!hidden.providers.has(provider)) return;
+    hidden.providers.delete(provider);
     saveHidden();
     currentPage = 1;
+    modelGroupFocus = provider; // 分组会移回上方可见区，渲染后聚焦提示去向
     render();
     renderCustomize();
     return;
@@ -1896,46 +1945,15 @@ function toggleHiddenKey(key, value) {
   saveHidden();
   currentPage = 1;
   render();
-  renderCustomize();
   updateNavBadges();
+  // 就地翻转胶囊状态而非重渲染面板：整页 innerHTML 重建会杀掉「变灰 + 划掉」过渡动画
   const panel = CUSTOMIZE_PANEL_BY_TAB[customizeTab];
-  const count = panel ? panel.querySelector(`[data-pref-count="${key}"]`) : null;
-  const resetButton = panel ? panel.querySelector(`[data-pref-reset="${key}"]`) : null;
-  const n = hidden[key].size;
-  if (count) count.hidden = n === 0;
-  if (resetButton) resetButton.hidden = n === 0;
-}
-
-function handleCustomizeInput(event) {
-  const search = event.target.closest('[data-pref-search]');
-  if (!search) return;
-  const key = search.dataset.prefSearch;
-  customizeSearches[key] = search.value;
-  searchFocusKey = key;
-  const section = search.closest('.pref-section');
-  if (!section) return;
-  const list = section.querySelector('.chip-grid') || section.querySelector('.pref-list');
-  if (!list) return;
-  const q = search.value.trim().toLowerCase();
-  let matches = 0;
-  list.querySelectorAll(':scope .hide-chip, :scope .pref-row').forEach((item) => {
-    const name = item.querySelector('strong, .hide-chip-name')?.textContent || item.dataset.prefValue || '';
-    const visible = !q || name.toLowerCase().includes(q);
-    item.hidden = !visible;
-    if (visible) matches += 1;
+  const visible = !hidden[key].has(value);
+  panel?.querySelectorAll(`[data-pref-toggle][data-pref-key="${key}"]`).forEach((chip) => {
+    if (chip.dataset.prefValue !== value) return;
+    chip.classList.toggle('hidden', !visible);
+    chip.setAttribute('aria-pressed', String(visible));
   });
-  let empty = list.querySelector(':scope .pref-empty');
-  if (!matches) {
-    if (!empty) {
-      empty = document.createElement('p');
-      empty.className = 'pref-empty';
-      empty.textContent = '没有匹配的条目';
-      list.appendChild(empty);
-    }
-    empty.hidden = false;
-  } else if (empty) {
-    empty.hidden = true;
-  }
 }
 
 function handleCustomizeSubmit(event) {
@@ -1972,12 +1990,7 @@ function handleCustomizeSubmit(event) {
 
 customizePage.addEventListener('click', handleCustomizeClick);
 customizePage.addEventListener('change', handleCustomizeChange);
-customizePage.addEventListener('input', handleCustomizeInput);
 customizePage.addEventListener('submit', handleCustomizeSubmit);
-customizePage.addEventListener('focusin', (event) => {
-  const search = event.target.closest('[data-pref-search]');
-  if (search) searchFocusKey = search.dataset.prefSearch;
-});
 // 定制页排序下拉键盘导航
 customizeSettingsPanel.addEventListener('keydown', (event) => {
   const trigger = event.target.closest('[data-customize-sort]');
@@ -2223,15 +2236,28 @@ function enterCustomize() {
   if (state === 'active') {
     setCustomizeTab(customizeTab);
   } else if (currentUser) {
-    // Logged in but not member: show notify tab only
+    // 已登录但非会员：默认展示会员门禁（兑换会员 / LDC 直充）；通知订阅仍可通过导航进入
     customizeNav.hidden = false;
-    customizeSettingsPanel.hidden = true;
-    customizeSitesPanel.hidden = true;
-    customizeProvidersPanel.hidden = true;
-    customizeModelsPanel.hidden = true;
-    customizeTagsPanel.hidden = true;
-    customizeNotifyPanel.hidden = false;
-    renderCustomizeGate(false);
+    customizeNav.querySelectorAll('[data-customize-tab]').forEach((button) => {
+      button.setAttribute('aria-selected', String(button.dataset.customizeTab === customizeTab));
+    });
+    if (customizeTab === 'notify') {
+      customizeSettingsPanel.hidden = true;
+      customizeSitesPanel.hidden = true;
+      customizeProvidersPanel.hidden = true;
+      customizeModelsPanel.hidden = true;
+      customizeTagsPanel.hidden = true;
+      customizeNotifyPanel.hidden = false;
+      renderCustomizeNotify();
+    } else {
+      customizeSettingsPanel.hidden = false;
+      customizeSitesPanel.hidden = true;
+      customizeProvidersPanel.hidden = true;
+      customizeModelsPanel.hidden = true;
+      customizeTagsPanel.hidden = true;
+      customizeNotifyPanel.hidden = true;
+      renderCustomizeGate(false);
+    }
   } else {
     // 门禁态：仅 settings 面板承载 gate，其余面板隐藏
     customizeSettingsPanel.hidden = false;
@@ -2265,9 +2291,8 @@ async function loadNotifySubscriptions() {
 
 const NOTIFY_FREE_LIMIT = 3;
 const NOTIFY_PLATFORMS = [
-  { key: 'telegram', label: 'Telegram', icon: '📱', placeholder: 'Chat ID（如 123456789）' },
-  { key: 'feishu', label: '飞书', icon: '💬', placeholder: 'Webhook URL（如 https://open.feishu.cn/...）' },
-  { key: 'bark', label: 'Bark', icon: '🔔', placeholder: '设备 Key' },
+  { key: 'telegram', label: 'Telegram', icon: '📱', placeholder: 'Chat ID（给 @relay_scope_bot 发 /chatid 获取）' },
+  { key: 'bark', label: 'Bark', icon: '🔔', placeholder: '设备 Key（Bark app 里复制）' },
 ];
 let notifyPlatform = 'telegram';
 // 渠道输入框是否有未保存的修改（输入或切换平台都会置脏；保存后清掉）
@@ -2301,8 +2326,42 @@ function maskNotifyTarget(target) {
   return target.length <= 4 ? target : '…' + target.slice(-4);
 }
 
+// 非会员超额站点推送暂停：按订阅 id 升序取前 NOTIFY_FREE_LIMIT 个去重站点，其余暂停。
+// 与服务端推送暂停同一规则；数据保留，续费后自动全部恢复。
+function notifyPausedSiteIds() {
+  const paused = new Set();
+  if (membershipIs() === 'active') return paused;
+  const seen = new Set();
+  const allowed = new Set();
+  for (const sub of [...notifySubscriptions].sort((a, b) => a.id - b.id)) {
+    if (seen.has(sub.siteId)) continue;
+    seen.add(sub.siteId);
+    if (allowed.size < NOTIFY_FREE_LIMIT) allowed.add(sub.siteId);
+  }
+  for (const siteId of seen) if (!allowed.has(siteId)) paused.add(siteId);
+  return paused;
+}
+
 function platformLabel(key) {
   return NOTIFY_PLATFORMS.find(p => p.key === key)?.label || key;
+}
+
+// 首次配置教程框：默认收起，网页只放最短动作序列；TG 侧的详细引导由 bot 回复承载
+function notifyGuideHTML() {
+  return '<details class="notify-guide">'
+    + '<summary><span class="notify-guide-title">📖 首次配置教程</span><span class="notify-guide-hint">Telegram / Bark 各 3 步</span></summary>'
+    + '<div class="notify-guide-body">'
+    + '<div class="notify-guide-item"><span class="notify-guide-name">📱 Telegram</span><ol class="notify-guide-steps">'
+    + '<li>点开 <a href="https://t.me/relay_scope_bot" target="_blank" rel="noopener">@relay_scope_bot</a>，按 START 或发送 <code>/chatid</code></li>'
+    + '<li>机器人秒回一串数字（你的 Chat ID），复制它</li>'
+    + '<li>粘贴到上方「推送目标」→ 测试推送 → 保存渠道</li>'
+    + '</ol></div>'
+    + '<div class="notify-guide-item"><span class="notify-guide-name">🔔 Bark（iPhone）</span><ol class="notify-guide-steps">'
+    + '<li>App Store 安装「Bark」，打开后点开第一项服务器地址</li>'
+    + '<li>复制地址里 <code>api.day.app/</code> 后面那串 Key</li>'
+    + '<li>粘贴到上方「推送目标」→ 测试推送 → 保存渠道</li>'
+    + '</ol></div>'
+    + '</div></details>';
 }
 
 function renderCustomizeNotify() {
@@ -2320,7 +2379,9 @@ function renderCustomizeNotify() {
   const uniqueSites = [...siteMap.entries()].sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'));
   const subscribedSiteIds = new Set(notifySubscriptions.map(s => s.siteId));
   const subCount = subscribedSiteIds.size;
-  const limitText = isMember ? '会员无限' : `${subCount} / ${NOTIFY_FREE_LIMIT}`;
+  const pausedSiteIds = notifyPausedSiteIds();
+  const pausedCount = pausedSiteIds.size;
+  const limitText = isMember ? '会员无限' : (pausedCount ? `${subCount} 个站点 · ${pausedCount} 个暂停推送` : `${subCount} / ${NOTIFY_FREE_LIMIT}`);
 
   let html = '<div class="notify-panel">';
 
@@ -2361,6 +2422,7 @@ function renderCustomizeNotify() {
   html += '<div class="notify-channel-status" data-notify-channel-status></div>';
   const canSave = notifyChannelDirty && currentValue.trim() !== '';
   html += `<div class="notify-channel-actions"><span class="notify-test-hint">保存前可先测试当前填写值</span><button type="button" class="btn btn-sm" data-notify-test>测试推送</button><button type="button" class="btn btn-primary btn-sm" data-notify-channel-save ${canSave ? '' : 'disabled'}>保存渠道</button></div>`;
+  html += notifyGuideHTML();
   html += '</div>';
   html += '</section>';
 
@@ -2368,7 +2430,7 @@ function renderCustomizeNotify() {
   html += '<section class="pref-section">';
   const allSelected = uniqueSites.length > 0 && uniqueSites.every(([siteId]) => subscribedSiteIds.has(siteId));
   const channelSummary = saved ? ` · 渠道 ${platformLabel(saved.platform)} ${maskNotifyTarget(saved.target)}` : ' · 请先保存渠道';
-  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点${channelSummary}</span><button type="button" class="pref-reset" data-notify-select-all>${allSelected ? '全不选' : '全选'}</button></div>`;
+  html += `<div class="pref-head notify-site-list-head"><h3>选择站点</h3><span class="pref-count" data-notify-count>已选 ${subscribedSiteIds.size} 个站点${channelSummary}</span><button type="button" class="notify-select-all" data-notify-select-all>${allSelected ? '全不选' : '全选'}</button></div>`;
   for (const [siteId, siteName] of uniqueSites) {
     const isSubscribed = subscribedSiteIds.has(siteId);
     const sub = notifySubscriptions.find(s => s.siteId === siteId);
@@ -2377,7 +2439,9 @@ function renderCustomizeNotify() {
     html += `<input type="checkbox" class="notify-site-check" data-site-id="${siteId}" ${isSubscribed ? 'checked' : ''} ${!canToggle ? 'disabled' : ''}>`;
     html += `<span class="notify-site-avatar">${escapeHTML(siteName[0])}</span>`;
     html += `<span class="notify-site-name">${escapeHTML(siteName)}</span>`;
-    if (isSubscribed && sub) {
+    if (isSubscribed && pausedSiteIds.has(Number(siteId))) {
+      html += `<span class="notify-site-channel notify-site-paused" title="会员已过期，此站点推送已暂停；续费后自动恢复">⏸ 已暂停</span>`;
+    } else if (isSubscribed && sub) {
       const subPlat = NOTIFY_PLATFORMS.find(p => p.key === sub.platform);
       html += `<span class="notify-site-channel" title="${escapeHTML(platformLabel(sub.platform))} · ${escapeHTML(sub.target)}">${subPlat?.icon || '📢'} ${escapeHTML(maskNotifyTarget(sub.target))}</span>`;
     }
@@ -2386,8 +2450,10 @@ function renderCustomizeNotify() {
   html += '</div>';
   html += '</section>';
 
-  // Upgrade CTA for non-members at limit
-  if (!isMember && subCount >= NOTIFY_FREE_LIMIT) {
+  // Upgrade CTA for non-members: paused pushes take priority over the plain at-limit hint
+  if (!isMember && pausedCount > 0) {
+    html += `<div class="notify-upgrade"><span class="notify-upgrade-icon">✦</span><span>${pausedCount} 个站点的推送已暂停（免费额度 3 个）—— 升级会员立即恢复全部推送</span><button class="btn btn-primary btn-sm" type="button" data-notify-upgrade>开通会员</button></div>`;
+  } else if (!isMember && subCount >= NOTIFY_FREE_LIMIT) {
     html += '<div class="notify-upgrade"><span class="notify-upgrade-icon">✦</span><span>升级会员解锁无限站点订阅</span><button class="btn btn-primary btn-sm" type="button" data-notify-upgrade>开通会员</button></div>';
   }
 
@@ -2519,11 +2585,18 @@ async function handleNotifySelectAll() {
     return;
   }
 
-  if (!saved) {
-    showToast('请先保存推送渠道，再订阅站点', 'error');
-    return;
+  // 与 handleSiteToggle 同款兜底：零订阅的新用户以当前填写的草稿为渠道
+  let platform, target;
+  if (saved) {
+    ({ platform, target } = saved);
+  } else {
+    platform = notifyPlatform || 'telegram';
+    target = customizeNotifyPanel.querySelector('#notify-target')?.value?.trim() ?? '';
+    if (!target) {
+      showToast('请先填写推送目标并保存渠道', 'error');
+      return;
+    }
   }
-  const { platform, target } = saved;
   let added = 0;
   let failed = false;
   for (const siteId of uniqueSites) {
@@ -2554,12 +2627,21 @@ async function handleSiteToggle(siteId, checked) {
   const isMember = membershipIs() === 'active';
 
   if (checked) {
-    // 订阅用的是已保存的渠道，而不是输入框里的草稿——这样“保存渠道”才是唯一事实来源
+    // 订阅用的是已保存的渠道，而不是输入框里的草稿——这样“保存渠道”才是唯一事实来源。
+    // 例外：从没订阅过的新用户没有任何订阅行可承载渠道，此时以当前填写的草稿为准，
+    // 否则「保存渠道」对 0 条订阅是空操作，勾选站点会被永久拦下（新手死循环）。
     const saved = notifySavedChannel();
-    if (!saved) {
-      showToast('请先保存推送渠道，再订阅站点', 'error');
-      renderCustomizeNotify();
-      return;
+    let platform, target;
+    if (saved) {
+      ({ platform, target } = saved);
+    } else {
+      platform = notifyPlatform || 'telegram';
+      target = customizeNotifyPanel.querySelector('#notify-target')?.value?.trim() ?? '';
+      if (!target) {
+        showToast('请先填写推送目标并保存渠道', 'error');
+        renderCustomizeNotify();
+        return;
+      }
     }
     // Check limit
     if (!isMember) {
@@ -2571,7 +2653,6 @@ async function handleSiteToggle(siteId, checked) {
         return;
       }
     }
-    const { platform, target } = saved;
     try {
       const resp = await fetch('/api/v1/me/notification-subscriptions', {
         method: 'POST',

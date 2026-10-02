@@ -151,6 +151,103 @@ function loadTagHelpers() {
 
 const { tagCreate, tagRename, tagSetColor, tagSetSite, tagPickColor, tagSnapshot } = loadTagHelpers();
 
+function loadModelGroupHelpers() {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const start = source.indexOf('// ---- 模型分组（纯函数，供面板与测试共用） ----');
+  const end = source.indexOf('// ---- 模型分组结束 ----');
+  assert.notEqual(start, -1, 'model group helper is missing');
+  assert.notEqual(end, -1, 'model group end marker is missing');
+  return Function(`${source.slice(start, end)}; return { modelProviderGroups };`)();
+}
+
+const { modelProviderGroups } = loadModelGroupHelpers();
+
+test('modelProviderGroups nests models under providers and counts entrances', () => {
+  const cards = [
+    { provider: 'OpenAI', ruleName: 'gpt-4o', rawModelName: 'gpt-4o-2024-11-20' },
+    { provider: 'OpenAI', ruleName: 'gpt-4o', rawModelName: 'gpt-4o-main' },
+    { provider: 'OpenAI', ruleName: 'gpt-4o-mini', rawModelName: 'gpt-4o-mini' },
+    { provider: 'GLM', ruleName: 'glm-4-flash', rawModelName: 'glm-4-flash' },
+    { provider: '', ruleName: '', rawModelName: 'nova-pro-v2' }
+  ];
+  const groups = modelProviderGroups(cards, new Set());
+  assert.deepEqual(groups.map((group) => [group.name, group.hidden, group.models.length]), [
+    ['GLM', false, 1],
+    ['OpenAI', false, 2],
+    ['未归类', false, 1]
+  ]);
+  const openai = groups.find((group) => group.name === 'OpenAI');
+  assert.deepEqual(openai.models, [
+    { value: 'gpt-4o', count: 2 },
+    { value: 'gpt-4o-mini', count: 1 }
+  ]);
+});
+
+test('modelProviderGroups sinks provider-hidden groups to the bottom but keeps their models', () => {
+  const cards = [
+    { provider: 'OpenAI', ruleName: 'gpt-4o', rawModelName: 'gpt-4o' },
+    { provider: 'Anthropic', ruleName: 'claude-3-5-sonnet', rawModelName: 'claude-3-5-sonnet' },
+    { provider: '', ruleName: '', rawModelName: 'nova-pro-v2' }
+  ];
+  const groups = modelProviderGroups(cards, new Set(['Anthropic']));
+  assert.deepEqual(groups.map((group) => group.name), ['OpenAI', '未归类', 'Anthropic']);
+  assert.deepEqual(groups.map((group) => group.hidden), [false, false, true]);
+  const anthropic = groups[2];
+  assert.deepEqual(anthropic.models, [{ value: 'claude-3-5-sonnet', count: 1 }]);
+});
+
+test('model card detail dialog opens with seamless motion instead of a stiff popup', () => {
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  // 进场 240ms 自定义 ease-out，退场更快 160ms；原生 dialog 依赖 allow-discrete 才能动画 display/overlay
+  assert.match(css, /\.detail-dialog\[open\] \{[^}]*opacity 240ms cubic-bezier\(\.23, 1, \.32, 1\)[^}]*display 240ms allow-discrete/);
+  assert.match(css, /\.detail-dialog:not\(\[open\]\) \{[^}]*display 160ms allow-discrete/);
+  assert.match(css, /@starting-style \{\s*\.public-dashboard \.detail-dialog\[open\] \{[^}]*opacity: 0/);
+  // 背景幕同步淡入淡出
+  assert.match(css, /@starting-style \{\s*\.public-dashboard \.detail-dialog\[open\]::backdrop \{\s*opacity: 0/);
+  assert.match(css, /\.detail-dialog:not\(\[open\]\)::backdrop \{\s*opacity: 0/);
+  // 内容组阶梯上浮；reduced-motion 下关掉位移动画
+  assert.match(css, /@keyframes detail-group-in/);
+  assert.match(css, /\.detail-group:nth-child\(2\) \{ animation-delay: 100ms/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.public-dashboard \.detail-group \{ animation: none; \}/);
+});
+
+test('customize models tab renders grouped chips with a fully-hidden provider section', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  assert.match(source, /customizeTab === 'models'\) renderModelChipGroups/);
+  assert.match(source, /data-pref-unhide-provider/);
+  assert.match(source, /chip-group-dead-title/);
+  assert.match(source, /modelProviderGroups\(cards, hidden\.providers\)/);
+  assert.match(css, /\.chip-group-dead \{/);
+  assert.match(css, /\.chip-group-badge \{/);
+  assert.match(css, /\.public-dashboard \.chip-group\.is-muted \.hide-chip/);
+  // display 规则会压过 [hidden] 的 UA 默认值，沉底区切换显隐依赖这里的显式压制
+  assert.match(css, /\.chip-group-dead\[hidden\]/);
+  // 隐藏动画 = 直接渐变为灰色 + 划掉线从左到右划过；不允许「确认」式的绿色/弹跳。
+  // 划线必须用 width 过渡：transform 动画结束瞬间的图层降级重栅格化会让细线闪一下
+  assert.match(css, /\.hide-chip-name::after/);
+  assert.match(css, /\.hide-chip\.hidden \.hide-chip-name::after \{ width: 100%/);
+  assert.doesNotMatch(css, /\.hide-chip-name::after \{[^}]*transform/);
+  assert.doesNotMatch(css, /\.hide-chip:active \{ transform/);
+  assert.doesNotMatch(css, /\.hide-chip\.hidden:hover \{[^}]*accent/);
+  // 定制页不提供搜索：不允许搜索框回流
+  assert.doesNotMatch(source, /data-pref-search/);
+  // 「全部显示」重置按钮已整体移除；解除屏蔽只能逐个点胶囊或去供应商页取消整体隐藏
+  assert.doesNotMatch(source, /data-pref-reset/);
+  assert.doesNotMatch(css, /\.pref-reset/);
+  // 说明文案只保留用户看不出来的那一句
+  assert.match(source, /note: '隐藏供应商会同时屏蔽其全部模型'/);
+  assert.match(source, /note: '已整体隐藏的供应商会在底部单独标出'/);
+});
+
+test('detail dialog head aligns title left and actions right', () => {
+  const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  // 「查看本站全部模型」归位到右上动作簇（与关闭按钮同排），不再悬在标题下方
+  assert.match(html, /detail-head-text"><h2 id="detail-title">[\s\S]*?<\/div><div class="detail-head-actions"><button id="detail-site-filter"/);
+  assert.match(css, /\.detail-head-actions \{[^}]*margin-left: auto/);
+});
+
 test('tagCreate adds a tag with the least-used palette color and rejects duplicates', () => {
   const tags = new Map();
   assert.deepEqual(tagCreate(tags, '新品监控'), { ok: true });
@@ -651,4 +748,35 @@ test('通知中心长文折叠以 CSS 截断为准', () => {
   // JS 展开类名必须与 CSS 解除 clamp 的选择器一致，否则按钮切换了但视觉不展开
   assert.match(css, /\.nc-text\.nc-text-expanded/);
   assert.match(source, /classList\.toggle\('nc-text-expanded'\)/);
+});
+
+test('通知订阅页内置首次配置教程框（TG/Bark，CSP 安全的 details 折叠）', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  // 教程框由 renderCustomizeNotify 渲染进渠道配置区，覆盖 TG 与 Bark 两条动线
+  assert.match(source, /function notifyGuideHTML\(\)/);
+  assert.match(source, /html \+= notifyGuideHTML\(\);/);
+  assert.match(source, /t\.me\/relay_scope_bot/);
+  assert.match(source, /\/chatid/);
+  assert.match(source, /api\.day\.app\//);
+  // 纯 <details> 折叠，无 JS 依赖、无内联样式（CSP）
+  assert.match(source, /<details class="notify-guide">/);
+  // TG placeholder 在填写瞬间给出获取方式；Bark 同理
+  assert.match(source, /Chat ID（给 @relay_scope_bot 发 \/chatid 获取）/);
+  assert.match(source, /设备 Key（Bark app 里复制）/);
+  assert.match(css, /\.notify-guide summary/);
+  assert.match(css, /\.notify-guide-steps/);
+});
+
+test('非会员超额站点显示「已暂停」徽标（与服务端推送暂停同规则）', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const css = readFileSync(join(__dirname, 'dashboard.css'), 'utf8');
+  // 暂停集合计算：按订阅 id 升序取前 NOTIFY_FREE_LIMIT 个去重站点，其余暂停；会员不暂停
+  assert.match(source, /function notifyPausedSiteIds\(\)/);
+  assert.match(source, /sort\(\(a, b\) => a\.id - b\.id\)/);
+  assert.match(source, /allowed\.size < NOTIFY_FREE_LIMIT/);
+  // 站点行渲染暂停徽标 + 提示；CTA 区分「已暂停」文案
+  assert.match(source, /notify-site-paused/);
+  assert.match(source, /推送已暂停/);
+  assert.match(css, /\.notify-site-channel\.notify-site-paused/);
 });

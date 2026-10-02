@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Telegram bot 通道：`/start`、`/chatid` 回显 Chat ID（与推送 dispatcher 共用
+  同一 bot token；webhook 与 getUpdates 互斥，仅配置 token 时启用）。
+- 会员续费提醒：到期前 3 天向用户已订阅渠道推送一次，新表
+  `membership_renewal_reminders` 以 (user, expires_at) 去重，续费后到期时间
+  变化自然产生下一次提醒（migration 010）。
+- 非会员推送免费额度：仅推送最早订阅的 3 个站点，超额站点暂停推送（数据
+  保留，续期后自动恢复），与前端提示、服务端订阅限额同一规则。
+- 定制页「模型」tab 按供应商分组展示；在「供应商」tab 被整体隐藏的供应商
+  沉底到独立分区并带「整体已隐藏」徽标，支持就地「取消隐藏」。
+- 模型详情弹窗无缝过渡动效：进场 240ms 上浮淡入、退场 160ms、背景幕同步
+  淡入、分时数据到达后各组阶梯浮现（`prefers-reduced-motion` 下关闭位移）。
+  头部重排：标题/副标题居左，「查看本站全部模型」与关闭键组成右上动作簇。
 - 新增 `newapi-model-status` 适配器，接入增强版 NewAPI 的公开「模型状态」
   页面（首发站点 ai.venlacy.com，无需登录）。数据源为
   `/api/enhancements/model-status/embed/status/all`：每个（模型，分组）一行，
@@ -75,6 +87,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refunds). Payment endpoints answer 501 until credentials are configured.
 
 ### Changed
+- 推送通道收敛为 Telegram + Bark：删除飞书 sender 及其 webhook/secret 配置。
+- 定制页体验收敛：移除各屏蔽 tab 的搜索框与「全部显示」重置按钮，说明文案
+  只保留非显而易见的因果句；隐藏供应商会同时屏蔽其全部模型。胶囊隐藏动画
+  重做——就地翻转状态（整页重渲染会杀掉 CSS 过渡），灰色渐变叠加从左到右
+  划过的删除线，去除按压弹跳与悬停变绿等「确认」式表意。
 - 模型匹配规则的关键词语义从「归一化整词」改为「大小写不敏感的子串」：模型名
   包含关键词即命中，标点原样参与匹配（5-5 与 5.5 是不同写法，需分开填），
   不再要求把模型名在脑内拆词。正则表达式仍作用于原始模型名，承担边界精度
