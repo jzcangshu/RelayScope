@@ -32,6 +32,9 @@ const (
 
 const membershipDaysPerMonth = int64(30)
 
+// notifyFreeSiteLimit 非会员（免费/已过期）可订阅的站点数上限，与前端 NOTIFY_FREE_LIMIT 一致。
+const notifyFreeSiteLimit = 3
+
 // registerUserRoutes 注册面向登录用户的会员/偏好/许愿/支付路由。
 func registerUserRoutes(mux *http.ServeMux, options Options) {
 	if options.Store == nil {
@@ -402,7 +405,7 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		}
 		platform := strings.TrimSpace(payload.Platform)
 		switch platform {
-		case "telegram", "feishu", "bark":
+		case "telegram", "bark":
 		default:
 			writeError(writer, http.StatusBadRequest, "unsupported platform: "+platform)
 			return
@@ -410,6 +413,31 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 		config := strings.TrimSpace(payload.Config)
 		if config == "" {
 			config = "{}"
+		}
+		// 免费额度服务端强制：非会员最多订阅 3 个站点（与前端 NOTIFY_FREE_LIMIT 一致）。
+		// 此前限制只在前端，直接调 API 可无限订阅。同一站点重复订阅（换渠道重订）不算新增。
+		membership, mErr := options.Store.GetMembership(request.Context(), user.ID)
+		if mErr != nil {
+			writeError(writer, http.StatusInternalServerError, "查询会员状态失败")
+			return
+		}
+		if !membership.Active {
+			sites, sErr := options.Store.DistinctSubscriptionSites(request.Context(), user.ID)
+			if sErr != nil {
+				writeError(writer, http.StatusInternalServerError, "查询订阅失败")
+				return
+			}
+			already := false
+			for _, siteID := range sites {
+				if siteID == payload.SiteID {
+					already = true
+					break
+				}
+			}
+			if !already && len(sites) >= notifyFreeSiteLimit {
+				writeError(writer, http.StatusForbidden, "免费版最多订阅 3 个站点，升级会员解锁无限订阅")
+				return
+			}
 		}
 		sub, err := options.Store.CreateSubscription(request.Context(), user.ID, payload.SiteID, platform, strings.TrimSpace(payload.Target), config)
 		if err != nil {
@@ -441,7 +469,7 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 			return
 		}
 		switch platform {
-		case "telegram", "feishu", "bark":
+		case "telegram", "bark":
 		default:
 			writeError(writer, http.StatusBadRequest, "unsupported platform: "+platform)
 			return

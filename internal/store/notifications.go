@@ -114,6 +114,26 @@ func (store *Store) ListActiveSubscriptionsForSite(ctx context.Context, siteID i
 
 // --- User subscription CRUD ---
 
+// DistinctSubscriptionSites 返回用户全部订阅的去重站点 ID，按最早一条订阅的 id 升序。
+// 免费额度（3 个站点）与推送暂停规则都以这个顺序为准，前端「已暂停」徽标用同一规则计算。
+func (store *Store) DistinctSubscriptionSites(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := store.db.QueryContext(ctx,
+		`SELECT site_id FROM notification_subscriptions WHERE user_id = ? GROUP BY site_id ORDER BY MIN(id)`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list distinct subscription sites: %w", err)
+	}
+	defer rows.Close()
+	var sites []int64
+	for rows.Next() {
+		var siteID int64
+		if err := rows.Scan(&siteID); err != nil {
+			return nil, fmt.Errorf("scan distinct subscription site: %w", err)
+		}
+		sites = append(sites, siteID)
+	}
+	return sites, rows.Err()
+}
+
 // CreateSubscription creates a new notification subscription.
 func (store *Store) CreateSubscription(ctx context.Context, userID, siteID int64, platform, target, config string) (NotificationSubscription, error) {
 	now := unixMilli(time.Now().UTC())
@@ -128,7 +148,7 @@ func (store *Store) CreateSubscription(ctx context.Context, userID, siteID int64
 	return NotificationSubscription{
 		ID: id, UserID: userID, SiteID: siteID,
 		Platform: platform, Target: target, Config: config,
-		Enabled: true,
+		Enabled:   true,
 		CreatedAt: time.UnixMilli(now).UTC(),
 		UpdatedAt: time.UnixMilli(now).UTC(),
 	}, nil

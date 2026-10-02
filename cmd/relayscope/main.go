@@ -111,23 +111,25 @@ func run() error {
 	}
 	// Build notification dispatcher (optional — only active if at least one platform is configured)
 	notifDispatcher := notifier.NewDispatcher(notifier.Config{
-		Store:  dbStore,
-		Logger: logger,
+		Store:   dbStore,
+		Logger:  logger,
+		SiteURL: cfg.PublicURL,
 		Telegram: func() *notifier.TelegramConfig {
 			if cfg.TelegramToken != "" {
 				return &notifier.TelegramConfig{Token: cfg.TelegramToken}
 			}
 			return nil
 		}(),
-		Feishu: func() *notifier.FeishuConfig {
-			if cfg.FeishuWebhook != "" {
-				return &notifier.FeishuConfig{WebhookURL: cfg.FeishuWebhook, Secret: cfg.FeishuSecret}
-			}
-			return nil
-		}(),
 		// Bark 不需要服务端凭据（设备 key 由用户填写），始终注册以便测试推送可用
 		Bark: &notifier.BarkConfig{Key: cfg.BarkKey, BaseURL: cfg.BarkBaseURL},
 	})
+
+	// Telegram bot 回显 Chat ID（/start、/chatid）。仅当配置了 bot token 时启用；
+	// 与 dispatcher 共用同一 token，但不能与 webhook 同时使用（getUpdates 互斥）。
+	var tgBot *notifier.TelegramBot
+	if cfg.TelegramToken != "" {
+		tgBot = notifier.NewTelegramBot(&notifier.TelegramConfig{Token: cfg.TelegramToken}, cfg.PublicURL, logger)
+	}
 
 	siteCollector, err := collector.New(collector.Options{
 		Store: dbStore, Registry: registry, Fetcher: siteFetcher, Logger: logger, MaxHTTPConcurrency: cfg.HTTPConcurrency, Notifier: notifDispatcher,
@@ -183,7 +185,12 @@ func run() error {
 	go runMaintenance(stopContext, dbStore, logger, cfg.MaintenanceInterval)
 	siteScheduler.Start(stopContext)
 	notifDispatcher.Start(stopContext)
+	// 会员到期前 3 天的续费提醒（向其订阅渠道推送，按到期时间去重）
+	notifDispatcher.StartRenewalReminders(stopContext, time.Hour)
 	logger.Info("notification dispatcher started", "senders", notifDispatcher.SenderCount())
+	if tgBot != nil {
+		tgBot.Start(stopContext)
+	}
 
 	select {
 	case err := <-serverErrors:
@@ -201,6 +208,9 @@ func run() error {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	notifDispatcher.Stop()
+	if tgBot != nil {
+		tgBot.Stop()
+	}
 	siteScheduler.Stop()
 	logger.Info("server stopped")
 	return nil

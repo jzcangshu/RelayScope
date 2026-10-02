@@ -42,8 +42,6 @@ type Config struct {
 	PayKey               string
 	// Notification push
 	TelegramToken string
-	FeishuWebhook string
-	FeishuSecret  string
 	BarkKey       string
 	BarkBaseURL   string
 }
@@ -71,8 +69,6 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		PayKey:               valueOrDefault(lookup, "RELAYSCOPE_PAY_KEY", ""),
 		// Notification push
 		TelegramToken: strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_TELEGRAM_TOKEN", "")),
-		FeishuWebhook: strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_FEISHU_WEBHOOK", "")),
-		FeishuSecret:  strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_FEISHU_SECRET", "")),
 		BarkKey:       strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_BARK_KEY", "")),
 		BarkBaseURL:   strings.TrimSpace(valueOrDefault(lookup, "RELAYSCOPE_BARK_BASE_URL", "")),
 	}

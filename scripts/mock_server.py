@@ -69,6 +69,9 @@ ROWS = [
     # 蓝光通道：失败 + 未归类
     row(3, "蓝光通道", "Anthropic", "claude-3-5-sonnet", "claude-3-5-sonnet-20241022", "直连", "healthy", "fresh", 0.995, 198),
     row(3, "蓝光通道", "", "", "nova-pro-v2", "实验线", "no_samples", "unknown", None, None, {"available": False, "mode": "token", "currency": "CNY", "currencySymbol": "¥", "inputPerMillion": None, "outputPerMillion": None, "cacheReadPerMillion": None, "cacheWritePerMillion": None, "fixedPerRequest": None, "groupMultiplier": None}),
+    # 感恩公益站 / 月城：凑 5 站，用于验证非会员超额「已暂停」徽标
+    row(4, "感恩公益站", "OpenAI", "gpt-4o-mini", "gpt-4o-mini", "公益", "healthy", "fresh", 0.99, 240),
+    row(5, "月城", "GLM", "glm-4-flash", "glm-4-flash", "免费", "degraded", "fresh", 0.9, 420),
 ]
 
 BUCKETS = []
@@ -208,7 +211,7 @@ class Handler(BaseHTTPRequestHandler):
             platform = (payload.get("platform") or "").strip()
             target = (payload.get("target") or "").strip()
             site_id = payload.get("siteId")
-            if not site_id or platform not in ("telegram", "feishu", "bark") or not target:
+            if not site_id or platform not in ("telegram", "bark") or not target:
                 return self._json({"message": "siteId, platform, and target are required"}, status=400)
             sub = {"id": NEXT_SUB_ID, "userId": 1, "siteId": site_id, "siteName": _site_name(site_id), "platform": platform, "target": target, "config": payload.get("config") or "{}", "enabled": True, "createdAt": NOW, "updatedAt": NOW}
             NEXT_SUB_ID += 1
@@ -259,7 +262,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             platform = (payload.get("platform") or "").strip()
             target = (payload.get("target") or "").strip()
-            if platform not in ("telegram", "feishu", "bark") or not target:
+            if platform not in ("telegram", "bark") or not target:
                 return self._json({"message": "platform and target are required"}, status=400)
             updated = 0
             for sub in SUBSCRIPTIONS:

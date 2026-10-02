@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,14 +16,15 @@ import (
 // Dispatcher polls the notification outbox and sends messages to external
 // platforms with per-platform rate limiting and exponential backoff.
 type Dispatcher struct {
-	store      *store.Store
-	logger     *slog.Logger
-	senders    map[string]Sender
-	limiters   map[string]*tokenBucket
+	store        *store.Store
+	logger       *slog.Logger
+	siteURL      string
+	senders      map[string]Sender
+	limiters     map[string]*tokenBucket
 	pollInterval time.Duration
-	stop       chan struct{}
-	stopOnce   sync.Once
-	wg         sync.WaitGroup
+	stop         chan struct{}
+	stopOnce     sync.Once
+	wg           sync.WaitGroup
 }
 
 // Sender sends a notification to one external platform.
@@ -33,9 +35,9 @@ type Sender interface {
 
 // Message is the rendered notification payload.
 type Message struct {
-	Title   string
-	Body    string
-	URL     string // optional deep link
+	Title string
+	Body  string
+	URL   string // optional deep link
 }
 
 // Config holds dispatcher configuration.
@@ -43,8 +45,8 @@ type Config struct {
 	Store        *store.Store
 	Logger       *slog.Logger
 	PollInterval time.Duration
+	SiteURL      string // 站点地址，用于续费提醒等面向用户的消息（可为空）
 	Telegram     *TelegramConfig
-	Feishu       *FeishuConfig
 	Bark         *BarkConfig
 }
 
@@ -61,11 +63,6 @@ func NewDispatcher(cfg Config) *Dispatcher {
 		senders[s.Platform()] = s
 		limiters[s.Platform()] = newTokenBucket(1.0, 1) // 1 msg/sec
 	}
-	if cfg.Feishu != nil && cfg.Feishu.WebhookURL != "" {
-		s := NewFeishuSender(cfg.Feishu)
-		senders[s.Platform()] = s
-		limiters[s.Platform()] = newTokenBucket(5.0, 10) // 5 msg/sec
-	}
 	if cfg.Bark != nil {
 		// Key 仅作为 target 为空时的回退；测试推送与用户订阅始终自带 target
 		s := NewBarkSender(cfg.Bark)
@@ -76,6 +73,7 @@ func NewDispatcher(cfg Config) *Dispatcher {
 	return &Dispatcher{
 		store:        cfg.Store,
 		logger:       cfg.Logger,
+		siteURL:      strings.TrimRight(strings.TrimSpace(cfg.SiteURL), "/"),
 		senders:      senders,
 		limiters:     limiters,
 		pollInterval: cfg.PollInterval,
@@ -207,6 +205,7 @@ func retryBackoff(retryCount int) time.Duration {
 func (d *Dispatcher) Enqueue(announcements []store.SiteAnnouncement) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	grants := map[int64]*pushGrant{}
 	for _, ann := range announcements {
 		subs, err := d.store.ListActiveSubscriptionsForSite(ctx, ann.SiteID)
 		if err != nil {
@@ -216,6 +215,10 @@ func (d *Dispatcher) Enqueue(announcements []store.SiteAnnouncement) {
 		for _, sub := range subs {
 			sender, ok := d.senders[sub.Platform]
 			if !ok {
+				continue
+			}
+			// 非会员免费额度：只推送最早订阅的 3 个站点，超额站点暂停（数据保留，续期自动恢复）
+			if !d.pushGrantFor(ctx, sub.UserID, grants).allows(sub.SiteID) {
 				continue
 			}
 			msg := renderMessage(ann)
@@ -228,6 +231,56 @@ func (d *Dispatcher) Enqueue(announcements []store.SiteAnnouncement) {
 			_ = sender // used for validation above
 		}
 	}
+}
+
+// freePushSites 非会员可收到推送的站点数上限，与前端 NOTIFY_FREE_LIMIT / 服务端订阅限额一致。
+const freePushSites = 3
+
+// pushGrant 描述一个用户的推送许可：会员全量放行；非会员仅其最早订阅的前
+// freePushSites 个站点（按订阅 id 升序去重，与前端「已暂停」徽标同一规则）。
+type pushGrant struct {
+	all          bool
+	allowedSites map[int64]struct{}
+}
+
+func (g *pushGrant) allows(siteID int64) bool {
+	if g.all {
+		return true
+	}
+	_, ok := g.allowedSites[siteID]
+	return ok
+}
+
+func (d *Dispatcher) pushGrantFor(ctx context.Context, userID int64, cache map[int64]*pushGrant) *pushGrant {
+	if g, ok := cache[userID]; ok {
+		return g
+	}
+	g := &pushGrant{allowedSites: map[int64]struct{}{}}
+	membership, err := d.store.GetMembership(ctx, userID)
+	switch {
+	case err != nil:
+		d.logger.Warn("read membership for push grant failed", "user_id", userID, "error", err)
+	case membership.Active:
+		g.all = true
+	default:
+		if subs, sErr := d.store.ListUserSubscriptions(ctx, userID); sErr != nil {
+			d.logger.Warn("list subscriptions for push grant failed", "user_id", userID, "error", sErr)
+		} else {
+			sort.Slice(subs, func(left, right int) bool { return subs[left].ID < subs[right].ID })
+			seen := map[int64]struct{}{}
+			for _, sub := range subs {
+				if _, dup := seen[sub.SiteID]; dup {
+					continue
+				}
+				seen[sub.SiteID] = struct{}{}
+				if len(g.allowedSites) < freePushSites {
+					g.allowedSites[sub.SiteID] = struct{}{}
+				}
+			}
+		}
+	}
+	cache[userID] = g
+	return g
 }
 
 func renderMessage(ann store.SiteAnnouncement) Message {
@@ -243,4 +296,93 @@ func renderMessage(ann store.SiteAnnouncement) Message {
 		Title: title,
 		Body:  body,
 	}
+}
+
+// renewalReminderWindow 会员到期前多久开始发续费提醒（提前 3 天）。
+const renewalReminderWindow = 72 * time.Hour
+
+// StartRenewalReminders 启动会员续费提醒循环：每次 tick 检查到期前 3 天内、且拥有
+// 活跃推送渠道的会员，向其所有渠道发一次提醒。按 (user_id, 到期时间) 落库去重，
+// 同一有效期绝不重复发送；全部渠道发送失败则下轮重试。
+func (d *Dispatcher) StartRenewalReminders(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.runRenewalReminders(ctx)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-d.stop:
+				return
+			case <-ticker.C:
+				d.runRenewalReminders(ctx)
+			}
+		}
+	}()
+}
+
+func (d *Dispatcher) runRenewalReminders(ctx context.Context) {
+	candidates, err := d.store.ListRenewalReminderCandidates(ctx, time.Now().UTC().Add(renewalReminderWindow))
+	if err != nil {
+		d.logger.Warn("list renewal reminder candidates failed", "error", err)
+		return
+	}
+	for _, candidate := range candidates {
+		subs, err := d.store.ListUserSubscriptions(ctx, candidate.UserID)
+		if err != nil {
+			d.logger.Warn("list subscriptions for renewal reminder failed", "user_id", candidate.UserID, "error", err)
+			continue
+		}
+		seen := map[string]struct{}{}
+		sentAny := false
+		for _, sub := range subs {
+			if !sub.Enabled {
+				continue
+			}
+			key := sub.Platform + "|" + sub.Target
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			sender, ok := d.senders[sub.Platform]
+			if !ok {
+				continue
+			}
+			sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			err := sender.Send(sendCtx, sub.Target, d.renewalMessage(candidate))
+			cancel()
+			if err != nil {
+				d.logger.Warn("renewal reminder send failed", "user_id", candidate.UserID, "platform", sub.Platform, "error", err)
+				continue
+			}
+			sentAny = true
+		}
+		if !sentAny {
+			continue
+		}
+		marked, err := d.store.MarkRenewalReminderSent(ctx, candidate.UserID, candidate.ExpiresAt, time.Now().UTC())
+		if err != nil {
+			d.logger.Error("mark renewal reminder sent failed", "user_id", candidate.UserID, "error", err)
+		} else if marked {
+			d.logger.Info("renewal reminder sent", "user_id", candidate.UserID, "expires_at", candidate.ExpiresAt.Format("2006-01-02"))
+		}
+	}
+}
+
+func (d *Dispatcher) renewalMessage(candidate store.RenewalReminderCandidate) Message {
+	days := int(time.Until(candidate.ExpiresAt).Hours()/24) + 1
+	if days < 0 {
+		days = 0
+	}
+	body := fmt.Sprintf("你的会员将于 %s 到期（约剩 %d 天）。到期后定制功能暂停、超出免费额度（3 个站点）的订阅推送将暂停，续费后全部自动恢复。", candidate.ExpiresAt.Format("2006-01-02"), days)
+	if d.siteURL != "" {
+		body += "\n\n续费入口：" + d.siteURL
+	}
+	return Message{Title: "⏳ RelayScope 会员即将到期", Body: body}
 }
