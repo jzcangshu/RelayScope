@@ -769,6 +769,48 @@
     "generated": false
   },
   {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-image-pro",
+    "requiredTerms": [
+      "grok-imagine-image-pro"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-image-pro$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-image-quality",
+    "requiredTerms": [
+      "grok-imagine-image-quality"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-image-quality$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-video-1.5-preview",
+    "requiredTerms": [
+      "grok-imagine-video-1.5-preview"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-video-1\\.5-preview$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
     "provider": "Anthropic",
     "canonicalName": "claude-fable-5",
     "requiredTerms": [

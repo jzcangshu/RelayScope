@@ -217,7 +217,8 @@ func TestProductionRulesMatchDarkforgerModelsUnambiguously(t *testing.T) {
 		"grok-4.7", "grok-4.7-build-fast",
 		"grok-chat-auto", "grok-chat-expert", "grok-chat-fast", "grok-chat-heavy",
 		"grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-edit", "grok-imagine-image-lite",
-		"grok-imagine-video",
+		"grok-imagine-image-pro", "grok-imagine-image-quality",
+		"grok-imagine-video", "grok-imagine-video-1.5-preview",
 	}
 	for _, rawName := range exact {
 		preview := engine.Preview(rawName)
