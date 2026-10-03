@@ -341,6 +341,69 @@ func TestNewAPIAdapterCollectsTimelineAnnouncements(t *testing.T) {
 	if expected := time.Date(2026, time.July, 30, 8, 10, 0, 0, time.UTC); !ann.PublishedAt.Equal(expected) {
 		t.Errorf("published at = %v, want %v", ann.PublishedAt, expected)
 	}
+	if ann.Title != "" {
+		t.Errorf("stock announcement title = %q, want empty", ann.Title)
+	}
+}
+
+func TestNewAPIAdapterCollectsStringAnnouncementIDs(t *testing.T) {
+	t.Parallel()
+
+	// CarolineAI publishes the same timeline with UUID ids and a title.
+	// publishDate stays the external id, matching integer-id sites.
+	status := []byte(`{"data":{"announcements_enabled":true,"notice":null,"announcements":[
+			{"id":"61774f3a-4738-4069-bd4d-d6303853b8f0","title":"国模降价","content":"国模降价，定价调整为x1.3","publishDate":"2026-09-18T09:04:35.711Z","level":"normal","extra":"补充"},
+			{"id":"f8b1d2ed-4ec4-4947-9d7b-cb8a597ac8ba","content":"  ","publishDate":"2026-09-15T05:32:18.804Z"}
+		]}}`)
+	anns, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 56, BaseURL: "https://example.test"},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anns) != 1 {
+		t.Fatalf("expected 1 non-empty announcement, got %d (%+v)", len(anns), anns)
+	}
+	ann := anns[0]
+	if ann.ExternalID != "2026-09-18T09:04:35.711Z" {
+		t.Errorf("external id = %q, want publishDate", ann.ExternalID)
+	}
+	if ann.Title != "国模降价" || ann.Content != "国模降价，定价调整为x1.3" {
+		t.Errorf("title/content = %q / %q", ann.Title, ann.Content)
+	}
+	if ann.Type != "" || ann.Extra != "补充" {
+		t.Errorf("type/extra = %q / %q", ann.Type, ann.Extra)
+	}
+}
+
+func TestNewAPIAdapterAnnouncementIDFallbackStaysDecimal(t *testing.T) {
+	t.Parallel()
+
+	status := []byte(`{"data":{"announcements_enabled":true,"announcements":[
+			{"id":8,"content":"无日期"},
+			{"content":"缺 id","publishDate":"2026-07-30T08:10:00.000Z"}
+		]}}`)
+	anns, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test"},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anns) != 2 || anns[0].ExternalID != "8" || anns[1].ExternalID != "2026-07-30T08:10:00.000Z" {
+		t.Fatalf("id fallback changed: %+v", anns)
+	}
+}
+
+func TestNewAPIAdapterRejectsNonIntegerAnnouncementID(t *testing.T) {
+	t.Parallel()
+
+	status := []byte(`{"data":{"announcements_enabled":true,"announcements":[{"id":1.5,"content":"坏 id","publishDate":"2026-07-30T08:10:00.000Z"}]}}`)
+	_, err := (NewAPIAdapter{}).CollectAnnouncements(context.Background(),
+		Site{ID: 1, BaseURL: "https://example.test"},
+		fakeFetcher{responses: map[string][]byte{"https://example.test/api/status": status}})
+	if err == nil {
+		t.Fatal("non-integer announcement id should still fail the timeline decode")
+	}
 }
 
 func TestNewAPIAdapterCollectsNoticeDiffAnnouncements(t *testing.T) {

@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,12 +28,61 @@ func sourceOriginBaseURL(sourceURL string) string {
 
 // --- ProbeAdapter (NewAPI系) announcement implementation ---
 
+// newapiAnnouncementID accepts the integer ids stock NewAPI emits and the
+// string ids a fork may emit instead. A non-integer number still fails, so a
+// stock payload cannot decode into a different id than before.
+type newapiAnnouncementID struct {
+	text string
+	set  bool
+}
+
+func (id *newapiAnnouncementID) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		return fmt.Errorf("announcement id must be an integer or string")
+	}
+	if data[0] == '"' {
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		id.text = strings.TrimSpace(text)
+		id.set = true
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var number json.Number
+	if err := dec.Decode(&number); err != nil {
+		return fmt.Errorf("announcement id: %w", err)
+	}
+	if dec.More() {
+		return fmt.Errorf("announcement id must be an integer or string")
+	}
+	if _, err := strconv.ParseInt(number.String(), 10, 64); err != nil {
+		return fmt.Errorf("announcement id: %w", err)
+	}
+	id.text = number.String()
+	id.set = true
+	return nil
+}
+
+// String is the id text used when an announcement has no publishDate.
+// A missing id stays "0", matching the old integer zero value.
+func (id newapiAnnouncementID) String() string {
+	if !id.set {
+		return "0"
+	}
+	return id.text
+}
+
 type newapiAnnouncement struct {
-	ID          int    `json:"id"`
-	Content     string `json:"content"`
-	Extra       string `json:"extra"`
-	PublishDate string `json:"publishDate"`
-	Type        string `json:"type"`
+	ID          newapiAnnouncementID `json:"id"`
+	Title       string               `json:"title"`
+	Content     string               `json:"content"`
+	Extra       string               `json:"extra"`
+	PublishDate string               `json:"publishDate"`
+	Type        string               `json:"type"`
 }
 
 type newapiStatusResponse struct {
@@ -130,10 +180,11 @@ func parseNewAPITimeline(resp newapiStatusResponse) []Announcement {
 		pubTime := parseNewAPITime(item.PublishDate)
 		externalID := item.PublishDate
 		if externalID == "" {
-			externalID = strconv.Itoa(item.ID)
+			externalID = item.ID.String()
 		}
 		anns = append(anns, Announcement{
 			ExternalID:  externalID,
+			Title:       strings.TrimSpace(item.Title),
 			Content:     content,
 			Type:        strings.TrimSpace(item.Type),
 			Extra:       strings.TrimSpace(item.Extra),
@@ -298,9 +349,9 @@ type sub2AnnouncementItem struct {
 }
 
 type sub2AnnouncementsResponse struct {
-	Code    int                      `json:"code"`
-	Message string                   `json:"message"`
-	Data    []sub2AnnouncementItem   `json:"data"`
+	Code    int                    `json:"code"`
+	Message string                 `json:"message"`
+	Data    []sub2AnnouncementItem `json:"data"`
 }
 
 // CollectAnnouncements implements AnnouncementProvider for Sub2MonitorAdapter.
