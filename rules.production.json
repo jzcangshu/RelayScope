@@ -615,6 +615,160 @@
     "generated": false
   },
   {
+    "provider": "xAI",
+    "canonicalName": "grok-4.7",
+    "requiredTerms": [
+      "grok-4.7"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-4\\.7$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-4.7-build-fast",
+    "requiredTerms": [
+      "grok-4.7-build-fast"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-4\\.7-build-fast$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-chat-auto",
+    "requiredTerms": [
+      "grok-chat-auto"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-chat-auto$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-chat-expert",
+    "requiredTerms": [
+      "grok-chat-expert"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-chat-expert$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-chat-fast",
+    "requiredTerms": [
+      "grok-chat-fast"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-chat-fast$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-chat-heavy",
+    "requiredTerms": [
+      "grok-chat-heavy"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-chat-heavy$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-image",
+    "requiredTerms": [
+      "grok-imagine-image"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-image$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-image-2.0",
+    "requiredTerms": [
+      "grok-imagine-image-2.0"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-image-2\\.0$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-image-edit",
+    "requiredTerms": [
+      "grok-imagine-image-edit"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-image-edit$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-image-lite",
+    "requiredTerms": [
+      "grok-imagine-image-lite"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-image-lite$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
+    "provider": "xAI",
+    "canonicalName": "grok-imagine-video",
+    "requiredTerms": [
+      "grok-imagine-video"
+    ],
+    "anyTerms": [],
+    "excludedTerms": [],
+    "aliases": [],
+    "pattern": "(?i)^grok-imagine-video$",
+    "priority": 100,
+    "enabled": true,
+    "generated": false
+  },
+  {
     "provider": "Anthropic",
     "canonicalName": "claude-fable-5",
     "requiredTerms": [

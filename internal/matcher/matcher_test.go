@@ -1,6 +1,10 @@
 package matcher
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"testing"
+)
 
 func TestSubstringMatchingDistinguishesVersions(t *testing.T) {
 	t.Parallel()
@@ -189,6 +193,36 @@ func TestAmbiguousMatchesHaveNoPrimary(t *testing.T) {
 	for _, match := range preview.Matches {
 		if match.Primary {
 			t.Fatalf("ambiguous matches must have no primary: %+v", preview)
+		}
+	}
+}
+
+func TestProductionRulesMatchDarkforgerModelsUnambiguously(t *testing.T) {
+	t.Parallel()
+
+	body, err := os.ReadFile("../../rules.production.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules []Rule
+	if err := json.Unmarshal(body, &rules); err != nil {
+		t.Fatal(err)
+	}
+	engine, err := New(rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exact := []string{
+		"grok-4.3", "grok-4.5", "grok-4.6",
+		"grok-4.7", "grok-4.7-build-fast",
+		"grok-chat-auto", "grok-chat-expert", "grok-chat-fast", "grok-chat-heavy",
+		"grok-imagine-image", "grok-imagine-image-2.0", "grok-imagine-image-edit", "grok-imagine-image-lite",
+		"grok-imagine-video",
+	}
+	for _, rawName := range exact {
+		preview := engine.Preview(rawName)
+		if preview.Ambiguous || len(preview.Matches) != 1 || !preview.Matches[0].Primary || preview.Matches[0].Rule.CanonicalName != rawName {
+			t.Fatalf("%s matched %+v", rawName, preview.Matches)
 		}
 	}
 }

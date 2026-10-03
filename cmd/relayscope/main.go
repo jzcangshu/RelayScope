@@ -86,6 +86,7 @@ func run() error {
 		adapter.Sub2MonitorAdapter{},
 		adapter.UptimeKumaAdapter{},
 		adapter.XAPIPoolAdapter{},
+		adapter.WelfareAdapter{},
 	)
 	if err != nil {
 		return fmt.Errorf("build adapter registry: %w", err)

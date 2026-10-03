@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 新增 `welfare-availability` 适配器，接入 Darkforger 公益站公开服务状态
+  （`https://welfare.darkforger.com/#/availability`，无需登录）。数据源是
+  `/api/welfare/availability`：页面的 7 天柱被最近 512 条检测截断，完整记录在
+  24 小时视图，因此采集按同一套 UTC 整点小时桶汇总这 24 小时，当前状态用窗口
+  成功率而不是最近一次检测的徽标。历史要延伸到窗口起点、且最近一小时内仍有
+  检测，才声明 24h 覆盖。公告走页面横幅使用的 `/api/welfare/notices`，不是
+  NewAPI 的 `/api/status`。
 - Telegram bot 通道：`/start`、`/chatid` 回显 Chat ID（与推送 dispatcher 共用
   同一 bot token；webhook 与 getUpdates 互斥，仅配置 token 时启用）。
 - 会员续费提醒：到期前 3 天向用户已订阅渠道推送一次，新表

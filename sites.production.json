@@ -441,5 +441,13 @@
     "adapter": "newapi-model-status",
     "adapter_config": {},
     "session_required": false
+  },
+  {
+    "name": "Darkforger",
+    "base_url": "https://welfare.darkforger.com",
+    "source_url": "https://welfare.darkforger.com/#/availability",
+    "adapter": "welfare-availability",
+    "adapter_config": {},
+    "session_required": false
   }
 ]
