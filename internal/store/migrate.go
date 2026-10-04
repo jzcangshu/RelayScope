@@ -131,6 +131,11 @@ func (store *Store) ensureSiteSchema(ctx context.Context) error {
 			return fmt.Errorf("add sites.deleted_at: %w", err)
 		}
 	}
+	if _, ok := columns["insecure_tls"]; !ok {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE sites ADD COLUMN insecure_tls INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add sites.insecure_tls: %w", err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS sites_active_idx ON sites(enabled, deleted_at, id)`); err != nil {
 		return fmt.Errorf("create sites active index: %w", err)
 	}

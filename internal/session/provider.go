@@ -39,11 +39,15 @@ func (provider Provider) PostJSON(ctx context.Context, rawURL string, body any) 
 }
 
 func (provider Provider) FetcherForSite(ctx context.Context, site adapter.Site) (adapter.Fetcher, error) {
+	base := provider.Base
+	if site.InsecureTLS {
+		base = base.WithInsecureTLS()
+	}
 	if !site.SessionRequired {
-		return provider.Base, nil
+		return base, nil
 	}
 	if provider.Store == nil || provider.Vault == nil {
-		return provider.Base, nil
+		return base, nil
 	}
 	data, expires, err := provider.Vault.Load(ctx, provider.Store, site.ID)
 	if err != nil {
@@ -52,14 +56,14 @@ func (provider Provider) FetcherForSite(ctx context.Context, site adapter.Site) 
 		}
 		// Missing or expired credentials are reported by the normal HTTP path;
 		// the collector can still read public sites without a stored session.
-		return provider.Base, nil
+		return base, nil
 	}
 	now := time.Now().UTC()
 	if provider.Now != nil {
 		now = provider.Now().UTC()
 	}
 	if expires != nil && expires.Before(now) {
-		return provider.Base, nil
+		return base, nil
 	}
 	if data.AuthType == AuthTypeSub2APIToken && tokenExpiry(data.TokenExpiresAt).Before(now.Add(2*time.Minute)) {
 		data, err = provider.refreshSub2API(ctx, site, data, now)
@@ -81,9 +85,9 @@ func (provider Provider) FetcherForSite(ctx context.Context, site adapter.Site) 
 	}
 	origin, err := NormalizeOrigin(site.BaseURL)
 	if err != nil {
-		return provider.Base, nil
+		return base, nil
 	}
-	base := provider.authenticatedFetcher(data)
+	authenticated := provider.authenticatedFetcher(data, base)
 	if data.AuthType == AuthTypeSub2APIToken {
 		// Sub2API access tokens can be rejected before our recorded expiry
 		// (upstream rotation, family revocation, deployments that invalidate
@@ -99,17 +103,16 @@ func (provider Provider) FetcherForSite(ctx context.Context, site adapter.Site) 
 			if err != nil {
 				return adapter.HTTPFetcher{}, false
 			}
-			return provider.authenticatedFetcher(refreshed), true
+			return provider.authenticatedFetcher(refreshed, base), true
 		}
-		return originScopedFetcher{origin: origin, authenticated: recoveringFetcher{HTTPFetcher: base, recoverUnauthorized: recovery}, public: provider.Base}, nil
+		return originScopedFetcher{origin: origin, authenticated: recoveringFetcher{HTTPFetcher: authenticated, recoverUnauthorized: recovery}, public: base}, nil
 	}
-	return originScopedFetcher{origin: origin, authenticated: base, public: provider.Base}, nil
+	return originScopedFetcher{origin: origin, authenticated: authenticated, public: base}, nil
 }
 
 // authenticatedFetcher builds the origin fetcher that presents the stored
 // credentials (cookies plus token headers) for the given session data.
-func (provider Provider) authenticatedFetcher(data Data) adapter.HTTPFetcher {
-	base := provider.Base
+func (provider Provider) authenticatedFetcher(data Data, base adapter.HTTPFetcher) adapter.HTTPFetcher {
 	if data.UserAgent != "" {
 		base.UserAgent = data.UserAgent
 	}
@@ -124,6 +127,18 @@ func (provider Provider) authenticatedFetcher(data Data) adapter.HTTPFetcher {
 		base.Headers = map[string]string{"Authorization": "Bearer " + data.AccessToken}
 	}
 	return base
+}
+
+// siteClient picks the HTTP client for direct token-refresh requests to the
+// site origin, honoring the site's opt-out from certificate verification.
+func (provider Provider) siteClient(site adapter.Site) *http.Client {
+	if site.InsecureTLS {
+		return provider.Base.WithInsecureTLS().Client
+	}
+	if provider.Base.Client == nil {
+		return http.DefaultClient
+	}
+	return provider.Base.Client
 }
 
 type originScopedFetcher struct {
@@ -193,9 +208,9 @@ func (fetcher recoveringFetcher) GetJSON(ctx context.Context, rawURL string, tar
 }
 
 type sub2APIRefreshResponse struct {
-	Code    any `json:"code"`
+	Code    any    `json:"code"`
 	Message string `json:"message"`
-	Data *struct {
+	Data    *struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int64  `json:"expires_in"`
@@ -254,10 +269,7 @@ func (provider Provider) rotateSub2API(ctx context.Context, site adapter.Site, c
 	if err != nil {
 		return Data{}, errors.New("invalid site refresh endpoint")
 	}
-	client := provider.Base.Client
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := provider.siteClient(site)
 	accessToken, refreshToken, expiresIn, err := exchangeSub2APIToken(ctx, client, endpoint, current.RefreshToken, provider.Base.UserAgent)
 	if err != nil {
 		return Data{}, err
@@ -391,10 +403,7 @@ func (provider Provider) refreshNewAPIToken(ctx context.Context, site adapter.Si
 		request.Header.Set("User-Agent", current.UserAgent)
 	}
 	request.Header.Set("Cookie", cookieHeader(current.Cookies))
-	client := provider.Base.Client
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := provider.siteClient(site)
 	response, err := client.Do(request)
 	if err != nil {
 		return Data{}, fmt.Errorf("request failed: %w", err)

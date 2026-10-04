@@ -21,6 +21,7 @@ type Site struct {
 	CustomFailureReason string                  `json:"customFailureReason"`
 	Enabled             bool                    `json:"enabled"`
 	SessionRequired     bool                    `json:"sessionRequired"`
+	InsecureTLS         bool                    `json:"insecureTLS"`
 	Interval            time.Duration           `json:"interval"`
 	Jitter              time.Duration           `json:"jitter"`
 	IntervalSeconds     int64                   `json:"intervalSeconds"`

@@ -93,7 +93,7 @@ func (collector *Collector) CollectSite(ctx context.Context, site store.Site, no
 		collector.logger.Warn("set collecting state failed", "site_id", site.ID, "error", err)
 	}
 
-	siteDefinition := adapter.Site{ID: site.ID, Name: site.Name, BaseURL: site.BaseURL, SourceURL: site.SourceURL, ConfigJSON: site.AdapterConfig, SessionRequired: site.SessionRequired}
+	siteDefinition := adapter.Site{ID: site.ID, Name: site.Name, BaseURL: site.BaseURL, SourceURL: site.SourceURL, ConfigJSON: site.AdapterConfig, SessionRequired: site.SessionRequired, InsecureTLS: site.InsecureTLS}
 	fetcher := collector.fetcher
 	if siteFetcher, ok := collector.fetcher.(adapter.SiteFetcher); ok {
 		resolved, resolveErr := siteFetcher.FetcherForSite(ctx, siteDefinition)

@@ -1441,3 +1441,44 @@ func TestAutoModeTrustsPrimaryNewAPIPayload(t *testing.T) {
 		t.Fatalf("valid NewAPI payload with announcements disabled must not fall back, got %d", len(anns))
 	}
 }
+
+func TestFetcherForSiteInsecureTLS(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	// A plain client reproduces the strict verification production uses; the
+	// httptest server presents a self-signed certificate that must be rejected.
+	strict := HTTPFetcher{Client: &http.Client{Timeout: 5 * time.Second}}
+	var target struct {
+		OK bool `json:"ok"`
+	}
+	if err := strict.GetJSON(context.Background(), server.URL+"/status", &target); err == nil {
+		t.Fatal("default fetcher accepted a self-signed certificate")
+	}
+
+	insecure, err := strict.FetcherForSite(context.Background(), Site{InsecureTLS: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := insecure.GetJSON(context.Background(), server.URL+"/status", &target); err != nil {
+		t.Fatalf("insecure fetch failed: %v", err)
+	}
+	if !target.OK {
+		t.Fatalf("unexpected response body: %+v", target)
+	}
+
+	plain, err := strict.FetcherForSite(context.Background(), Site{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.OK = false
+	if err := plain.GetJSON(context.Background(), server.URL+"/status", &target); err == nil {
+		t.Fatal("fetcher without the opt-in still skipped certificate verification")
+	}
+	if err := strict.GetJSON(context.Background(), server.URL+"/status", &target); err == nil {
+		t.Fatal("base client was mutated by the insecure clone")
+	}
+}

@@ -114,6 +114,7 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 				AdapterConfig       string  `json:"adapterConfig"`
 				Enabled             bool    `json:"enabled"`
 				SessionRequired     *bool   `json:"sessionRequired"`
+				InsecureTLS         *bool   `json:"insecureTLS"`
 				CustomFailureReason *string `json:"customFailureReason"`
 				IntervalSeconds     int64   `json:"intervalSeconds"`
 				JitterSeconds       int64   `json:"jitterSeconds"`
@@ -142,7 +143,7 @@ func registerAdminRoutes(mux *http.ServeMux, options Options) {
 			if payload.CustomFailureReason != nil {
 				failureReason = *payload.CustomFailureReason
 			}
-			if err := options.Store.UpdateSiteDetails(request.Context(), id, payload.Name, baseURL, sourceURL, payload.AdapterKey, payload.AdapterConfig, payload.Enabled, valueOrBool(payload.SessionRequired, current.SessionRequired), time.Duration(payload.IntervalSeconds)*time.Second, time.Duration(payload.JitterSeconds)*time.Second, failureReason); err != nil {
+			if err := options.Store.UpdateSiteDetails(request.Context(), id, payload.Name, baseURL, sourceURL, payload.AdapterKey, payload.AdapterConfig, payload.Enabled, valueOrBool(payload.SessionRequired, current.SessionRequired), valueOrBool(payload.InsecureTLS, current.InsecureTLS), time.Duration(payload.IntervalSeconds)*time.Second, time.Duration(payload.JitterSeconds)*time.Second, failureReason); err != nil {
 				writeError(writer, http.StatusBadRequest, "update site")
 				return
 			}

@@ -304,7 +304,7 @@ function renderSites() {
         <div class="site-facts"><span>${escapeHTML(adapterFor(site.adapterKey)?.displayName || site.adapterKey)}</span></div>
       </div>
       <div class="site-schedule"><span class="site-fact-label">采集计划</span><strong>每 ${Math.round(site.intervalSeconds / 60)} 分钟</strong><span>下次 ${site.enabled ? nextRun : '已暂停'}</span></div>
-      <div class="site-health"><span class="chip ${site.enabled ? stateClass : 'chip-muted'}"><span class="dot"></span>${site.enabled ? escapeHTML(stateLabel || '未知') : '已停用'}</span><span class="session-state${needsSession(site) ? ' needs-session' : ''}">${site.sessionRequired ? (site.sessionConfigured ? '已配置登录态' : '待同步登录态') : '公开数据源'}</span></div>
+      <div class="site-health"><span class="chip ${site.enabled ? stateClass : 'chip-muted'}"><span class="dot"></span>${site.enabled ? escapeHTML(stateLabel || '未知') : '已停用'}</span><span class="session-state${needsSession(site) ? ' needs-session' : ''}">${site.sessionRequired ? (site.sessionConfigured ? '已配置登录态' : '待同步登录态') : '公开数据源'}</span>${site.insecureTLS ? '<span class="session-state" title="该站点已开启跳过 HTTPS 证书校验">跳过证书校验</span>' : ''}</div>
       <div class="site-actions">
         <button class="btn btn-ghost" data-edit-site="${site.id}" type="button" aria-label="编辑 ${escapeHTML(site.name)}">编辑</button>
         <button class="btn" data-collect="${site.id}" type="button"${collecting ? ' disabled' : ''} aria-label="采集 ${escapeHTML(site.name)}">${icon('play')}${collecting ? '采集中' : '采集'}</button>
@@ -464,6 +464,7 @@ function openSite(id = 0) {
   $('#site-failure-reason').value = site?.customFailureReason || '';
   $('#site-enabled').checked = site?.enabled ?? true;
   $('#site-session-required').checked = site?.sessionRequired ?? false;
+  $('#site-insecure-tls').checked = site?.insecureTLS ?? false;
   $('#site-announcement-mode').value = config.announcementMode || 'timeline';
   formError($('#site-form'));
   $('#site-schedule-section').open = Boolean(site && (site.intervalSeconds !== 900 || site.jitterSeconds !== 120));
@@ -508,7 +509,7 @@ $('#site-form').addEventListener('submit', async (event) => {
   else delete config.blockedKeywords;
   config.announcementMode = $('#site-announcement-mode').value || 'timeline';
   const id = Number($('#site-id').value);
-  const payload = { name: $('#site-name').value.trim(), baseUrl: $('#site-base-url').value.trim(), sourceUrl: $('#site-source-url').value.trim(), adapterKey: $('#site-adapter').value, adapterConfig: JSON.stringify(config), customFailureReason: $('#site-failure-reason').value.trim(), enabled: $('#site-enabled').checked, sessionRequired: $('#site-session-required').checked, intervalSeconds: Number($('#site-interval').value) * 60, jitterSeconds: Number($('#site-jitter').value) };
+  const payload = { name: $('#site-name').value.trim(), baseUrl: $('#site-base-url').value.trim(), sourceUrl: $('#site-source-url').value.trim(), adapterKey: $('#site-adapter').value, adapterConfig: JSON.stringify(config), customFailureReason: $('#site-failure-reason').value.trim(), enabled: $('#site-enabled').checked, sessionRequired: $('#site-session-required').checked, insecureTLS: $('#site-insecure-tls').checked, intervalSeconds: Number($('#site-interval').value) * 60, jitterSeconds: Number($('#site-jitter').value) };
   await saveRequest(id ? `/api/v1/admin/sites/${id}` : '/api/v1/admin/sites', id ? 'PATCH' : 'POST', payload);
   $('#site-dialog').close();
   toast(id ? `站点“${payload.name}”已更新` : `已新增站点“${payload.name}”`, 'success');

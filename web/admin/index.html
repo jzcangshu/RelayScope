@@ -294,7 +294,8 @@
           <legend>连接与采集</legend>
           <label class="check connection-check"><input id="site-enabled" type="checkbox" checked> 启用自动采集</label>
           <label class="check connection-check"><input id="site-session-required" type="checkbox"> 此站点需要登录后采集</label>
-          <p class="field-hint">需要登录的站点可在保存后，通过浏览器同步或导入登录态完成连接。</p>
+          <label class="check connection-check"><input id="site-insecure-tls" type="checkbox"> 跳过 HTTPS 证书校验</label>
+          <p class="field-hint">需要登录的站点可在保存后，通过浏览器同步或导入登录态完成连接。仅当站点证书过期或自签且站点本身可信时开启跳过校验。</p>
         </fieldset>
         <details class="advanced-section" id="site-source-settings">
           <summary>来源专用设置<span>接口路径、价格来源与采集选项</span></summary>

@@ -58,7 +58,7 @@ func (store *Store) UpdateSite(ctx context.Context, siteID int64, name, adapterK
 
 // UpdateSiteDetails applies all editable site fields in one transaction so a
 // malformed URL or failure reason cannot leave a partially updated site.
-func (store *Store) UpdateSiteDetails(ctx context.Context, siteID int64, name, baseURL, sourceURL, adapterKey, adapterConfig string, enabled bool, sessionRequired bool, interval, jitter time.Duration, failureReason string) error {
+func (store *Store) UpdateSiteDetails(ctx context.Context, siteID int64, name, baseURL, sourceURL, adapterKey, adapterConfig string, enabled bool, sessionRequired bool, insecureTLS bool, interval, jitter time.Duration, failureReason string) error {
 	if siteID <= 0 || strings.TrimSpace(name) == "" || strings.TrimSpace(adapterKey) == "" || interval < 5*time.Minute || jitter < 0 {
 		return errors.New("invalid site update")
 	}
@@ -83,8 +83,8 @@ func (store *Store) UpdateSiteDetails(ctx context.Context, siteID int64, name, b
 		return fmt.Errorf("begin site details update: %w", err)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE sites SET name = ?, base_url = ?, source_url = ?, adapter_key = ?, adapter_config = ?, custom_failure_reason = ?, enabled = ?, session_required = ?, interval_seconds = ?, jitter_seconds = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
-		name, baseURL, sourceURL, adapterKey, adapterConfig, failureReason, boolInt(enabled), boolInt(sessionRequired), int64(interval/time.Second), int64(jitter/time.Second), unixMilli(time.Now().UTC()), siteID)
+	result, err := tx.ExecContext(ctx, `UPDATE sites SET name = ?, base_url = ?, source_url = ?, adapter_key = ?, adapter_config = ?, custom_failure_reason = ?, enabled = ?, session_required = ?, insecure_tls = ?, interval_seconds = ?, jitter_seconds = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		name, baseURL, sourceURL, adapterKey, adapterConfig, failureReason, boolInt(enabled), boolInt(sessionRequired), boolInt(insecureTLS), int64(interval/time.Second), int64(jitter/time.Second), unixMilli(time.Now().UTC()), siteID)
 	if err != nil {
 		return fmt.Errorf("update site details: %w", err)
 	}
@@ -203,11 +203,11 @@ func (store *Store) CreateSite(ctx context.Context, site Site) (Site, error) {
 	}
 	now := time.Now().UTC()
 	result, err := store.db.ExecContext(ctx, `
-		INSERT INTO sites(name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+		INSERT INTO sites(name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required, insecure_tls,
 			interval_seconds, jitter_seconds, acquisition_state, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		site.Name, site.BaseURL, site.SourceURL, site.AdapterKey, site.AdapterConfig, site.CustomFailureReason, boolInt(site.Enabled),
-		boolInt(site.SessionRequired), int64(site.Interval/time.Second), int64(site.Jitter/time.Second), site.AcquisitionState, unixMilli(now), unixMilli(now),
+		boolInt(site.SessionRequired), boolInt(site.InsecureTLS), int64(site.Interval/time.Second), int64(site.Jitter/time.Second), site.AcquisitionState, unixMilli(now), unixMilli(now),
 	)
 	if err != nil {
 		return Site{}, fmt.Errorf("create site: %w", err)
@@ -228,7 +228,7 @@ func (store *Store) CreateManagedSite(ctx context.Context, site Site) (Site, err
 
 func (store *Store) ListEnabledSites(ctx context.Context) ([]Site, error) {
 	rows, err := store.db.QueryContext(ctx, `
-		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required, insecure_tls,
 			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
 		FROM sites WHERE enabled = 1 AND deleted_at IS NULL ORDER BY id`)
@@ -241,7 +241,7 @@ func (store *Store) ListEnabledSites(ctx context.Context) ([]Site, error) {
 
 func (store *Store) ListAllSites(ctx context.Context) ([]Site, error) {
 	rows, err := store.db.QueryContext(ctx, `
-		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required, insecure_tls,
 			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
 		FROM sites WHERE deleted_at IS NULL ORDER BY id`)
@@ -254,12 +254,12 @@ func (store *Store) ListAllSites(ctx context.Context) ([]Site, error) {
 
 func (store *Store) GetSite(ctx context.Context, siteID int64) (Site, error) {
 	row := store.db.QueryRowContext(ctx, `
-		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required, insecure_tls,
 			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
 		FROM sites WHERE id = ? AND deleted_at IS NULL`, siteID)
 	var site Site
-	var enabled, sessionRequired int
+	var enabled, sessionRequired, insecureTLS int
 	var intervalSeconds, jitterSeconds int64
 	var acquisitionState string
 	var nextRunAt sql.NullInt64
@@ -267,11 +267,12 @@ func (store *Store) GetSite(ctx context.Context, siteID int64) (Site, error) {
 	var createdAt, updatedAt int64
 	var sessionConfigured bool
 	if err := row.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
-		&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &deletedAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
+		&enabled, &sessionRequired, &insecureTLS, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &deletedAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
 		return Site{}, fmt.Errorf("get site %d: %w", siteID, err)
 	}
 	site.Enabled = enabled == 1
 	site.SessionRequired = sessionRequired == 1
+	site.InsecureTLS = insecureTLS == 1
 	site.Interval = time.Duration(intervalSeconds) * time.Second
 	site.Jitter = time.Duration(jitterSeconds) * time.Second
 	site.IntervalSeconds = intervalSeconds
@@ -296,7 +297,7 @@ func (store *Store) ListDueSites(ctx context.Context, now time.Time, limit int) 
 		limit = 50
 	}
 	rows, err := store.db.QueryContext(ctx, `
-		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required,
+		SELECT id, name, base_url, source_url, adapter_key, adapter_config, custom_failure_reason, enabled, session_required, insecure_tls,
 			interval_seconds, jitter_seconds, acquisition_state, next_run_at, deleted_at, created_at, updated_at,
 			EXISTS (SELECT 1 FROM encrypted_sessions WHERE site_id = sites.id AND purpose = 'site-http')
 		FROM sites WHERE enabled = 1 AND deleted_at IS NULL AND (next_run_at IS NULL OR next_run_at <= ?)
@@ -398,7 +399,7 @@ func scanSites(rows siteRows) ([]Site, error) {
 	var sites []Site
 	for rows.Next() {
 		var site Site
-		var enabled, sessionRequired int
+		var enabled, sessionRequired, insecureTLS int
 		var intervalSeconds, jitterSeconds int64
 		var acquisitionState string
 		var nextRunAt sql.NullInt64
@@ -406,11 +407,12 @@ func scanSites(rows siteRows) ([]Site, error) {
 		var createdAt, updatedAt int64
 		var sessionConfigured bool
 		if err := rows.Scan(&site.ID, &site.Name, &site.BaseURL, &site.SourceURL, &site.AdapterKey, &site.AdapterConfig, &site.CustomFailureReason,
-			&enabled, &sessionRequired, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &deletedAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
+			&enabled, &sessionRequired, &insecureTLS, &intervalSeconds, &jitterSeconds, &acquisitionState, &nextRunAt, &deletedAt, &createdAt, &updatedAt, &sessionConfigured); err != nil {
 			return nil, fmt.Errorf("scan site: %w", err)
 		}
 		site.Enabled = enabled == 1
 		site.SessionRequired = sessionRequired == 1
+		site.InsecureTLS = insecureTLS == 1
 		site.Interval = time.Duration(intervalSeconds) * time.Second
 		site.Jitter = time.Duration(jitterSeconds) * time.Second
 		site.IntervalSeconds = intervalSeconds

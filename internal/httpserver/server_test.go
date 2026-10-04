@@ -933,3 +933,76 @@ func TestPublicDashboardReturnsCachedSnapshotShape(t *testing.T) {
 		t.Fatalf("dashboard cache did not invalidate: %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestAdminSiteUpdateKeepsAndTogglesInsecureTLS(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.Open(ctx, t.TempDir()+"/state.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	site, err := db.CreateSite(ctx, store.Site{
+		Name: "expired-cert", BaseURL: "https://example.test", SourceURL: "https://example.test/status",
+		AdapterKey: "test-adapter", AdapterConfig: "{}", Enabled: true, Interval: 15 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, err := admin.NewAuth("this-is-a-long-test-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHandler(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Store: db, Auth: auth})
+	if err != nil {
+		t.Fatal(err)
+	}
+	login := httptest.NewRequest(http.MethodPost, "/api/v1/admin/login", strings.NewReader(`{"password":"this-is-a-long-test-password"}`))
+	login.RemoteAddr = "127.0.0.1:12345"
+	loginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(loginResponse, login)
+	var adminCookie, csrfCookie *http.Cookie
+	for _, cookie := range loginResponse.Result().Cookies() {
+		switch cookie.Name {
+		case "relayscope_admin":
+			adminCookie = cookie
+		case "relayscope_csrf":
+			csrfCookie = cookie
+		}
+	}
+	if adminCookie == nil || csrfCookie == nil {
+		t.Fatal("login did not issue both session cookies")
+	}
+	patch := func(payload string) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sites/"+strconv.FormatInt(site.ID, 10), strings.NewReader(payload))
+		request.AddCookie(adminCookie)
+		request.AddCookie(csrfCookie)
+		request.Header.Set("X-CSRF-Token", csrfCookie.Value)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("patch status = %d, body=%s", response.Code, response.Body.String())
+		}
+	}
+	current := func() store.Site {
+		t.Helper()
+		sites, err := db.ListAllSites(ctx)
+		if err != nil || len(sites) != 1 {
+			t.Fatalf("list sites: %v %v", sites, err)
+		}
+		return sites[0]
+	}
+
+	patch(`{"name":"expired-cert","adapterKey":"test-adapter","adapterConfig":"{}","enabled":true,"insecureTLS":true,"intervalSeconds":900,"jitterSeconds":120}`)
+	if !current().InsecureTLS {
+		t.Fatal("insecureTLS=true was not persisted")
+	}
+	patch(`{"name":"expired-cert","adapterKey":"test-adapter","adapterConfig":"{}","enabled":true,"intervalSeconds":900,"jitterSeconds":120}`)
+	if !current().InsecureTLS {
+		t.Fatal("patch without insecureTLS reset the stored flag")
+	}
+	patch(`{"name":"expired-cert","adapterKey":"test-adapter","adapterConfig":"{}","enabled":true,"insecureTLS":false,"intervalSeconds":900,"jitterSeconds":120}`)
+	if current().InsecureTLS {
+		t.Fatal("insecureTLS=false was not persisted")
+	}
+}

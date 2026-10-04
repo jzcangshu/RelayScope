@@ -3,6 +3,7 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,6 +73,7 @@ type Site struct {
 	SourceURL       string
 	ConfigJSON      string
 	SessionRequired bool
+	InsecureTLS     bool
 }
 
 type Fetcher interface {
@@ -183,8 +185,37 @@ type HTTPFetcher struct {
 	Headers   map[string]string
 }
 
-func (fetcher HTTPFetcher) FetcherForSite(context.Context, Site) (Fetcher, error) {
+func (fetcher HTTPFetcher) FetcherForSite(_ context.Context, site Site) (Fetcher, error) {
+	if site.InsecureTLS {
+		return fetcher.WithInsecureTLS(), nil
+	}
 	return fetcher, nil
+}
+
+// WithInsecureTLS returns a copy of the fetcher whose HTTP client accepts
+// certificates that fail verification (expired or self-signed). The clone
+// keeps the original timeout but owns a private transport, so the opt-in
+// never weakens TLS checks for other sites sharing the base client.
+func (fetcher HTTPFetcher) WithInsecureTLS() HTTPFetcher {
+	client := fetcher.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	var transport *http.Transport
+	if base, ok := client.Transport.(*http.Transport); ok {
+		transport = base.Clone()
+	} else {
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	transport.TLSClientConfig.InsecureSkipVerify = true
+	next := fetcher
+	next.Client = &http.Client{Timeout: client.Timeout, Transport: transport}
+	return next
 }
 
 func (fetcher HTTPFetcher) GetJSON(ctx context.Context, rawURL string, target any) error {
