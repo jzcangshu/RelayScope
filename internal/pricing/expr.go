@@ -58,7 +58,8 @@ func parseBillingExpression(expression string) (billingExprResult, bool) {
 
 // pickTierBody returns the expression body of the tier representing the
 // standard price: the "base" tier when present, else the "standard" tier,
-// else the first tier() call. Bare expressions pass through unchanged.
+// else the first tier() call that reduces to a per-token price, else the
+// first tier() call. Bare expressions pass through unchanged.
 func pickTierBody(expression string) string {
 	type tierCall struct{ name, body string }
 	var tiers []tierCall
@@ -100,7 +101,35 @@ func pickTierBody(expression string) string {
 			}
 		}
 	}
+	// Unnamed tiers order their branches freely: conditional prefixes such as
+	// liveness-probe or per-request tiers may come first, so prefer the first
+	// tier that reduces to a standard per-token price over blindly taking
+	// tiers[0].
+	for _, tier := range tiers {
+		if isStandardTierBody(tier.body) {
+			return tier.body
+		}
+	}
 	return tiers[0].body
+}
+
+// isStandardTierBody reports whether a tier body reduces to the standard
+// per-token price: linear p/c coefficients with no constant, fixed, or
+// negative terms — the same acceptance rules parseBillingExpression applies.
+func isStandardTierBody(body string) bool {
+	value, err := parseLinearExpression(body)
+	if err != nil || value.fixed != nil || value.constant != 0 {
+		return false
+	}
+	if value.coefficients["p"] == 0 && value.coefficients["c"] == 0 {
+		return false
+	}
+	for _, coefficient := range value.coefficients {
+		if coefficient < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func indexOfTierCall(expression string, from int) int {
