@@ -44,6 +44,10 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		database.Close()
 		return nil, fmt.Errorf("ping SQLite: %w", err)
 	}
+	if err := store.ensureRoutingIdentity(ctx); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize routing identity: %w", err)
+	}
 	return store, nil
 }
 

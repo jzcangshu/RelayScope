@@ -2,9 +2,11 @@ package adapter
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"relayscope/internal/adapter/adapterutil"
 	"relayscope/internal/domain"
+	"relayscope/internal/routing"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,6 +14,10 @@ import (
 )
 
 func mergeDetailBuckets(model *domain.ModelObservation, buckets []detailBucket, now time.Time) {
+	mergeDetailBucketsAt(model, buckets, now, time.Now().UTC())
+}
+
+func mergeDetailBucketsAt(model *domain.ModelObservation, buckets []detailBucket, now, collectedAt time.Time) {
 	groups := make(map[string]int, len(model.Groups))
 	for index, group := range model.Groups {
 		groups[group.RawName] = index
@@ -171,6 +177,97 @@ func mergeDetailBuckets(model *domain.ModelObservation, buckets []detailBucket, 
 		}
 		ensureGroup(groupName).Metrics = metrics
 	}
+	recordRoutingDetailEvidence(model, buckets, collectedAt)
+}
+
+// Keep the actual latest source window separate from the display's synthetic
+// intervals and 24-hour aggregate. Missing protocol evidence stays unknown.
+func recordRoutingDetailEvidence(model *domain.ModelObservation, buckets []detailBucket, collectedAt time.Time) {
+	for index := range model.Groups {
+		group := &model.Groups[index]
+		var latest *detailBucket
+		var latestStart time.Time
+		copied := false
+		for bucketIndex := range buckets {
+			item := &buckets[bucketIndex]
+			if item.Aggregate || (item.Group != "" && item.Group != group.RawName) {
+				continue
+			}
+			sourceItem := *item
+			if item.SourceTimestamp != 0 {
+				sourceItem.Timestamp, sourceItem.EndTimestamp = item.SourceTimestamp, item.SourceEndTimestamp
+			}
+			start, valid := detailBucketStart(sourceItem)
+			if !valid || !detailBucketOwnsCurrent(*item) {
+				continue
+			}
+			if latest == nil || start.After(latestStart) {
+				latest, latestStart, copied = item, start, item.Group == ""
+			} else if start.Equal(latestStart) && item.Group == "" {
+				copied = true
+			}
+		}
+		if latest == nil {
+			continue
+		}
+		metadata := routing.ReadExtension(group.Extension)
+		availability := routing.UnknownAvailability()
+		availability.Evidence = "group-observed"
+		if copied {
+			availability.Evidence = "copied"
+		} else {
+			known := true
+			metadata.GroupKnown = &known
+		}
+		availability.CollectionStatus = "ok"
+		at := collectedAt.UnixMilli()
+		availability.CollectedAt = &at
+		endTime := detailBucketEnd(*latest)
+		if latest.SourceTimestamp != 0 {
+			endTime = adapterutil.ParseFlexibleTime(latest.SourceEndTimestamp)
+		}
+		start, end := latestStart.UnixMilli(), endTime.UnixMilli()
+		if end > start {
+			availability.WindowStartedAt, availability.WindowEndedAt, availability.SourceObservedAt = &start, &end, &end
+		}
+		availability.SampleCount = latest.Requests
+		availability.SuccessRate = routingSuccessRate(*latest)
+		if availability.SuccessRate != nil && latest.Requests != nil && *latest.Requests > 0 {
+			availability.Status = "available"
+			if *availability.SuccessRate < 0.5 {
+				availability.Status = "unavailable"
+			}
+		}
+		metadata.Availability = &availability
+		group.Extension = routing.WriteExtension(group.Extension, metadata)
+	}
+}
+
+// Preserve incomplete rates for display, but never hide contradictory source
+// counts behind a different rate. Empty/failure counts may overlap, so they are
+// bounded independently rather than guessed into a total.
+func routingSuccessRate(item detailBucket) *float64 {
+	for _, count := range []*int64{item.Requests, item.Success, item.Failure, item.Empty} {
+		if count != nil && (*count < 0 || (item.Requests != nil && *count > *item.Requests)) {
+			return nil
+		}
+	}
+	if item.Requests != nil && *item.Requests == 0 {
+		return nil
+	}
+	rate := adapterutil.NormalizeRatio(item.SuccessRate)
+	if rate != nil && (math.IsNaN(*rate) || math.IsInf(*rate, 0) || *rate < 0 || *rate > 1) {
+		return nil
+	}
+	if item.Requests != nil && *item.Requests > 0 && item.Success != nil {
+		countRate := float64(*item.Success) / float64(*item.Requests)
+		// Only allow representation noise in float-derived source ratios.
+		if rate != nil && math.Abs(*rate-countRate) > 1e-12 {
+			return nil
+		}
+		return &countRate
+	}
+	return rate
 }
 
 func detailBucketOwnsCurrent(item detailBucket) bool {

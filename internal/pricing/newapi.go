@@ -1,9 +1,13 @@
 package pricing
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
+
+	"relayscope/internal/routing"
 )
 
 type NewAPIDecoder struct{}
@@ -12,11 +16,21 @@ func (NewAPIDecoder) Key() string { return "newapi" }
 
 func (NewAPIDecoder) Decode(pricingBody, statusBody []byte) (Catalog, error) {
 	var value any
-	if err := json.Unmarshal(pricingBody, &value); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(pricingBody))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		return Catalog{}, fmt.Errorf("decode NewAPI pricing: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return Catalog{}, fmt.Errorf("decode NewAPI pricing: trailing data")
 	}
 	status := decodeStatus(statusBody)
 	groupRatios := decodeGroupRatios(value)
+	routingStatus := decodeRoutingStatus(statusBody)
+	if root, ok := value.(map[string]any); ok && routingResponseFailed(root) {
+		routingStatus = nil
+	}
+	routingRatios, _ := findObject(value, "", 0)["group_ratio"].(map[string]any)
 	items := findArray(value, 0)
 	models := make(map[string]ModelPrice, len(items))
 	for _, item := range items {
@@ -24,7 +38,7 @@ func (NewAPIDecoder) Decode(pricingBody, statusBody []byte) (Catalog, error) {
 		if !ok {
 			continue
 		}
-		name := firstString(object, "model_name", "model", "name", "id")
+		name := routing.SourceString(object, "model_name", "model", "name", "id")
 		if name == "" {
 			continue
 		}
@@ -59,7 +73,7 @@ func (NewAPIDecoder) Decode(pricingBody, statusBody []byte) (Catalog, error) {
 				}
 			}
 		}
-		groups := stringSlice(object, "enable_groups", "groups", "group_names")
+		groups := routing.SourceStrings(object, "enable_groups", "groups", "group_names")
 		if len(groups) == 0 {
 			groups = []string{"default"}
 		}
@@ -70,6 +84,7 @@ func (NewAPIDecoder) Decode(pricingBody, statusBody []byte) (Catalog, error) {
 			}
 			model.GroupMultipliers[group] = multiplier
 		}
+		model.RoutingPrices = newAPIRoutingPrices(object, routingStatus, routingRatios)
 		models[name] = model
 	}
 	return Catalog{Models: models}, nil
@@ -223,6 +238,11 @@ func PricesForModel(model ModelPrice) map[string]DisplayPrice {
 	result := make(map[string]DisplayPrice, len(model.GroupMultipliers))
 	for group := range model.GroupMultipliers {
 		result[group] = displayPrice(model, group)
+		if evidence, exists := model.RoutingPrices[group]; exists {
+			price := result[group]
+			price.RoutingPrice = &evidence
+			result[group] = price
+		}
 	}
 	return result
 }

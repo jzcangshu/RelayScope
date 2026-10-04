@@ -2,8 +2,11 @@ package adapter
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
+
+	"relayscope/internal/routing"
 )
 
 // pricingCatalogItemCount reports how many raw catalog entries the pricing
@@ -63,7 +66,7 @@ func decodePricingModels(body []byte) ([]pricingModel, error) {
 	models := make([]pricingModel, 0, len(items))
 	for _, item := range items {
 		if name, ok := item.(string); ok {
-			if name = strings.TrimSpace(name); name != "" {
+			if strings.TrimSpace(name) != "" {
 				models = append(models, pricingModel{Model: name})
 			}
 			continue
@@ -73,15 +76,15 @@ func decodePricingModels(body []byte) ([]pricingModel, error) {
 			continue
 		}
 		model := pricingModel{
-			Model:    firstString(object, "model", "model_name", "name", "id"),
+			Model:    routing.SourceString(object, "model", "model_name", "name", "id"),
 			Provider: firstString(object, "provider", "supplier", "vendor"),
-			Group:    firstString(object, "group", "group_name", "channel_name", "channel"),
-			Channel:  firstString(object, "channel"),
+			Group:    routing.SourceString(object, "group", "group_name", "channel_name", "channel"),
+			Channel:  routing.SourceString(object, "channel"),
 			Status:   firstString(object, "status", "state"),
 		}
 		if channel, ok := object["channel"].(map[string]any); ok {
 			if model.Group == "" {
-				model.Group = firstString(channel, "name", "group", "slug")
+				model.Group = routing.SourceString(channel, "name", "group", "slug")
 			}
 			if model.Provider == "" {
 				model.Provider = firstString(channel, "provider", "type")
@@ -95,7 +98,7 @@ func decodePricingModels(body []byte) ([]pricingModel, error) {
 			_, model.HistoryPresent = health["buckets"]
 			model.Buckets = decodeEmbeddedHealthBuckets(health, model.Group)
 		}
-		model.Groups = stringSlice(object, "enable_groups", "groups", "group_names")
+		model.Groups = routing.SourceStrings(object, "enable_groups", "groups", "group_names")
 		if value := numberPointer(object, "success_rate", "successRate", "success_ratio", "successRatio"); value != nil {
 			model.SuccessRate = value
 		}
@@ -202,6 +205,9 @@ func decodeDetailBuckets(body []byte) ([]detailBucket, error) {
 	if err := json.Unmarshal(body, &value); err != nil {
 		return nil, err
 	}
+	if pricingAPIErrorMessage(body) != "" {
+		return nil, errors.New("detail endpoint reported business failure")
+	}
 	if probeBuckets := decodeProbeStatus(value); len(probeBuckets) > 0 {
 		return probeBuckets, nil
 	}
@@ -220,7 +226,7 @@ func decodeDetailBuckets(body []byte) ([]detailBucket, error) {
 			EndTimestamp: int64Value(object, "end_timestamp", "end_ts", "end_time"),
 			Time:         firstString(object, "time", "timestamp_iso", "start", "bucket_start"),
 			EndTime:      firstString(object, "end", "bucket_end", "end_time", "end_time_iso"),
-			Group:        firstString(object, "group", "group_name", "channel", "channel_name", "token_group", "tokenGroup"),
+			Group:        routing.SourceString(object, "group", "group_name", "channel", "channel_name", "token_group", "tokenGroup"),
 			SuccessRate:  numberPointer(object, "success_rate", "successRate", "success_ratio", "successRatio"),
 			Latency:      numberPointer(object, "latency", "avg_latency", "avg_latency_ms", "average_latency", "average_latency_ms"),
 			TTFT:         numberPointer(object, "ttft", "avg_ttft_ms", "first_token_ms", "firstTokenMs"),
@@ -270,8 +276,10 @@ func decodeProbeStatus(value any) []detailBucket {
 			// consecutive collections produce shifted boundaries. Hour-aligned
 			// starts keep the store's (group, bucket_start) upsert key stable
 			// across runs instead of accumulating near-duplicate buckets.
-			Timestamp:    normalizeProbeSlotStart(start, end),
-			EndTimestamp: alignedProbeSlotEnd(start, end),
+			Timestamp:          normalizeProbeSlotStart(start, end),
+			EndTimestamp:       alignedProbeSlotEnd(start, end),
+			SourceTimestamp:    start,
+			SourceEndTimestamp: end,
 			// The source UI renders zero-traffic slots as "no request" (grey),
 			// even though the plugin stamps them success_rate=100. A nil rate
 			// keeps them in the no-samples state instead of fabricated healthy.
@@ -339,7 +347,7 @@ func decodeNewAPIGroups(groups []any) []detailBucket {
 		if !ok {
 			continue
 		}
-		name := firstString(group, "group", "group_name", "name")
+		name := routing.SourceString(group, "group", "group_name", "name")
 		series, _ := group["series"].([]any)
 		result = append(result, detailBucket{
 			Aggregate:   true,

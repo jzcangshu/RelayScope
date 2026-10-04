@@ -647,7 +647,7 @@ func (adapter ProbeAdapter) CollectDetails(ctx context.Context, site Site, fetch
 			return probeDetailURL(statusBaseURL, template, modelName, false)
 		}
 	}
-	return collectModelDetails(ctx, fetcher, collection, pending, now, 24*time.Hour, endpointFor, fallbackEndpointFor)
+	return collectModelDetails(ctx, fetcher, collection, pending, now, 24*time.Hour, endpointFor, fallbackEndpointFor, nil)
 }
 
 // staleProbeModels returns the tracked models whose detail series is missing

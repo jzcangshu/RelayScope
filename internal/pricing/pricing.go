@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"relayscope/internal/routing"
 )
 
 const ExtensionKey = "pricing"
@@ -12,35 +14,38 @@ const ExtensionKey = "pricing"
 // DisplayPrice is the normalized price shown to users. Exactly one of the
 // input/output pair or fixed-per-request is populated for a priced quote.
 type DisplayPrice struct {
-	Available            bool     `json:"available"`
-	Mode                 string   `json:"mode,omitempty"`
-	Currency             string   `json:"currency,omitempty"`
-	CurrencySymbol       string   `json:"currencySymbol,omitempty"`
-	InputPerMillion      *float64 `json:"inputPerMillion,omitempty"`
-	OutputPerMillion     *float64 `json:"outputPerMillion,omitempty"`
-	CacheReadPerMillion  *float64 `json:"cacheReadPerMillion,omitempty"`
-	CacheWritePerMillion *float64 `json:"cacheWritePerMillion,omitempty"`
-	FixedPerRequest      *float64 `json:"fixedPerRequest,omitempty"`
-	GroupMultiplier      *float64 `json:"groupMultiplier,omitempty"`
+	// Machine evidence is persisted separately and never changes the public display quote.
+	RoutingPrice         *routing.Price `json:"-"`
+	Available            bool           `json:"available"`
+	Mode                 string         `json:"mode,omitempty"`
+	Currency             string         `json:"currency,omitempty"`
+	CurrencySymbol       string         `json:"currencySymbol,omitempty"`
+	InputPerMillion      *float64       `json:"inputPerMillion,omitempty"`
+	OutputPerMillion     *float64       `json:"outputPerMillion,omitempty"`
+	CacheReadPerMillion  *float64       `json:"cacheReadPerMillion,omitempty"`
+	CacheWritePerMillion *float64       `json:"cacheWritePerMillion,omitempty"`
+	FixedPerRequest      *float64       `json:"fixedPerRequest,omitempty"`
+	GroupMultiplier      *float64       `json:"groupMultiplier,omitempty"`
 }
 
 // ModelPrice stores source-level billing metadata and the normalized group
 // quotes. It is intentionally independent from health observations so a new
 // pricing decoder can be added without changing the monitor contract.
 type ModelPrice struct {
-	RawName          string             `json:"rawName"`
-	Mode             string             `json:"mode,omitempty"`
-	Currency         string             `json:"currency,omitempty"`
-	CurrencySymbol   string             `json:"currencySymbol,omitempty"`
-	ModelRatio       *float64           `json:"modelRatio,omitempty"`
-	ModelPrice       *float64           `json:"modelPrice,omitempty"`
-	CompletionRatio  *float64           `json:"completionRatio,omitempty"`
-	CacheRatio       *float64           `json:"cacheRatio,omitempty"`
-	CacheCreateRatio *float64           `json:"cacheCreateRatio,omitempty"`
-	CacheReadPrice   *float64           `json:"cacheReadPrice,omitempty"`
-	CacheWritePrice  *float64           `json:"cacheWritePrice,omitempty"`
-	QuotaPerUnit     *float64           `json:"quotaPerUnit,omitempty"`
-	GroupMultipliers map[string]float64 `json:"groupMultipliers,omitempty"`
+	RoutingPrices    map[string]routing.Price `json:"-"`
+	RawName          string                   `json:"rawName"`
+	Mode             string                   `json:"mode,omitempty"`
+	Currency         string                   `json:"currency,omitempty"`
+	CurrencySymbol   string                   `json:"currencySymbol,omitempty"`
+	ModelRatio       *float64                 `json:"modelRatio,omitempty"`
+	ModelPrice       *float64                 `json:"modelPrice,omitempty"`
+	CompletionRatio  *float64                 `json:"completionRatio,omitempty"`
+	CacheRatio       *float64                 `json:"cacheRatio,omitempty"`
+	CacheCreateRatio *float64                 `json:"cacheCreateRatio,omitempty"`
+	CacheReadPrice   *float64                 `json:"cacheReadPrice,omitempty"`
+	CacheWritePrice  *float64                 `json:"cacheWritePrice,omitempty"`
+	QuotaPerUnit     *float64                 `json:"quotaPerUnit,omitempty"`
+	GroupMultipliers map[string]float64       `json:"groupMultipliers,omitempty"`
 	// ExpressionBilling marks tiered-expression models whose price comes
 	// from billing_expr instead of the legacy ratio fields. When the
 	// expression cannot be reduced to coefficients no group price is

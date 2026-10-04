@@ -328,6 +328,7 @@ func NewHandler(options Options) (http.Handler, error) {
 			writeJSON(writer, map[string]any{"status": "ok", "imported": len(payload.Bundles), "results": results})
 		})
 		dashboardCache := &publicDashboardCache{}
+		registerRoutingObservations(mux, options)
 		mux.HandleFunc("GET /api/v1/public/dashboard", func(writer http.ResponseWriter, request *http.Request) {
 			payload, err := dashboardCache.load(request.Context(), options.Store, options.Now())
 			if err != nil {

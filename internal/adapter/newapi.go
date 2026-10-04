@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"encoding/json"
+	"time"
 
 	"relayscope/internal/pricing"
 )
@@ -22,6 +23,15 @@ type NewAPIConfig struct {
 
 type NewAPIAdapter struct {
 	PricingRegistry *pricing.Registry
+	// Optional completion clock, independent of source health time.
+	Now func() time.Time
+}
+
+func (adapter NewAPIAdapter) completionTime() time.Time {
+	if adapter.Now != nil {
+		return adapter.Now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 func (NewAPIAdapter) Key() string         { return "newapi-pricing" }
@@ -56,19 +66,22 @@ type summaryModel struct {
 }
 
 type detailBucket struct {
-	Aggregate    bool
-	Complete     *bool
-	Timestamp    int64    `json:"timestamp"`
-	EndTimestamp int64    `json:"end_timestamp"`
-	Time         string   `json:"time"`
-	EndTime      string   `json:"end_time"`
-	Group        string   `json:"group"`
-	SuccessRate  *float64 `json:"success_rate"`
-	Latency      *float64 `json:"latency"`
-	TTFT         *float64 `json:"ttft"`
-	TPS          *float64 `json:"tps"`
-	Requests     *int64   `json:"requests"`
-	Success      *int64   `json:"success"`
-	Failure      *int64   `json:"failure"`
-	Empty        *int64   `json:"empty"`
+	// Probe display buckets may be aligned; routing keeps the source window.
+	SourceTimestamp    int64
+	SourceEndTimestamp int64
+	Aggregate          bool
+	Complete           *bool
+	Timestamp          int64    `json:"timestamp"`
+	EndTimestamp       int64    `json:"end_timestamp"`
+	Time               string   `json:"time"`
+	EndTime            string   `json:"end_time"`
+	Group              string   `json:"group"`
+	SuccessRate        *float64 `json:"success_rate"`
+	Latency            *float64 `json:"latency"`
+	TTFT               *float64 `json:"ttft"`
+	TPS                *float64 `json:"tps"`
+	Requests           *int64   `json:"requests"`
+	Success            *int64   `json:"success"`
+	Failure            *int64   `json:"failure"`
+	Empty              *int64   `json:"empty"`
 }

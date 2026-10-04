@@ -2,12 +2,15 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"relayscope/internal/domain"
 	"relayscope/internal/pricing"
+	"relayscope/internal/routing"
 )
 
 type pricingSource struct {
@@ -96,6 +99,10 @@ func mergePricingCatalog(target *pricing.Catalog, source pricing.Catalog) {
 }
 
 func applyPricingCatalog(collection *domain.Collection, catalog pricing.Catalog) {
+	applyPricingCatalogAt(collection, catalog, time.Now().UTC())
+}
+
+func applyPricingCatalogAt(collection *domain.Collection, catalog pricing.Catalog, priceReadAt time.Time) {
 	if collection == nil {
 		return
 	}
@@ -125,7 +132,15 @@ func applyPricingCatalog(collection *domain.Collection, catalog pricing.Catalog)
 					group := baseGroup
 					group.RawName = name
 					group.Buckets = append([]domain.TimeBucket(nil), baseGroup.Buckets...)
-					group.Extension = pricing.GroupExtension(groupPrices[name])
+					metadata := routing.ReadExtension(baseGroup.Extension)
+					availability := routing.UnknownAvailability()
+					if metadata.Availability != nil {
+						availability = *metadata.Availability
+					}
+					availability.Evidence = "copied"
+					known := true
+					metadata.GroupKnown, metadata.Availability = &known, &availability
+					group.Extension = groupPriceExtension(groupPrices[name], metadata, priceReadAt)
 					model.Groups = append(model.Groups, group)
 				}
 				continue
@@ -133,8 +148,21 @@ func applyPricingCatalog(collection *domain.Collection, catalog pricing.Catalog)
 		}
 		for groupIndex := range model.Groups {
 			if groupPrice, ok := groupPrices[model.Groups[groupIndex].RawName]; ok {
-				model.Groups[groupIndex].Extension = pricing.GroupExtension(groupPrice)
+				model.Groups[groupIndex].Extension = groupPriceExtension(groupPrice, routing.ReadExtension(model.Groups[groupIndex].Extension), priceReadAt)
 			}
 		}
 	}
+}
+
+func groupPriceExtension(price pricing.DisplayPrice, metadata routing.Extension, observedAt time.Time) json.RawMessage {
+	metadata.Price = nil
+	if price.RoutingPrice != nil && !observedAt.IsZero() {
+		copy := *price.RoutingPrice
+		at := observedAt.UnixMilli()
+		copy.PriceObservedAt = &at
+		metadata.Price = &copy
+		known := true
+		metadata.GroupKnown = &known
+	}
+	return routing.WriteExtension(pricing.GroupExtension(price), metadata)
 }

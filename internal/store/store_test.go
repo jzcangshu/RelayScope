@@ -1398,3 +1398,32 @@ func TestUpdateSubscriptionChannelOnlyTouchesOwnUser(t *testing.T) {
 		t.Fatalf("other user's channel was changed: %+v", subs)
 	}
 }
+
+func TestSiteInsecureTLSRoundTrips(t *testing.T) {
+	ctx := context.Background()
+	dbStore := openTestStore(t)
+	created, err := dbStore.CreateSite(ctx, Site{
+		Name: "expired-cert", BaseURL: "https://expired.example.test", SourceURL: "https://expired.example.test/status",
+		AdapterKey: "test", Enabled: true, InsecureTLS: true, Interval: 15 * time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	site, err := dbStore.GetSite(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !site.InsecureTLS {
+		t.Fatalf("created insecure flag was lost: %+v", site)
+	}
+	if err := dbStore.UpdateSiteDetails(ctx, site.ID, site.Name, site.BaseURL, site.SourceURL, site.AdapterKey, site.AdapterConfig, site.Enabled, site.SessionRequired, false, site.Interval, site.Jitter, site.CustomFailureReason); err != nil {
+		t.Fatal(err)
+	}
+	sites, err := dbStore.ListAllSites(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) != 1 || sites[0].InsecureTLS {
+		t.Fatalf("insecure flag was not cleared: %+v", sites)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"relayscope/internal/adapter/adapterutil"
 	"relayscope/internal/domain"
 	"relayscope/internal/pricing"
+	"relayscope/internal/routing"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,9 @@ func (adapter NewAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fet
 	body, _, err := fetcher.GetBytes(ctx, pricingURL)
 	if err != nil {
 		return domain.Collection{}, err
+	}
+	if pricingAPIErrorMessage(body) != "" {
+		return domain.Collection{}, errors.New("pricing endpoint reported business failure")
 	}
 	models, err := decodePricingModels(body)
 	if err != nil {
@@ -104,7 +108,15 @@ func (adapter NewAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fet
 			if availabilityMode == "presence" {
 				state = domain.ServiceHealthy
 			}
-			groups = append(groups, domain.GroupObservation{RawName: groupName, ServiceState: state, Metrics: metricsFromPricing(item)})
+			availability := routing.UnknownAvailability()
+			availability.Evidence = "site-aggregate"
+			if availabilityMode == "presence" {
+				availability.Evidence = "presence"
+			}
+			availability.CollectionStatus = "ok"
+			known := len(item.Groups) > 0 || item.Group != "" || item.Channel != ""
+			extension := routing.WriteExtension(nil, routing.Extension{GroupKnown: &known, Availability: &availability})
+			groups = append(groups, domain.GroupObservation{RawName: groupName, ServiceState: state, Metrics: metricsFromPricing(item), Extension: extension})
 		}
 		observation := domain.ModelObservation{
 			RawName:  item.Model,
@@ -112,12 +124,24 @@ func (adapter NewAPIAdapter) Collect(ctx context.Context, site Site, fetcher Fet
 			Groups:   groups,
 		}
 		if len(item.Buckets) > 0 {
-			mergeDetailBuckets(&observation, item.Buckets, now)
+			mergeDetailBucketsAt(&observation, item.Buckets, now, adapter.completionTime())
 		}
 		collection.Models = append(collection.Models, observation)
 	}
 	collection.Models = deduplicateModels(collection.Models)
-	applyPricingCatalog(&collection, priceCatalog)
+	completedAt := adapter.completionTime()
+	applyPricingCatalogAt(&collection, priceCatalog, completedAt)
+	for index := range collection.Models {
+		for groupIndex := range collection.Models[index].Groups {
+			group := &collection.Models[index].Groups[groupIndex]
+			metadata := routing.ReadExtension(group.Extension)
+			if metadata.Availability != nil {
+				at := completedAt.UnixMilli()
+				metadata.Availability.CollectedAt = &at
+				group.Extension = routing.WriteExtension(group.Extension, metadata)
+			}
+		}
+	}
 	if len(collection.Models) == 0 {
 		return domain.Collection{}, fmt.Errorf("NewAPI pricing contained no valid model names")
 	}
@@ -154,7 +178,7 @@ func (adapter NewAPIAdapter) CollectDetails(ctx context.Context, site Site, fetc
 	}
 	return collectModelDetails(ctx, fetcher, collection, modelNames, now, time.Duration(config.WindowHours)*time.Hour, func(modelName string) (string, error) {
 		return detailQuery(endpoint, modelName, config.WindowHours), nil
-	}, nil)
+	}, nil, adapter.completionTime)
 }
 
 // summaryActiveModels is a best-effort preflight for detail collection.
@@ -188,8 +212,8 @@ func summaryActiveModels(ctx context.Context, fetcher Fetcher, baseURL, summaryP
 	}
 	activeNames := make(map[string]struct{}, len(response.Data.Models))
 	for _, model := range response.Data.Models {
-		if name := strings.TrimSpace(model.ModelName); name != "" {
-			activeNames[name] = struct{}{}
+		if strings.TrimSpace(model.ModelName) != "" {
+			activeNames[model.ModelName] = struct{}{}
 		}
 	}
 	active := make([]string, 0, len(candidates))
@@ -210,6 +234,7 @@ func collectModelDetails(
 	historyWindow time.Duration,
 	endpointFor func(string) (string, error),
 	fallbackEndpointFor func(string) (string, error),
+	completionTime func() time.Time,
 ) error {
 	byModel := make(map[string]*domain.ModelObservation, len(collection.Models))
 	for index := range collection.Models {
@@ -256,7 +281,11 @@ func collectModelDetails(
 			model.HistoryCoverageStart = now.UTC().Add(-historyWindow)
 			model.HistoryCoverageEnd = now.UTC()
 		}
-		mergeDetailBuckets(model, buckets, now)
+		completedAt := time.Now().UTC()
+		if completionTime != nil {
+			completedAt = completionTime()
+		}
+		mergeDetailBucketsAt(model, buckets, now, completedAt)
 		succeeded++
 	}
 	if attempted > 0 && succeeded == 0 && len(collection.Issues) > issueStart {
