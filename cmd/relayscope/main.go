@@ -242,7 +242,8 @@ func runMaintenance(ctx context.Context, dbStore *store.Store, logger *slog.Logg
 	for {
 		select {
 		case <-ticker.C:
-			removed, err := dbStore.Cleanup(ctx, time.Now().UTC().Add(-72*time.Hour), 500)
+			// 10000 是单块事务块大小；Cleanup 循环分块清到 72h 截止线，单次调用有行数/时间预算上限
+			removed, err := dbStore.Cleanup(ctx, time.Now().UTC().Add(-72*time.Hour), 10_000)
 			if err != nil {
 				logger.Warn("maintenance cleanup failed", "error", err)
 				continue

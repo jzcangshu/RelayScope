@@ -23,38 +23,77 @@ func (store *Store) Revision(ctx context.Context) (int64, error) {
 	return revision, nil
 }
 
+// cleanupMaxRowsPerCall and cleanupMaxDuration bound a single Cleanup call so
+// the maintenance tick never holds the SQLite write lock for long: rows leave
+// in batchSize chunks across separate transactions, collectors interleave
+// between chunks, and the loop resumes from the oldest remaining row on the
+// next tick when a bound is hit.
+var (
+	cleanupMaxRowsPerCall = 400_000
+	cleanupMaxDuration    = 30 * time.Second
+)
+
 func (store *Store) Cleanup(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	if batchSize <= 0 || batchSize > 10_000 {
 		return 0, errors.New("cleanup batch size must be between 1 and 10000")
 	}
+	deadline := time.Now().Add(cleanupMaxDuration)
+	var removed int64
+	for removed < int64(cleanupMaxRowsPerCall) {
+		if err := ctx.Err(); err != nil {
+			return removed, nil
+		}
+		if time.Now().After(deadline) {
+			return removed, nil
+		}
+		bucketsDeleted, runsDeleted, err := store.deleteExpiredChunk(ctx, unixMilli(cutoff), int64(batchSize))
+		if err != nil {
+			return removed, err
+		}
+		removed += bucketsDeleted + runsDeleted
+		if bucketsDeleted < int64(batchSize) && runsDeleted < int64(batchSize) {
+			return removed, nil
+		}
+	}
+	return removed, nil
+}
+
+func (store *Store) deleteExpiredChunk(ctx context.Context, cutoffMillis, batchSize int64) (int64, int64, error) {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin cleanup: %w", err)
+		return 0, 0, fmt.Errorf("begin cleanup: %w", err)
 	}
 	defer tx.Rollback()
-
-	var removed int64
-	queries := []string{
-		`DELETE FROM metric_buckets
-		 WHERE (group_id, bucket_start, resolution_seconds) IN
-		       (SELECT group_id, bucket_start, resolution_seconds FROM metric_buckets WHERE bucket_start < ? LIMIT ?)`,
-		`DELETE FROM collection_runs WHERE id IN (SELECT id FROM collection_runs WHERE started_at < ? LIMIT ?)`,
+	queries := []struct {
+		statement string
+		deleted   *int64
+	}{
+		{
+			`DELETE FROM metric_buckets
+			 WHERE (group_id, bucket_start, resolution_seconds) IN
+			       (SELECT group_id, bucket_start, resolution_seconds FROM metric_buckets WHERE bucket_start < ? LIMIT ?)`,
+			new(int64),
+		},
+		{
+			`DELETE FROM collection_runs WHERE id IN (SELECT id FROM collection_runs WHERE started_at < ? LIMIT ?)`,
+			new(int64),
+		},
 	}
 	for _, query := range queries {
-		result, err := tx.ExecContext(ctx, query, unixMilli(cutoff), batchSize)
+		result, err := tx.ExecContext(ctx, query.statement, cutoffMillis, batchSize)
 		if err != nil {
-			return 0, fmt.Errorf("delete expired rows: %w", err)
+			return 0, 0, fmt.Errorf("delete expired rows: %w", err)
 		}
 		count, err := result.RowsAffected()
 		if err != nil {
-			return 0, fmt.Errorf("count deleted rows: %w", err)
+			return 0, 0, fmt.Errorf("count deleted rows: %w", err)
 		}
-		removed += count
+		*query.deleted = count
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit cleanup: %w", err)
+		return 0, 0, fmt.Errorf("commit cleanup: %w", err)
 	}
-	return removed, nil
+	return *queries[0].deleted, *queries[1].deleted, nil
 }
 
 func incrementRevision(ctx context.Context, tx *sql.Tx) (int64, error) {

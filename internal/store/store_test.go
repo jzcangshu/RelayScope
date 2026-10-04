@@ -748,6 +748,106 @@ func TestCleanupRemovesOnlyExpiredHistory(t *testing.T) {
 	assertCount(t, store, "current_snapshots", 1)
 }
 
+// seedExpiredHistory inserts expired rows under the site's first group:
+// `buckets` metric buckets and `runs` collection runs, all older than any 72h
+// cutoff. Fresh rows are left untouched so tests can assert they survive.
+func seedExpiredHistory(t *testing.T, store *Store, siteID int64, buckets, runs int) {
+	t.Helper()
+	var groupID int64
+	if err := store.db.QueryRow(`SELECT sg.id FROM site_groups sg JOIN raw_models rm ON rm.id = sg.raw_model_id WHERE rm.site_id = ? LIMIT 1`, siteID).Scan(&groupID); err != nil {
+		t.Fatalf("find group: %v", err)
+	}
+	base := time.Now().UTC().Add(-30 * 24 * time.Hour)
+	for i := 0; i < buckets; i++ {
+		start := base.Add(time.Duration(i) * time.Minute)
+		if _, err := store.db.Exec(`INSERT INTO metric_buckets(group_id, bucket_start, bucket_end, resolution_seconds, collected_at) VALUES (?, ?, ?, 300, ?)`,
+			groupID, start.UnixMilli(), start.Add(5*time.Minute).UnixMilli(), start.UnixMilli()); err != nil {
+			t.Fatalf("insert expired bucket: %v", err)
+		}
+	}
+	for i := 0; i < runs; i++ {
+		start := base.Add(time.Duration(i) * time.Minute)
+		if _, err := store.db.Exec(`INSERT INTO collection_runs(site_id, adapter_key, started_at, finished_at, status) VALUES (?, 'test', ?, ?, 'success')`,
+			siteID, start.UnixMilli(), start.Add(time.Second).UnixMilli()); err != nil {
+			t.Fatalf("insert expired run: %v", err)
+		}
+	}
+}
+
+func applyFreshCollection(t *testing.T, store *Store, siteID int64, now time.Time) {
+	t.Helper()
+	collection := domain.Collection{
+		SiteID: siteID, ObservedAt: now, CollectedAt: now, CatalogComplete: true,
+		Models: []domain.ModelObservation{{RawName: "model", Groups: []domain.GroupObservation{{
+			RawName: "group", ServiceState: domain.ServiceHealthy,
+			Buckets: []domain.TimeBucket{{Start: now.Add(-time.Hour), End: now.Add(-55 * time.Minute), Resolution: 5 * time.Minute}},
+		}}}},
+	}
+	if _, _, err := store.ApplyCollection(context.Background(), collection, strings.ToLower); err != nil {
+		t.Fatalf("apply collection: %v", err)
+	}
+}
+
+func TestCleanupDrainsBacklogAcrossChunks(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	site := createTestSite(t, store)
+	now := time.Now().UTC()
+	applyFreshCollection(t, store, site.ID, now)
+	seedExpiredHistory(t, store, site.ID, 250, 250)
+
+	removed, err := store.Cleanup(ctx, now.Add(-72*time.Hour), 100)
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if removed != 500 {
+		t.Fatalf("removed = %d, want 500 (250 buckets + 250 runs)", removed)
+	}
+	var fresh int64
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM metric_buckets WHERE bucket_start >= ?`, now.Add(-72*time.Hour).UnixMilli()).Scan(&fresh); err != nil {
+		t.Fatal(err)
+	}
+	if fresh != 1 {
+		t.Fatalf("fresh buckets = %d, want 1", fresh)
+	}
+}
+
+func TestCleanupStopsAtRowBudgetPerCall(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	site := createTestSite(t, store)
+	now := time.Now().UTC()
+	applyFreshCollection(t, store, site.ID, now)
+	seedExpiredHistory(t, store, site.ID, 12, 0)
+
+	originalBudget := cleanupMaxRowsPerCall
+	cleanupMaxRowsPerCall = 5
+	defer func() { cleanupMaxRowsPerCall = originalBudget }()
+	cutoff := now.Add(-72 * time.Hour)
+
+	// batchSize 1 with a 5-row budget: each call removes exactly 5 expired
+	// buckets (the fresh bucket from ApplyCollection is never touched).
+	removed, err := store.Cleanup(ctx, cutoff, 1)
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if removed != 5 {
+		t.Fatalf("removed = %d, want 5", removed)
+	}
+	assertCount(t, store, "metric_buckets", 8)
+
+	if removed, err = store.Cleanup(ctx, cutoff, 1); err != nil || removed != 5 {
+		t.Fatalf("second cleanup removed = %d, err = %v, want 5", removed, err)
+	}
+	assertCount(t, store, "metric_buckets", 3)
+
+	if removed, err = store.Cleanup(ctx, cutoff, 1); err != nil || removed != 2 {
+		t.Fatalf("final cleanup removed = %d, err = %v, want 2", removed, err)
+	}
+	assertCount(t, store, "metric_buckets", 1)
+	assertCount(t, store, "collection_runs", 0)
+}
+
 func TestPublicRowsMarkOldSnapshotStale(t *testing.T) {
 	store := openTestStore(t)
 	site := createTestSite(t, store)
