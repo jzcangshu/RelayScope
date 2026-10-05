@@ -18,7 +18,7 @@ run:
 ## test: run Go tests and the embedded frontend tests
 test:
 	go test ./...
-	node --test web/public/dashboard.test.cjs web/admin/admin.test.cjs extension/session-sync/capture.test.cjs
+	node --test web/public/*.test.cjs web/admin/*.test.cjs extension/session-sync/*.test.cjs
 
 ## vet: go vet
 vet:

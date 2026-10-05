@@ -15,5 +15,6 @@ $env:GOMODCACHE = Join-Path $projectRoot '.cache\go-mod'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $go vet ./...
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-& $node --test (Join-Path $projectRoot 'web\public\dashboard.test.cjs') (Join-Path $projectRoot 'web\admin\admin.test.cjs') (Join-Path $projectRoot 'extension\session-sync\capture.test.cjs')
+$frontendTests = Get-ChildItem -Path (Join-Path $projectRoot 'web\public\*.test.cjs'), (Join-Path $projectRoot 'web\admin\*.test.cjs'), (Join-Path $projectRoot 'extension\session-sync\*.test.cjs') | Select-Object -ExpandProperty FullName
+& $node --test @frontendTests
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -10,6 +10,9 @@ data-ui-test
 var
 .secrets
 *.env
+.env.*
+**/.env.*
+DEPLOYMENT.md
 !.env.example
 *.db
 *.db-shm

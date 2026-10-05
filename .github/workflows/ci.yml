@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -49,7 +50,7 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Frontend tests
-        run: node --test web/public/dashboard.test.cjs web/admin/admin.test.cjs extension/session-sync/capture.test.cjs
+        run: node --test web/public/*.test.cjs web/admin/*.test.cjs extension/session-sync/*.test.cjs
 
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /tmp/relayscope ./cmd/relayscope
