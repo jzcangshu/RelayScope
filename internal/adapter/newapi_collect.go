@@ -166,6 +166,13 @@ func (adapter NewAPIAdapter) CollectDetails(ctx context.Context, site Site, fetc
 	if config.SkipDetails {
 		return nil
 	}
+	// An explicit availabilityPath replaces the summary preflight and the
+	// per-model detail fan-out: the source already carries hourly buckets for
+	// every model in one response, and mixing it with the lagging perf-metrics
+	// pipeline would only reintroduce stale states.
+	if config.AvailabilityPath != "" {
+		return collectModelHealthAvailability(ctx, fetcher, collection, site.BaseURL, config.AvailabilityPath, config.WindowHours, modelNames, now, adapter.completionTime)
+	}
 	if activeNames, ok := summaryActiveModels(ctx, fetcher, site.BaseURL, config.SummaryPath, config.WindowHours, modelNames); ok {
 		if len(activeNames) == 0 {
 			return nil

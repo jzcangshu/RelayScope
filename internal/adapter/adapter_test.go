@@ -1482,3 +1482,76 @@ func TestFetcherForSiteInsecureTLS(t *testing.T) {
 		t.Fatal("base client was mutated by the insecure clone")
 	}
 }
+
+func TestNewAPIAdapterCollectsAvailabilityFromModelHealth(t *testing.T) {
+	now := time.Date(2026, time.October, 5, 4, 6, 0, 0, time.UTC)
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "deepseek-v4.1-flash", Groups: []domain.GroupObservation{{RawName: "CC"}, {RawName: "Free"}}},
+		{RawName: "glm-5.3-flash", Groups: []domain.GroupObservation{{RawName: "CC"}}},
+	}}
+	health := fmt.Sprintf(`{"success":true,"data":{"window_hours":24,"models":[
+		{"model_name":"deepseek-v4.1-flash","requests":13,"tokens":70000000,"avg_latency_ms":35954,"avg_first_token_ms":17838,
+		 "buckets":[
+		   {"hour":%d,"total_count":0,"success_count":0,"probe_count":0,"success_rate":0},
+		   {"hour":%d,"total_count":11,"success_count":7,"probe_count":0,"success_rate":63.64},
+		   {"hour":%d,"total_count":2,"success_count":2,"probe_count":2,"success_rate":100},
+		   {"hour":%d,"total_count":0,"success_count":0,"probe_count":0,"success_rate":0}
+		 ]},
+		{"model_name":"ghost-model","buckets":[{"hour":%d,"total_count":5,"success_count":5,"success_rate":100}]}
+	]}}`,
+		now.Add(-3*time.Hour).Unix(), now.Add(-2*time.Hour).Unix(), now.Add(-time.Hour).Unix(), now.Unix(), now.Unix())
+	fetcher := &recordingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/user/model-health?hours=24": []byte(health),
+	}}}
+	site := Site{ID: 1, BaseURL: "https://example.test", ConfigJSON: `{"availabilityPath":"/api/user/model-health"}`}
+
+	if err := (NewAPIAdapter{}).CollectDetails(context.Background(), site, fetcher, &collection, []string{"deepseek-v4.1-flash"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(fetcher.requests) != 1 || fetcher.requests[0] != "https://example.test/api/user/model-health?hours=24" {
+		t.Fatalf("requests = %v, want the single model-health call", fetcher.requests)
+	}
+	model := collection.Models[0]
+	if !model.HistoryCoverageStart.Equal(now.Add(-24*time.Hour)) || !model.HistoryCoverageEnd.Equal(now) {
+		t.Fatalf("history coverage = %v..%v", model.HistoryCoverageStart, model.HistoryCoverageEnd)
+	}
+	for _, group := range model.Groups {
+		if group.ServiceState != domain.ServiceHealthy {
+			t.Fatalf("group %s state = %s, want healthy from the latest active hour", group.RawName, group.ServiceState)
+		}
+		if !group.ObservedAt.Equal(now.Add(-time.Hour)) {
+			t.Fatalf("group %s observedAt = %v, want the latest active bucket start", group.RawName, group.ObservedAt)
+		}
+		if len(group.Buckets) != 2 {
+			t.Fatalf("group %s buckets = %d, want the two active hours", group.RawName, len(group.Buckets))
+		}
+		if group.Metrics.RequestCount == nil || *group.Metrics.RequestCount != 13 || group.Metrics.SuccessCount == nil || *group.Metrics.SuccessCount != 9 {
+			t.Fatalf("group %s window totals = %+v", group.RawName, group.Metrics)
+		}
+		if group.Metrics.AverageLatencyMS == nil || *group.Metrics.AverageLatencyMS != 35954 {
+			t.Fatalf("group %s latency = %+v", group.RawName, group.Metrics)
+		}
+	}
+	// Models without a rule match must not gain groups from model-level evidence.
+	if len(collection.Models[1].Groups) != 1 || len(collection.Models[1].Groups[0].Buckets) != 0 {
+		t.Fatalf("unmatched model was mutated: %+v", collection.Models[1].Groups)
+	}
+}
+
+func TestNewAPIAdapterModelHealthFailureFailsWithoutFallback(t *testing.T) {
+	collection := domain.Collection{Models: []domain.ModelObservation{
+		{RawName: "deepseek-v4.1-flash", Groups: []domain.GroupObservation{{RawName: "CC"}}},
+	}}
+	fetcher := &recordingFetcher{fakeFetcher: fakeFetcher{responses: map[string][]byte{
+		"https://example.test/api/user/model-health?hours=24": []byte(`{"success":false,"message":"metrics disabled"}`),
+	}}}
+	site := Site{ID: 1, BaseURL: "https://example.test", ConfigJSON: `{"availabilityPath":"/api/user/model-health"}`}
+
+	err := (NewAPIAdapter{}).CollectDetails(context.Background(), site, fetcher, &collection, []string{"deepseek-v4.1-flash"}, time.Now().UTC())
+	if err == nil || !strings.Contains(err.Error(), "model-health") {
+		t.Fatalf("err = %v, want a model-health failure", err)
+	}
+	if len(fetcher.requests) != 1 {
+		t.Fatalf("requests = %v, want no perf-metrics fallback", fetcher.requests)
+	}
+}
