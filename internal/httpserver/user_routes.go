@@ -245,33 +245,15 @@ func registerUserRoutes(mux *http.ServeMux, options Options) {
 			return
 		}
 		now := options.Now()
-		// 会员免费额度优先抵扣：额度部分立即落为已支付订单（进度即时计入）
-		creditUsed := int64(0)
-		if membership, err := options.Store.GetMembership(request.Context(), user.ID); err == nil && membership.Active {
-			if available, err := options.Store.EnsureMonthlyCredit(request.Context(), user.ID, wishFreeCreditLdc(request.Context(), options.Store), now); err == nil && available > 0 {
-				if consumed, err := options.Store.ConsumeMonthlyCredit(request.Context(), user.ID, payload.AmountLDC, now); err == nil && consumed > 0 {
-					creditUsed = consumed
-				}
-			}
+		creditOrderNo, err := newOrderNo()
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "创建订单失败")
+			return
 		}
-		if creditUsed > 0 {
-			creditOrderNo, err := newOrderNo()
-			if err != nil {
-				writeError(writer, http.StatusInternalServerError, "创建订单失败")
-				return
-			}
-			creditOrder, err := options.Store.CreateOrder(request.Context(), store.LDCOrder{
-				OrderNo: creditOrderNo, UserID: user.ID, Kind: store.OrderKindWish, WishSiteID: &site.ID,
-				AmountLDC: creditUsed, Funding: store.OrderFundingCredit,
-			})
-			if err != nil {
-				writeError(writer, http.StatusInternalServerError, "创建订单失败")
-				return
-			}
-			if _, _, err := options.Store.MarkOrderPaid(request.Context(), creditOrder.OrderNo, "CREDIT"); err != nil {
-				writeError(writer, http.StatusInternalServerError, "订单状态更新失败")
-				return
-			}
+		creditUsed, err := options.Store.PledgeMonthlyCredit(request.Context(), user.ID, site.ID, creditOrderNo, payload.AmountLDC, wishFreeCreditLdc(request.Context(), options.Store), now)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "免费助力失败，额度未扣除")
+			return
 		}
 		remaining := payload.AmountLDC - creditUsed
 		if remaining <= 0 {

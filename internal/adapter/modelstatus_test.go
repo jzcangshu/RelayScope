@@ -95,8 +95,8 @@ func TestModelStatusCoverageRequiresFreshFullWindow(t *testing.T) {
 	staleEnd := now.Add(-2 * time.Hour).Unix()
 	responses := map[string][]byte{
 		"https://example.test/api/enhancements/model-status/embed/status/all": []byte(`{"success":true,"data":[{"model_name":"claude-fable-5","group":"default","current_status":"green","last_request_at":` + itoa(staleEnd) + `,"slot_data":[{"slot":0,"start_time":` + itoa(staleStart) + `,"end_time":` + itoa(staleEnd) + `,"total_requests":1,"success_count":1,"error_count":0,"success_rate":100}]}]}`),
-		"https://example.test/api/pricing": []byte(`{"data":[{"model_name":"claude-fable-5","model_ratio":5,"completion_ratio":5,"enable_groups":["default"]}]}`),
-		"https://example.test/api/status":  []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD"}}`),
+		"https://example.test/api/pricing":                                    []byte(`{"data":[{"model_name":"claude-fable-5","model_ratio":5,"completion_ratio":5,"enable_groups":["default"]}]}`),
+		"https://example.test/api/status":                                     []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD"}}`),
 	}
 	collection, err := (ModelStatusAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: responses}, now)
 	if err != nil {
@@ -114,8 +114,8 @@ func TestModelStatusStateFallsBackToWordStatus(t *testing.T) {
 	now := time.Now()
 	responses := map[string][]byte{
 		"https://example.test/api/enhancements/model-status/embed/status/all": []byte(`{"success":true,"data":[{"model_name":"m","group":"default","current_status":"","status":"degraded","slot_data":[]}]}`),
-		"https://example.test/api/pricing": []byte(`{"data":[{"model_name":"m","model_ratio":1,"enable_groups":["default"]}]}`),
-		"https://example.test/api/status":  []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD"}}`),
+		"https://example.test/api/pricing":                                    []byte(`{"data":[{"model_name":"m","model_ratio":1,"enable_groups":["default"]}]}`),
+		"https://example.test/api/status":                                     []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"USD"}}`),
 	}
 	collection, err := (ModelStatusAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: responses}, now)
 	if err != nil {
@@ -129,8 +129,8 @@ func TestModelStatusStateFallsBackToWordStatus(t *testing.T) {
 func TestModelStatusEmptyReportMarksAllModelsUnavailable(t *testing.T) {
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	for name, payload := range map[string]string{
-		"empty data":   `{"success":true,"data":[]}`,
-		"blank names":  `{"success":true,"data":[{"model_name":"  "}]}`,
+		"empty data":  `{"success":true,"data":[]}`,
+		"blank names": `{"success":true,"data":[{"model_name":"  "}]}`,
 	} {
 		collection, err := (ModelStatusAdapter{}).Collect(context.Background(), Site{ID: 1, BaseURL: "https://example.test"}, fakeFetcher{responses: map[string][]byte{
 			"https://example.test/api/enhancements/model-status/embed/status/all": []byte(payload),

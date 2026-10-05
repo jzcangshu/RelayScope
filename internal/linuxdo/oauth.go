@@ -3,6 +3,7 @@ package linuxdo
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -61,15 +62,19 @@ func (s *Service) Begin(w http.ResponseWriter) error {
 	s.cleanupStatesLocked(time.Now())
 	s.states[state] = time.Now().Add(10 * time.Minute)
 	s.mu.Unlock()
+	http.SetCookie(w, s.StateCookie(state, 600))
 	q := url.Values{"client_id": {s.cfg.ClientID}, "response_type": {"code"}, "redirect_uri": {s.cfg.CallbackURL}, "scope": {"openid profile"}, "state": {state}}
 	w.Header().Set("Location", authorizeEndpoint+"?"+q.Encode())
 	w.WriteHeader(http.StatusFound)
 	return nil
 }
 
-func (s *Service) Callback(ctx context.Context, code, state string) (store.User, error) {
+func (s *Service) Callback(ctx context.Context, code, state, browserState string) (store.User, error) {
 	if !s.Enabled() {
 		return store.User{}, errors.New("linuxdo oauth is not configured")
+	}
+	if state == "" || subtle.ConstantTimeCompare([]byte(state), []byte(browserState)) != 1 {
+		return store.User{}, errors.New("invalid oauth browser binding")
 	}
 	s.mu.Lock()
 	s.cleanupStatesLocked(time.Now())
@@ -152,4 +157,13 @@ func (s *Service) cleanupStatesLocked(now time.Time) {
 			delete(s.states, state)
 		}
 	}
+}
+
+// SecureCookies uses the public callback scheme, including behind TLS-terminating proxies.
+func (s *Service) SecureCookies() bool {
+	u, err := url.Parse(s.cfg.CallbackURL)
+	return err == nil && strings.EqualFold(u.Scheme, "https")
+}
+func (s *Service) StateCookie(value string, maxAge int) *http.Cookie {
+	return &http.Cookie{Name: "relayscope_oauth_state", Value: value, Path: "/api/v1/auth/linuxdo", HttpOnly: true, Secure: s.SecureCookies(), SameSite: http.SameSiteLaxMode, MaxAge: maxAge}
 }

@@ -174,6 +174,9 @@ func (s *Store) SetMembershipByUsername(ctx context.Context, provider, rawUserna
 	err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE provider = ? AND LOWER(username) = ? ORDER BY CASE WHEN registered_at IS NULL THEN 1 ELSE 0 END, id LIMIT 1`, provider, usernameKey(username)).Scan(&userID)
 	switch {
 	case err == nil:
+		if err := clipMembershipIntervals(ctx, tx, userID, expiry); err != nil {
+			return MemberUser{}, err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE users SET membership_expires_at = ?, updated_at = ? WHERE id = ?`, expiry, unixMilli(now), userID); err != nil {
 			return MemberUser{}, err
 		}

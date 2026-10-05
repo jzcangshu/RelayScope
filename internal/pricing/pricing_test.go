@@ -121,9 +121,9 @@ func TestParseBillingExpressionShapes(t *testing.T) {
 		{"happycoding", `tier("base", p * 0.3 + c * 1.2 + cr * 0.006)`, 0.3, 1.2, 0.006, 0, nil},
 		{"conditional standard tier", `len <= 272000 ? tier("standard", p * 2.5 + c * 15 + cr * 0.25 + cc * 3.125) : tier("long_context", p * 5 + c * 22.5 + cr * 0.5 + cc * 6.25)`, 2.5, 15, 0.25, 3.125, nil},
 		{"first tier fallback", `len <= 200000 ? tier("0_200k", p * 2 + c * 6 + cr * 0.5) : tier("200k_plus", p * 4 + c * 12 + cr * 1)`, 2, 6, 0.5, 0, nil},
-			{"probe conditional picks base", `(((((p <= 50)))) && (((((c <= 100))) && ((c > 0))))) ? (tier(" 探测", fixed(0.3))) : (tier("base", p * 4 + c * 10 + cr * 0.8))`, 4, 10, 0.8, 0, nil},
-			{"carolineai liveness tier skipped", `len > 0 && len < 500 ? tier("测活请求 · $0.2/次", 200000) : tier("normal", p * 0.75 + c * 2 + cr * 0.4)`, 0.75, 2, 0.4, 0, nil},
-			{"unnamed fixed probe tier skipped", `len > 0 && len < 500 ? tier("测活", fixed(0.2)) : tier("normal", p * 1 + c * 2)`, 1, 2, 0, 0, nil},
+		{"probe conditional picks base", `(((((p <= 50)))) && (((((c <= 100))) && ((c > 0))))) ? (tier(" 探测", fixed(0.3))) : (tier("base", p * 4 + c * 10 + cr * 0.8))`, 4, 10, 0.8, 0, nil},
+		{"carolineai liveness tier skipped", `len > 0 && len < 500 ? tier("测活请求 · $0.2/次", 200000) : tier("normal", p * 0.75 + c * 2 + cr * 0.4)`, 0.75, 2, 0.4, 0, nil},
+		{"unnamed fixed probe tier skipped", `len > 0 && len < 500 ? tier("测活", fixed(0.2)) : tier("normal", p * 1 + c * 2)`, 1, 2, 0, 0, nil},
 		{"runtime multipliers ignored", `(tier("base", p * 4.5 + c * 13.5 + cr * 0.15)) * (hour("UTC") >= 1 && hour("UTC") < 4 ? 2 : 1) * (hour("UTC") >= 6 && hour("UTC") < 10 ? 2 : 1)`, 4.5, 13.5, 0.15, 0, nil},
 		{"multiline conditional", "len <= 272000\n\t? tier(\"0_272k\", p * 12.5 + c * 75 + cr * 1.25 + cc * 15.625)\n\t: tier(\"272k_plus\", p * 25 + c * 112.5 + cr * 2.5 + cc * 31.25)", 12.5, 75, 1.25, 15.625, nil},
 		{"image variables tolerated", `tier("base", p * 5 + c * 10 + cr * 1.25 + img * 8 + img_o * 32)`, 5, 10, 1.25, 0, nil},
@@ -179,7 +179,6 @@ func TestParseBillingExpressionRejectsNonLinearShapes(t *testing.T) {
 		}
 	}
 }
-
 
 func TestNewAPIDecoderNormalizesFixedPriceAndCurrency(t *testing.T) {
 	catalog, err := (NewAPIDecoder{}).Decode([]byte(`{"group_ratio":{"default":1.5},"data":[{"model_name":"gpt-5-nano","quota_type":1,"model_price":2,"enable_groups":["default"]}]}`), []byte(`{"data":{"quota_per_unit":500000,"quota_display_type":"CNY","custom_currency_symbol":"¥","custom_currency_exchange_rate":7}}`))

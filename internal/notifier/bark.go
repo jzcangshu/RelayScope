@@ -12,9 +12,9 @@ import (
 
 // BarkConfig holds Bark push configuration.
 type BarkConfig struct {
-	Key      string // Device key from Bark app
-	BaseURL  string // Optional: custom Bark server URL (default: https://api.day.app)
-	Client   *http.Client
+	Key     string // Device key from Bark app
+	BaseURL string // Optional: custom Bark server URL (default: https://api.day.app)
+	Client  *http.Client
 }
 
 // BarkSender sends notifications via Bark (iOS push).

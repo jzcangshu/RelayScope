@@ -2,20 +2,56 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
-// EnqueueNotification inserts a notification into the outbox.
-func (store *Store) EnqueueNotification(ctx context.Context, subscriptionID, announcementID, siteID int64, platform, target, payload string) error {
-	_, err := store.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO notification_outbox (subscription_id, announcement_id, site_id, platform, target, payload, status, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-		subscriptionID, announcementID, siteID, platform, target, payload, unixMilli(time.Now().UTC()))
+// EnqueueNotification queues each full announcement version once per
+// subscription. Repeated collection never resets a sent/failed/retrying entry.
+// Only legacy rows lack a full-content version; compare their visible content
+// conservatively, ignoring the site's display name, before inserting a version.
+func (store *Store) EnqueueNotification(ctx context.Context, subscriptionID, announcementID, siteID int64, platform, target, payload, contentVersion, announcementTitle string) error {
+	if contentVersion == "" {
+		return fmt.Errorf("enqueue notification: content version is required")
+	}
+	var legacyPayload string
+	err := store.db.QueryRowContext(ctx, `SELECT payload FROM notification_outbox WHERE subscription_id = ? AND announcement_id = ? AND content_version = ''`, subscriptionID, announcementID).Scan(&legacyPayload)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("check legacy notification: %w", err)
+	}
+	if err == nil && sameLegacyAnnouncement(legacyPayload, payload, announcementTitle) {
+		return nil
+	}
+	_, err = store.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO notification_outbox (subscription_id, announcement_id, site_id, platform, target, payload, status, created_at, content_version)
+		 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+		subscriptionID, announcementID, siteID, platform, target, payload, unixMilli(time.Now().UTC()), contentVersion)
 	if err != nil {
 		return fmt.Errorf("enqueue notification: %w", err)
 	}
 	return nil
+}
+
+func sameLegacyAnnouncement(legacyPayload, payload, announcementTitle string) bool {
+	// Legacy messages have the form "📢 site | announcement title" (or
+	// "📢 site" when there is no title). They contain at most 2000 body runes;
+	// missing full text cannot safely distinguish historical long-text edits.
+	type message struct{ Title, Body string }
+	var old, next message
+	if json.Unmarshal([]byte(legacyPayload), &old) != nil || json.Unmarshal([]byte(payload), &next) != nil {
+		return legacyPayload == payload
+	}
+	if old.Body != next.Body {
+		return false
+	}
+	// Site names may themselves contain the separator. Match the known raw
+	// announcement title as a suffix instead of guessing where the site ends.
+	// An untitled legacy message cannot be distinguished from a site's name;
+	// prefer suppressing ambiguous historical content over replaying it.
+	return announcementTitle == "" || strings.HasSuffix(old.Title, " | "+announcementTitle)
 }
 
 // ListPendingNotifications returns outbox entries that are ready to send.

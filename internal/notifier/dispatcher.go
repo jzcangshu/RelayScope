@@ -223,7 +223,7 @@ func (d *Dispatcher) Enqueue(announcements []store.SiteAnnouncement) {
 			}
 			msg := renderMessage(ann)
 			payload, _ := json.Marshal(msg)
-			if err := d.store.EnqueueNotification(ctx, sub.ID, ann.ID, ann.SiteID, sub.Platform, sub.Target, string(payload)); err != nil {
+			if err := d.store.EnqueueNotification(ctx, sub.ID, ann.ID, ann.SiteID, sub.Platform, sub.Target, string(payload), ann.ContentHash, ann.Title); err != nil {
 				if !strings.Contains(err.Error(), "UNIQUE") {
 					d.logger.Error("enqueue notification failed", "sub_id", sub.ID, "ann_id", ann.ID, "error", err)
 				}

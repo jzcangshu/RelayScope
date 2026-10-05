@@ -177,7 +177,7 @@ func (p *Provider) ParseCallback(r *http.Request) (string, payment.Status, error
 // Refund 调平台退款接口对已支付订单全额退回。
 func (p *Provider) Refund(ctx context.Context, ref string, amountLDC int64) error {
 	if !p.Configured() {
-		return errors.New("epay provider is not configured")
+		return payment.ErrNotConfigured
 	}
 	form := url.Values{
 		"pid":          {p.cfg.PID},
@@ -197,14 +197,17 @@ func (p *Provider) Refund(ctx context.Context, ref string, amountLDC int64) erro
 	}
 	defer response.Body.Close()
 	var payload struct {
-		Code int    `json:"code"`
+		Code *int   `json:"code"`
 		Msg  string `json:"msg"`
 	}
 	if err := decodeJSON(response.Body, &payload); err != nil {
 		return err
 	}
-	if payload.Code != 1 {
-		return fmt.Errorf("%w: %s", ErrPaymentFailed, payload.Msg)
+	if response.StatusCode < 200 || response.StatusCode >= 300 || payload.Code == nil {
+		return errors.New("invalid refund response")
+	}
+	if *payload.Code != 1 {
+		return fmt.Errorf("%w: %s", payment.ErrRefundRejected, payload.Msg)
 	}
 	return nil
 }

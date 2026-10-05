@@ -97,3 +97,52 @@ func (s *Store) availableCredit(ctx context.Context, userID int64, period string
 	}
 	return granted - used, nil
 }
+
+// PledgeMonthlyCredit atomically grants/debits credit and records the paid contribution.
+func (s *Store) PledgeMonthlyCredit(ctx context.Context, userID, wishID int64, orderNo string, amount, grant int64, now time.Time) (int64, error) {
+	if userID <= 0 || wishID <= 0 || orderNo == "" || amount <= 0 || amount > 10000 || grant <= 0 {
+		return 0, errors.New("invalid credit pledge")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	// Acquire the write lock before reading eligibility or remaining credit.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO wish_credits(user_id, period, granted_ldc, used_ldc, created_at)
+ SELECT id, ?, ?, 0, ? FROM users WHERE id = ? AND membership_expires_at > ?
+ ON CONFLICT(user_id, period) DO NOTHING`, currentCreditPeriod(now), grant, unixMilli(now), userID, unixMilli(now)); err != nil {
+		return 0, err
+	}
+	var active bool
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(membership_expires_at, 0) > ? FROM users WHERE id = ?`, unixMilli(now), userID).Scan(&active); err != nil {
+		return 0, err
+	}
+	if !active {
+		return 0, tx.Commit()
+	}
+	var status string
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM wish_sites WHERE id = ?`, wishID).Scan(&status); err != nil {
+		return 0, err
+	}
+	if status != WishStatusOpen {
+		return 0, errors.New("该站点不在可助力状态")
+	}
+	var consumed int64
+	if err := tx.QueryRowContext(ctx, `SELECT MIN(granted_ldc - used_ldc, ?) FROM wish_credits WHERE user_id = ? AND period = ?`, amount, userID, currentCreditPeriod(now)).Scan(&consumed); err != nil {
+		return 0, err
+	}
+	if consumed == 0 {
+		return 0, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE wish_credits SET used_ldc = used_ldc + ? WHERE user_id = ? AND period = ?`, consumed, userID, currentCreditPeriod(now)); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO ldc_orders(order_no, user_id, kind, wish_site_id, amount_ldc, funding, status, platform_trade_no, created_at, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'CREDIT', ?, ?)`, orderNo, userID, OrderKindWish, wishID, consumed, OrderFundingCredit, OrderStatusPaid, unixMilli(now), unixMilli(now)); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE wish_sites SET status = ?, resolved_at = ? WHERE id = ? AND status = ? AND target_ldc IS NOT NULL AND target_ldc <= (SELECT COALESCE(SUM(amount_ldc), 0) FROM ldc_orders WHERE wish_site_id = wish_sites.id AND status = ?)`, WishStatusReached, unixMilli(now), wishID, WishStatusOpen, OrderStatusPaid); err != nil {
+		return 0, err
+	}
+	return consumed, tx.Commit()
+}

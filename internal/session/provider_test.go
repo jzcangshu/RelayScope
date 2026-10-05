@@ -575,4 +575,3 @@ func TestExchangeSub2APITokenBuildsStorableCredentials(t *testing.T) {
 		}
 	}
 }
-

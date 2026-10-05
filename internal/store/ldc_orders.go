@@ -139,6 +139,9 @@ func (s *Store) MarkOrderPaid(ctx context.Context, orderNo, platformTradeNo stri
 	order.Days = days
 	switch order.Kind {
 	case OrderKindMembership:
+		if _, err := tx.ExecContext(ctx, `INSERT INTO membership_order_intervals(order_id, user_id, starts_at, ends_at) SELECT ?, id, MAX(COALESCE(membership_expires_at, 0), ?), MAX(COALESCE(membership_expires_at, 0), ?) + ? FROM users WHERE id = ?`, order.ID, unixMilli(now), unixMilli(now), *order.Days*dayMillis, order.UserID); err != nil {
+			return LDCOrder{}, false, err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE users SET membership_expires_at = MAX(COALESCE(membership_expires_at, 0), ?) + ?, updated_at = ? WHERE id = ?`,
 			unixMilli(now), *order.Days*dayMillis, unixMilli(now), order.UserID); err != nil {
 			return LDCOrder{}, false, err
@@ -180,6 +183,12 @@ func (s *Store) MarkOrderRefunded(ctx context.Context, orderID int64) (LDCOrder,
 	if err := tx.QueryRowContext(ctx, `SELECT id, order_no, user_id, kind, wish_site_id, days, amount_ldc, funding, status FROM ldc_orders WHERE id = ?`, orderID).
 		Scan(&order.ID, &order.OrderNo, &order.UserID, &order.Kind, &wishID, &days, &order.AmountLDC, &order.Funding, &order.Status); err != nil {
 		return LDCOrder{}, err
+	}
+	order.WishSiteID, order.Days = wishID, days
+	if order.Kind == OrderKindMembership {
+		if err := revokeOrderMembership(ctx, tx, order, time.Now().UTC()); err != nil {
+			return LDCOrder{}, err
+		}
 	}
 	if wishID != nil {
 		if _, err := tx.ExecContext(ctx, `UPDATE wish_sites SET status = ?, resolved_at = NULL

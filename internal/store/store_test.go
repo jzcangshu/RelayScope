@@ -1431,7 +1431,7 @@ func TestUpdateSubscriptionChannelAppliesToAllSitesAndRepointsOutbox(t *testing.
 	if newAnns[0].SiteName != "A" {
 		t.Fatalf("new announcement SiteName = %q, want A", newAnns[0].SiteName)
 	}
-	if err := dbStore.EnqueueNotification(ctx, 1, newAnns[0].ID, siteA.ID, "telegram", "old-chat-id", "{}"); err != nil {
+	if err := dbStore.EnqueueNotification(ctx, 1, newAnns[0].ID, siteA.ID, "telegram", "old-chat-id", "{}", newAnns[0].ContentHash, newAnns[0].Title); err != nil {
 		t.Fatal(err)
 	}
 

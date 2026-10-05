@@ -96,7 +96,12 @@ func NewHandler(options Options) (http.Handler, error) {
 			}
 		})
 		mux.HandleFunc("GET /api/v1/auth/linuxdo/callback", func(writer http.ResponseWriter, request *http.Request) {
-			user, err := options.LinuxDO.Callback(request.Context(), request.URL.Query().Get("code"), request.URL.Query().Get("state"))
+			browserState := ""
+			if cookie, err := request.Cookie("relayscope_oauth_state"); err == nil {
+				browserState = cookie.Value
+			}
+			http.SetCookie(writer, options.LinuxDO.StateCookie("", -1))
+			user, err := options.LinuxDO.Callback(request.Context(), request.URL.Query().Get("code"), request.URL.Query().Get("state"), browserState)
 			if err != nil {
 				writeError(writer, http.StatusBadRequest, "登录失败")
 				return
@@ -106,7 +111,7 @@ func NewHandler(options Options) (http.Handler, error) {
 				writeError(writer, http.StatusInternalServerError, "创建登录会话失败")
 				return
 			}
-			http.SetCookie(writer, &http.Cookie{Name: "relayscope_user", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: request.TLS != nil, Expires: expires})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_user", Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: options.LinuxDO.SecureCookies() || request.TLS != nil, Expires: expires})
 			http.Redirect(writer, request, "/", http.StatusFound)
 		})
 		mux.HandleFunc("GET /api/v1/auth/me", func(writer http.ResponseWriter, request *http.Request) {
@@ -126,7 +131,7 @@ func NewHandler(options Options) (http.Handler, error) {
 			if cookie, err := request.Cookie("relayscope_user"); err == nil {
 				options.LinuxDO.Logout(cookie.Value)
 			}
-			http.SetCookie(writer, &http.Cookie{Name: "relayscope_user", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: request.TLS != nil})
+			http.SetCookie(writer, &http.Cookie{Name: "relayscope_user", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: options.LinuxDO.SecureCookies() || request.TLS != nil})
 			writeJSON(writer, map[string]string{"status": "ok"})
 		})
 		mux.HandleFunc("POST /api/v1/feedback", func(writer http.ResponseWriter, request *http.Request) {

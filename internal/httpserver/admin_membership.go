@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -243,24 +244,55 @@ func registerAdminMembershipRoutes(mux *http.ServeMux, options Options) {
 			Platform *bool `json:"platform"`
 		}
 		_ = json.NewDecoder(http.MaxBytesReader(writer, request.Body, 4<<10)).Decode(&payload)
+		if err := options.Store.ValidateOrderRefund(request.Context(), id); err != nil {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
 		callPlatform := payload.Platform == nil || *payload.Platform
-		if callPlatform && options.Payment.Configured() {
-			target, err := options.Store.GetOrder(request.Context(), id)
-			if err != nil || target.Status != store.OrderStatusPaid {
-				writeError(writer, http.StatusBadRequest, "订单不存在或不在可退款状态")
+		target, err := options.Store.GetOrder(request.Context(), id)
+		if err != nil {
+			writeError(writer, http.StatusBadRequest, "订单不存在")
+			return
+		}
+		if callPlatform && target.Funding != store.OrderFundingCredit {
+			if !options.Payment.Configured() {
+				writeError(writer, http.StatusBadRequest, "支付通道未配置；确认已退款后可仅登记本地状态")
+				return
+			}
+			if err := options.Store.ClaimPlatformRefund(request.Context(), id); err != nil {
+				writeError(writer, http.StatusConflict, err.Error())
 				return
 			}
 			ref := target.PlatformTradeNo
 			if ref == "" {
 				ref = target.OrderNo
 			}
-			if err := options.Payment.Refund(request.Context(), ref, target.AmountLDC); err != nil {
-				if !errors.Is(err, payment.ErrNotConfigured) {
-					writeError(writer, http.StatusBadGateway, "平台退款失败："+err.Error())
-					return
+			refundErr := options.Payment.Refund(request.Context(), ref, target.AmountLDC)
+			result := "succeeded"
+			if refundErr != nil {
+				result = "uncertain"
+				if errors.Is(refundErr, payment.ErrRefundRejected) || errors.Is(refundErr, payment.ErrNotConfigured) {
+					result = "rejected"
 				}
 			}
+			// A client disconnect must not discard the result of a money transfer.
+			resultCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			saveErr := options.Store.RecordPlatformRefundResult(resultCtx, id, result)
+			cancel()
+			if saveErr != nil {
+				writeError(writer, http.StatusInternalServerError, "退款结果记录失败；请核对平台结果，勿重复发起退款")
+				return
+			}
+			if refundErr != nil {
+				message := "平台退款结果不明，已阻止重复请求；请核对平台，确认已退款后仅登记本地状态"
+				if result == "rejected" {
+					message = "平台拒绝退款，可处理原因后重试"
+				}
+				writeError(writer, http.StatusBadGateway, message)
+				return
+			}
 		}
+
 		order, err := options.Store.MarkOrderRefunded(request.Context(), id)
 		if err != nil {
 			writeError(writer, http.StatusBadRequest, err.Error())

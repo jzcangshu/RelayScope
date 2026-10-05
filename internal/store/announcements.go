@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -59,17 +60,20 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 		if externalID == "" {
 			continue
 		}
-		hash := contentHash(ann.Content, ann.AnnType, ann.Extra)
+		ann.Title = strings.TrimSpace(ann.Title)
+		ann.AnnType = defaultAnnType(ann.AnnType)
+		ann.Extra = strings.TrimSpace(ann.Extra)
+		hash := contentHash(ann.Title, ann.Content, ann.AnnType, ann.Extra)
 		publishedMs := unixMilli(ann.PublishedAt)
 		if publishedMs == 0 {
 			publishedMs = nowMs
 		}
 
-		var existingHash string
+		var old AnnouncementInput
 		var existingID int64
 		err := tx.QueryRowContext(ctx,
-			`SELECT id, content_hash FROM site_announcements WHERE site_id = ? AND external_id = ?`,
-			siteID, externalID).Scan(&existingID, &existingHash)
+			`SELECT id, title, content, ann_type, extra FROM site_announcements WHERE site_id = ? AND external_id = ?`,
+			siteID, externalID).Scan(&existingID, &old.Title, &old.Content, &old.AnnType, &old.Extra)
 
 		if err == sql.ErrNoRows {
 			res, insertErr := tx.ExecContext(ctx,
@@ -82,6 +86,9 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 				return nil, fmt.Errorf("insert announcement %s: %w", externalID, insertErr)
 			}
 			id, _ := res.LastInsertId()
+			if _, err := rememberAnnouncementVersion(ctx, tx, id, hash); err != nil {
+				return nil, err
+			}
 			if backfill {
 				continue
 			}
@@ -96,6 +103,15 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 		} else if err != nil {
 			return nil, fmt.Errorf("query announcement %s: %w", externalID, err)
 		} else {
+			// Seed the stored baseline before comparing after an upgrade. A hash
+			// format change must never turn existing announcements into news.
+			if _, err := rememberAnnouncementVersion(ctx, tx, existingID, contentHash(strings.TrimSpace(old.Title), old.Content, defaultAnnType(old.AnnType), strings.TrimSpace(old.Extra))); err != nil {
+				return nil, err
+			}
+			unseen, err := rememberAnnouncementVersion(ctx, tx, existingID, hash)
+			if err != nil {
+				return nil, err
+			}
 			_, updateErr := tx.ExecContext(ctx,
 				`UPDATE site_announcements SET title = ?, content = ?, ann_type = ?, extra = ?, content_hash = ?, last_seen_at = ?, removed_at = NULL
 				 WHERE id = ?`,
@@ -105,7 +121,7 @@ func (store *Store) ApplyAnnouncements(ctx context.Context, siteID int64, anns [
 			if updateErr != nil {
 				return nil, fmt.Errorf("update announcement %s: %w", externalID, updateErr)
 			}
-			if existingHash != hash {
+			if unseen && !backfill {
 				news = append(news, SiteAnnouncement{
 					ID: existingID, SiteID: siteID, SiteName: siteName, ExternalID: externalID,
 					Title: strings.TrimSpace(ann.Title), Content: ann.Content,
@@ -282,8 +298,18 @@ func scanAllAnnouncements(rows *sql.Rows) ([]SiteAnnouncement, error) {
 	return items, rows.Err()
 }
 
-func contentHash(content, annType, extra string) string {
-	h := sha256.Sum256([]byte(content + "|" + annType + "|" + extra))
+func rememberAnnouncementVersion(ctx context.Context, tx *sql.Tx, id int64, hash string) (bool, error) {
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO announcement_versions (announcement_id, content_hash) VALUES (?, ?)`, id, hash)
+	if err != nil {
+		return false, fmt.Errorf("remember announcement version: %w", err)
+	}
+	count, err := result.RowsAffected()
+	return count > 0, err
+}
+
+func contentHash(title, content, annType, extra string) string {
+	encoded, _ := json.Marshal([]string{title, content, annType, extra})
+	h := sha256.Sum256(encoded)
 	return hex.EncodeToString(h[:])
 }
 

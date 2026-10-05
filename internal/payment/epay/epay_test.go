@@ -3,6 +3,7 @@ package epay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -114,5 +115,29 @@ func TestQueryInterpretsPlatformStatus(t *testing.T) {
 	}
 	if status, _ := provider.Query(context.Background(), "LD-WAIT"); status != payment.StatusPending {
 		t.Fatal("status 0 must map to pending")
+	}
+}
+
+func TestRefundDistinguishesRejectionFromUnknownOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name, body        string
+		status            int
+		rejected, success bool
+	}{
+		{"success", `{"code":1}`, 200, false, true},
+		{"rejected", `{"code":-1,"msg":"declined"}`, 200, true, false},
+		{"missing code", `{"msg":"unknown"}`, 200, false, false},
+		{"invalid json", `bad`, 200, false, false},
+		{"server error", `{"code":-1}`, 500, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status); w.Write([]byte(tc.body)) }))
+			defer server.Close()
+			p := New(Config{Gateway: server.URL, PID: "001", Key: "SECRET"})
+			err := p.Refund(context.Background(), "trade", 30)
+			if errors.Is(err, payment.ErrRefundRejected) != tc.rejected || (err == nil) != tc.success {
+				t.Fatalf("unexpected result: %v", err)
+			}
+		})
 	}
 }

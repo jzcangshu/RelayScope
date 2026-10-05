@@ -67,7 +67,7 @@ func TestCallbackUpsertsProfileWithTrustLevelAndStartsSession(t *testing.T) {
 	service.mu.Lock()
 	service.states["state-1"] = time.Now().Add(time.Minute)
 	service.mu.Unlock()
-	user, err := service.Callback(context.Background(), "the-code", "state-1")
+	user, err := service.Callback(context.Background(), "the-code", "state-1", "state-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,39 @@ func TestCallbackUpsertsProfileWithTrustLevelAndStartsSession(t *testing.T) {
 
 func TestCallbackRejectsUnknownState(t *testing.T) {
 	service, _ := newFakeConnect(t, map[string]any{})
-	if _, err := service.Callback(context.Background(), "the-code", "bogus"); err == nil {
+	if _, err := service.Callback(context.Background(), "the-code", "bogus", "bogus"); err == nil {
 		t.Fatal("unknown state must be rejected")
+	}
+}
+
+func TestBeginBindsBrowserAndCallbackRejectsMissingBinding(t *testing.T) {
+	service, _ := newFakeConnect(t, map[string]any{})
+	recorder := httptest.NewRecorder()
+	if err := service.Begin(recorder); err != nil {
+		t.Fatal(err)
+	}
+	cookies := recorder.Result().Cookies()
+	if len(cookies) != 1 || !cookies[0].HttpOnly || !cookies[0].Secure || cookies[0].SameSite != http.SameSiteLaxMode || cookies[0].MaxAge != 600 {
+		t.Fatalf("missing safe browser binding: %+v", cookies)
+	}
+}
+
+func TestCallbackRequiresMatchingBrowserWithoutConsumingLegitimateState(t *testing.T) {
+	service, _ := newFakeConnect(t, map[string]any{"id": 42, "username": "tester"})
+	service.states["state-1"] = time.Now().Add(time.Minute)
+	for _, binding := range []string{"", "other-browser"} {
+		if _, err := service.Callback(context.Background(), "the-code", "state-1", binding); err == nil {
+			t.Fatal("unbound callback accepted")
+		}
+	}
+	if _, err := service.Callback(context.Background(), "the-code", "state-1", "state-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Callback(context.Background(), "the-code", "state-1", "state-1"); err == nil {
+		t.Fatal("state replay accepted")
+	}
+	service.states["expired"] = time.Now().Add(-time.Second)
+	if _, err := service.Callback(context.Background(), "the-code", "expired", "expired"); err == nil {
+		t.Fatal("expired state accepted")
 	}
 }

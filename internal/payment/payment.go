@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// ErrRefundRejected means the provider explicitly declined the refund without transferring funds.
+var ErrRefundRejected = errors.New("平台拒绝退款")
+
 var ErrNotConfigured = errors.New("支付通道未配置")
 
 type Status int
