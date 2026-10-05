@@ -80,8 +80,25 @@ func TestAnnouncementVersionMigrationPreservesLegacyQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := sqlDB.Exec(`PRAGMA foreign_keys=OFF`); err != nil {
+		t.Fatal(err)
+	}
+	for i, status := range []string{"pending", "retry", "sent"} {
+		if _, err := sqlDB.Exec(`INSERT INTO notification_outbox(id,subscription_id,announcement_id,site_id,platform,target,payload,status,created_at) VALUES(?,?,1,?,'bark','test','{}',?,1)`, 90+i, 99+i, site.ID, status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sqlDB.Exec(`PRAGMA foreign_keys=ON`); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.migrate(ctx); err != nil {
 		t.Fatal(err)
+	}
+	for i, want := range []string{"cancelled", "cancelled", "sent"} {
+		var status string
+		if err := sqlDB.QueryRow(`SELECT status FROM notification_outbox WHERE id=?`, 90+i).Scan(&status); err != nil || status != want {
+			t.Fatalf("orphan %d=%s err=%v", i, status, err)
+		}
 	}
 	for i, status := range []string{"sent", "retry", "pending", "failed"} {
 		var got string
@@ -100,7 +117,7 @@ func TestAnnouncementVersionMigrationPreservesLegacyQueue(t *testing.T) {
 	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM notification_outbox`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 4 {
+	if count != 7 {
 		t.Fatalf("legacy queue replayed: %d", count)
 	}
 	for i, payload := range []string{
@@ -111,7 +128,7 @@ func TestAnnouncementVersionMigrationPreservesLegacyQueue(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM notification_outbox`).Scan(&count); err != nil || count != 6 {
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM notification_outbox`).Scan(&count); err != nil || count != 9 {
 		t.Fatalf("legacy compatibility suppressed real edits: count=%d err=%v", count, err)
 	}
 	input := AnnouncementInput{ExternalID: "a", Title: "stored", Content: "body"}
@@ -123,6 +140,13 @@ func TestAnnouncementVersionMigrationPreservesLegacyQueue(t *testing.T) {
 	news, err = db.ApplyAnnouncements(ctx, site.ID, []AnnouncementInput{input}, time.Now())
 	if err != nil || len(news) != 1 {
 		t.Fatalf("upgrade suppressed real edit: %v %v", news, err)
+	}
+	if err := db.RecordDelivery(ctx, 200, 1, site.ID, "bark", "delivered", ""); err != nil {
+		t.Fatal(err)
+	}
+	sub, err := db.CreateSubscription(ctx, 1, site.ID, "bark", "new-target", "{}")
+	if err != nil || sub.ID != 201 {
+		t.Fatalf("reused historical ID: %+v err=%v", sub, err)
 	}
 }
 

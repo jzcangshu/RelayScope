@@ -148,6 +148,14 @@ func (d *Dispatcher) dispatch(ctx context.Context) {
 }
 
 func (d *Dispatcher) sendOne(ctx context.Context, sender Sender, entry store.NotificationOutboxEntry) {
+	allowed, err := d.store.NotificationCanSend(ctx, entry.ID)
+	if err != nil {
+		d.logger.Error("check notification subscription failed", "id", entry.ID, "error", err)
+		return
+	}
+	if !allowed {
+		return
+	}
 	var msg Message
 	if err := json.Unmarshal([]byte(entry.Payload), &msg); err != nil {
 		d.markFailed(ctx, entry.ID, "invalid payload: "+err.Error())

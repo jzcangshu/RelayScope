@@ -27,8 +27,9 @@ func (store *Store) EnqueueNotification(ctx context.Context, subscriptionID, ann
 	}
 	_, err = store.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO notification_outbox (subscription_id, announcement_id, site_id, platform, target, payload, status, created_at, content_version)
-		 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-		subscriptionID, announcementID, siteID, platform, target, payload, unixMilli(time.Now().UTC()), contentVersion)
+		 SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?
+		 WHERE EXISTS (SELECT 1 FROM notification_subscriptions WHERE id = ? AND site_id = ? AND enabled = 1)`,
+		subscriptionID, announcementID, siteID, platform, target, payload, unixMilli(time.Now().UTC()), contentVersion, subscriptionID, siteID)
 	if err != nil {
 		return fmt.Errorf("enqueue notification: %w", err)
 	}
@@ -64,6 +65,7 @@ func (store *Store) ListPendingNotifications(ctx context.Context, limit int) ([]
 		`SELECT id, subscription_id, announcement_id, site_id, platform, target, payload, status, retry_count, next_retry_at, created_at, sent_at
 		 FROM notification_outbox
 		 WHERE (status = 'pending' OR (status = 'retry' AND next_retry_at <= ?))
+		 AND EXISTS (SELECT 1 FROM notification_subscriptions s WHERE s.id = notification_outbox.subscription_id AND s.enabled = 1)
 		 ORDER BY created_at ASC
 		 LIMIT ?`, now, limit)
 	if err != nil {
@@ -90,6 +92,16 @@ func (store *Store) ListPendingNotifications(ctx context.Context, limit int) ([]
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// NotificationCanSend rechecks cancellation after a dispatcher has read a
+// batch. It cannot recall a request that is already in flight to a platform.
+func (store *Store) NotificationCanSend(ctx context.Context, id int64) (bool, error) {
+	var allowed bool
+	err := store.db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM notification_outbox o JOIN notification_subscriptions s ON s.id = o.subscription_id
+		WHERE o.id = ? AND o.status IN ('pending', 'retry') AND s.enabled = 1)`, id).Scan(&allowed)
+	return allowed, err
 }
 
 // MarkNotificationSent marks an outbox entry as successfully sent.
@@ -174,8 +186,11 @@ func (store *Store) DistinctSubscriptionSites(ctx context.Context, userID int64)
 func (store *Store) CreateSubscription(ctx context.Context, userID, siteID int64, platform, target, config string) (NotificationSubscription, error) {
 	now := unixMilli(time.Now().UTC())
 	res, err := store.db.ExecContext(ctx,
-		`INSERT INTO notification_subscriptions (user_id, site_id, platform, target, config, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO notification_subscriptions (id, user_id, site_id, platform, target, config, created_at, updated_at)
+		 VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM (
+		 SELECT id FROM notification_subscriptions UNION ALL
+		 SELECT subscription_id FROM notification_outbox UNION ALL
+		 SELECT subscription_id FROM notification_deliveries)), ?, ?, ?, ?, ?, ?, ?)`,
 		userID, siteID, platform, target, config, now, now)
 	if err != nil {
 		return NotificationSubscription{}, fmt.Errorf("create subscription: %w", err)
@@ -245,7 +260,17 @@ func (store *Store) UpdateSubscriptionChannel(ctx context.Context, userID int64,
 
 // DeleteSubscription removes a subscription (only if owned by the user).
 func (store *Store) DeleteSubscription(ctx context.Context, userID, subscriptionID int64) error {
-	result, err := store.db.ExecContext(ctx,
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete subscription: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE notification_outbox SET status = 'cancelled'
+		WHERE subscription_id = ? AND status IN ('pending', 'retry')
+		AND EXISTS (SELECT 1 FROM notification_subscriptions WHERE id = ? AND user_id = ?)`, subscriptionID, subscriptionID, userID); err != nil {
+		return fmt.Errorf("cancel subscription notifications: %w", err)
+	}
+	result, err := tx.ExecContext(ctx,
 		`DELETE FROM notification_subscriptions WHERE id = ? AND user_id = ?`,
 		subscriptionID, userID)
 	if err != nil {
@@ -254,5 +279,5 @@ func (store *Store) DeleteSubscription(ctx context.Context, userID, subscription
 	if count, _ := result.RowsAffected(); count == 0 {
 		return fmt.Errorf("subscription not found")
 	}
-	return nil
+	return tx.Commit()
 }

@@ -1,7 +1,8 @@
--- Keep every existing outbox ID, payload, delivery state and retry deadline.
+-- Keep every existing outbox ID, payload and retry deadline. Only undeliverable
+-- outstanding messages are cancelled below; sent/failed history is preserved.
 CREATE TABLE notification_outbox_versioned (
     id INTEGER PRIMARY KEY,
-    subscription_id INTEGER NOT NULL REFERENCES notification_subscriptions(id),
+    subscription_id INTEGER NOT NULL,
     announcement_id INTEGER NOT NULL REFERENCES site_announcements(id),
     site_id INTEGER NOT NULL,
     platform TEXT NOT NULL,
@@ -17,6 +18,13 @@ CREATE TABLE notification_outbox_versioned (
 );
 INSERT INTO notification_outbox_versioned
 SELECT *, '' FROM notification_outbox;
+-- Historical databases can contain subscriptions already deleted by older
+-- builds. Preserve their history, but never send their outstanding messages.
+UPDATE notification_outbox_versioned SET status = 'cancelled'
+WHERE status IN ('pending', 'retry') AND NOT EXISTS (
+    SELECT 1 FROM notification_subscriptions s
+    WHERE s.id = notification_outbox_versioned.subscription_id AND s.enabled = 1
+);
 DROP TABLE notification_outbox;
 ALTER TABLE notification_outbox_versioned RENAME TO notification_outbox;
 CREATE INDEX idx_outbox_status ON notification_outbox(status, next_retry_at);
