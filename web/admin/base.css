@@ -1,3 +1,4 @@
+@import url('/assets/ui-tokens.css');
 /* 管理控制台的颜色、排版、控件与无障碍基础，与公开页独立加载。 */
 :root {
   --page: #f5f7fa;
@@ -125,3 +126,9 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+/* Same control and text scale as the public/customize surfaces. */
+
+body { font-size: var(--ui-body); }
+button, input:not([type="checkbox"]):not([type="hidden"]), select, textarea { min-height: var(--control-height); border-radius: var(--control-radius); }
+
+:root, :root[data-theme="dark"] { --accent: var(--ui-accent); --focus: var(--ui-focus); }

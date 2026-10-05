@@ -703,7 +703,8 @@ test('public page wires account, redeem, recharge, wish pool and payment return'
   assert.match(source, /userAction\.addEventListener\('click'/);
   assert.match(source, /window\.addEventListener\('hashchange', applyRoute\)/);
   assert.match(source, /scheduleCloudSave/);
-  assert.match(source, /\/api\/v1\/me\/preferences/);
+  assert.match(source, /preferencesSync\.load\(/);
+  assert.match(source, /preferencesSync\.save\(/);
   assert.match(source, /\/api\/v1\/redeem/);
   assert.match(source, /\/api\/v1\/membership\/recharge/);
   assert.match(source, /\/api\/v1\/me\/wish-credit/);
@@ -779,4 +780,17 @@ test('非会员超额站点显示「已暂停」徽标（与服务端推送暂�
   assert.match(source, /notify-site-paused/);
   assert.match(source, /推送已暂停/);
   assert.match(css, /\.notify-site-channel\.notify-site-paused/);
+});
+
+test('cards keep details as their primary action and announcements in the header', () => {
+  const source = readFileSync(join(__dirname, 'dashboard.js'), 'utf8');
+  const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
+  const start = source.indexOf('function renderCard(card)');
+  const end = source.indexOf('function orderedCards(', start);
+  const cardRenderer = source.slice(start, end);
+  assert.doesNotMatch(cardRenderer, /card-announcement|data-ann-site-id|annButton/);
+  assert.match(source, /element\.addEventListener\('click', \(\) => openDetails\(element\.dataset\.model, element\.dataset\.site\)\)/);
+  assert.match(html, /id="announcement-action"/);
+  assert.doesNotMatch(source, /showSiteAnnouncements|siteAnnouncementRequest|createNotificationView/);
+  assert.doesNotMatch(html, /id="nc-all"/);
 });

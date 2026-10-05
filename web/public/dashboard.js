@@ -1,3 +1,6 @@
+const detailRequest = DashboardState.createLatestRequest(fetch);
+const preferencesSync = PreferencesSync.createPreferencesSync(fetch);
+const subscriptionsAPI = Subscriptions.createSubscriptions(fetch);
 const searchElement = document.querySelector('#search');
 const contentElement = document.querySelector('#content');
 const summaryElement = document.querySelector('#summary');
@@ -73,13 +76,11 @@ let cards = [];
 let historyBuckets = [];
 let historyEnd = Date.now();
 let view = 'model';
-let revision = null;
 let dataReady = false;
 let currentPage = 1;
 let pageSize = 20;
 let announcements = [];
 let announcementSignature = '';
-let sitesWithAnnouncements = new Set(); // siteIds that have recent announcements
 
 // 定制个性化（全部保存在浏览器本地）
 const TAG_COLORS = ['mint', 'blue', 'violet', 'amber', 'rose', 'slate'];
@@ -626,7 +627,6 @@ function buildCards() {
     card.tagNames = cardTagsOf(card.siteName);
     const cardHistory = historyByCard.get(card.key) || [];
     card.hasHistory = cardHistory.length > 0;
-    card.hasAnnouncements = sitesWithAnnouncements.has(card.siteId);
     card.timeline = buildTimeline(cardHistory);
     card.lowestPrice = lowestPrice(card.groups);
     return card;
@@ -705,22 +705,28 @@ function renderFilters(query = '') {
         counts.set(value, (counts.get(value) || 0) + 1);
       }
     }
-    const values = [...new Set(visibleCards.flatMap((card) => (definition.anyOf ? definition.value(card) : [definition.value(card)])))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    const values = [...new Set([...visibleCards.flatMap((card) => (definition.anyOf ? definition.value(card) : [definition.value(card)])), ...selectedFilters[definition.key]])].filter(value => counts.has(value) || selectedFilters[definition.key].has(value)).sort((a, b) => a.localeCompare(b, 'zh-CN'));
     const allSelected = selectedFilters[definition.key].size === 0;
     const options = values.map((value) => {
       const selected = selectedFilters[definition.key].has(value);
       const selectionState = definition.single ? ` role="radio" aria-checked="${selected}"` : ` aria-pressed="${selected}"`;
       if (definition.key === 'tag') {
         const color = tags.get(value)?.color || 'mint';
-        return `<button type="button" class="filter-chip tag-colored ${color}${selected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-value="${escapeHTML(value)}"${selectionState}${counts.has(value) ? '' : ' disabled'}><i aria-hidden="true"></i><span>${escapeHTML(value)}</span><b>${counts.get(value) || 0}</b></button>`;
+        return `<button type="button" class="filter-chip tag-colored ${color}${selected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-value="${escapeHTML(value)}"${selectionState}${counts.has(value) || selected ? '' : ' disabled'}><i aria-hidden="true"></i><span>${escapeHTML(value)}</span><b>${counts.get(value) || 0}</b></button>`;
       }
-      return `<button type="button" class="filter-chip${selected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-value="${escapeHTML(value)}"${selectionState}${counts.has(value) ? '' : ' disabled'}><span>${escapeHTML(value)}</span><b>${counts.get(value) || 0}</b></button>`;
+      return `<button type="button" class="filter-chip${selected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-value="${escapeHTML(value)}"${selectionState}${counts.has(value) || selected ? '' : ' disabled'}><span>${escapeHTML(value)}</span><b>${counts.get(value) || 0}</b></button>`;
     }).join('');
     const groupRole = definition.single ? ' role="radiogroup"' : '';
     const allSelectionState = definition.single ? ` role="radio" aria-checked="${allSelected}"` : ` aria-pressed="${allSelected}"`;
-    return `<section class="filter-section"><h3>${definition.title}</h3><div class="filter-options"${groupRole} aria-label="${definition.title}"><button type="button" class="filter-chip${allSelected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-all="true"${allSelectionState}><span>${definition.allLabel}</span><b>${available.length}</b></button>${options}</div></section>`;
+    return `<section class="filter-section"><h3>${definition.title}</h3>${values.length > 8 ? `<input class="filter-search" type="search" aria-label="搜索${definition.title}" placeholder="搜索${definition.title}">` : ''}<div class="filter-options"${groupRole} aria-label="${definition.title}"><button type="button" class="filter-chip${allSelected ? ' selected' : ''}" data-filter-category="${definition.key}" data-filter-all="true"${allSelectionState}><span>${definition.allLabel}</span><b>${available.length}</b></button>${options}</div></section>`;
   }).join('');
 
+  const selectedCount = Object.values(selectedFilters).reduce((sum, values) => sum + values.size, 0);
+  document.querySelector('#filter-count').textContent = selectedCount ? `已选择 ${selectedCount} 项条件` : '按站点、模型等缩小范围';
+  filterPanel.querySelectorAll('.filter-search').forEach(input => input.addEventListener('input', () => {
+    const query = input.value.trim().toLocaleLowerCase();
+    input.nextElementSibling.querySelectorAll('[data-filter-value]').forEach(button => { button.hidden = !button.dataset.filterValue.toLocaleLowerCase().includes(query); });
+  }));
   filterPanel.querySelectorAll('.filter-chip').forEach((button) => button.addEventListener('click', () => {
     const category = button.dataset.filterCategory;
     updateFilterSelection(category, button.dataset.filterValue, Boolean(button.dataset.filterAll));
@@ -750,12 +756,9 @@ function homepageOf(siteName, url) {
 function renderCard(card) {
   const homeUrl = homepageOf(card.siteName, card.siteUrl);
   const homeLink = homeUrl ? `<a class="site-home-link" href="${escapeHTML(homeUrl)}" target="_blank" rel="noopener" title="访问站点主页"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2h5v5"/><path d="M14 2L7 9"/><path d="M2 5v7a2 2 0 0 0 2 2h7"/></svg></a>` : '';
-  // 生产 CSP 禁止内联事件处理器（default-src 'self'），站点公告入口只能用
-  // data 属性 + 渲染后 addEventListener 绑定（见 render() 的卡片绑定段）。
-  const annAttr = card.hasAnnouncements ? ` data-ann-site-id="${card.siteId}" data-ann-site-name="${escapeHTML(card.siteName)}" title="查看站点公告"` : '';
   const title = view === 'model'
-    ? `<strong class="card-title"><span class="card-title-text"${annAttr}>${escapeHTML(card.siteName)}</span><small class="card-title-text"> · ${escapeHTML(card.rawModelName)}</small>${homeLink}</strong>`
-    : `<strong class="card-title"><span class="card-title-text"${annAttr}>${escapeHTML(card.rawModelName)}</span>${homeLink}</strong>`;
+    ? `<strong class="card-title"><span class="card-title-text">${escapeHTML(card.siteName)}</span><small class="card-title-text"> · ${escapeHTML(card.rawModelName)}</small>${homeLink}</strong>`
+    : `<strong class="card-title"><span class="card-title-text">${escapeHTML(card.rawModelName)}</span>${homeLink}</strong>`;
   const tagsHTML = (card.tagNames || []).length
     ? `<div class="card-tags">${card.tagNames.map((name) => {
       const color = tags.get(name)?.color || 'mint';
@@ -929,39 +932,31 @@ function render() {
       render();
     }));
     element.querySelectorAll('.site-home-link').forEach((link) => link.addEventListener('click', (event) => event.stopPropagation()));
-    element.querySelectorAll('.card-title-text[data-ann-site-id]').forEach((span) => span.addEventListener('click', (event) => {
-      event.stopPropagation();
-      showSiteAnnouncements(Number(span.dataset.annSiteId), span.dataset.annSiteName);
-    }));
   });
   bindPagination();
 }
 
-async function loadRows() {
-  try {
-    const metaResponse = await fetch('/api/v1/meta', { cache: 'no-store' });
-    const meta = metaResponse.ok ? await metaResponse.json() : {};
-    await loadSiteSettings(meta);
-    if (revision !== null && meta.revision === revision) {
-      await loadAnnouncements();
-      return;
-    }
-    revision = meta.revision ?? revision;
-    const announcementsPromise = loadAnnouncements();
-    const dashboardResponse = await fetch('/api/v1/public/dashboard', { cache: 'no-store' });
-    if (!dashboardResponse.ok) throw new Error('dashboard not ready');
-    const dashboard = await dashboardResponse.json();
-    revision = dashboard.revision ?? revision;
+const dashboardPoller = DashboardState.createPoller({
+  fetch,
+  onMeta: async (meta) => { await loadSiteSettings(meta); await loadAnnouncements(); },
+  apply: async (dashboard, meta) => {
     rows = dashboard.rows || [];
     historyBuckets = dashboard.buckets || [];
     historyEnd = meta.serverTime ? Date.parse(meta.serverTime) : Date.now();
-    await announcementsPromise;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    buildCards();
-    dataReady = true;
-    render();
-  } catch {}
-}
+    buildCards(); dataReady = true; render();
+  },
+  onSuccess: () => { document.querySelector('#data-status').hidden = true; },
+  onError: () => {
+    const status = document.querySelector('#data-status');
+    status.hidden = false;
+    status.querySelector('span').textContent = dataReady
+      ? `更新失败，正在显示上次成功读取的数据（${formatTime(historyEnd)}），稍后自动重试。`
+      : '数据暂时无法读取，稍后自动重试。';
+    if (!dataReady) contentElement.innerHTML = '<div class="empty"><h1>暂时无法读取数据</h1><p>请使用上方重试按钮。</p></div>';
+  }
+});
+async function loadRows() { return dashboardPoller.refresh(); }
+document.querySelector('#retry-data').addEventListener('click', loadRows);
 
 /* ---------- 通知中心渲染 ---------- */
 
@@ -997,7 +992,7 @@ function renderAnnouncements() {
     title: item.title,
     content: item.content,
     annType: item.annType || 'default',
-    time: item.publishedAt ? new Date(item.publishedAt) : null,
+    time: item.publishedAt ? new Date(item.publishedAt) : item.time || null,
   }));
   ncAllItems = [...ncSiteAnnouncements].sort((a, b) => {
     if (!a.time && !b.time) return 0;
@@ -1153,7 +1148,6 @@ async function loadAnnouncements() {
     const payload = await response.json();
     siteNotice = payload.notice || null;
     renderNotice();
-    sitesWithAnnouncements = new Set(payload.siteAnnouncementSiteIds || []);
     const next = payload.announcements || [];
     const nextSignature = next.map((item) => `${item.siteId}:${item.failureCode}:${item.reason}`).join('|');
     const changed = nextSignature !== announcementSignature;
@@ -1166,24 +1160,67 @@ async function loadAnnouncements() {
       try { seen = localStorage.getItem('relayscope-announcements-seen') || ''; } catch (_) {}
       if (seen !== nextSignature) {
         try { localStorage.setItem('relayscope-announcements-seen', nextSignature); } catch (_) {}
-        toggleNCSidebar(true);
+        announcementAction?.classList.add('has-unread');
       }
     }
   } catch (_) {}
 }
 
-// Sidebar toggle — 通知面板是 board-shell 的右侧拓展列，开合会带动整页重新居中
-function toggleNCSidebar(show) {
+// Compact screens use an overlay; wide screens reserve a stable column.
+const ncOverlayMedia = matchMedia('(max-width: 1500px)');
+const ncBackdrop = document.querySelector('#nc-backdrop');
+let ncReturnFocus = null;
+function updateNCMode() {
+  DashboardState.updateNotificationPanel({
+    visible: !boardShell.hidden,
+    open: boardShell.classList.contains('nc-open'),
+    compact: ncOverlayMedia.matches,
+    backdrop: ncBackdrop,
+    background: document.querySelector('.board-main'),
+    header: document.querySelector('.topbar'),
+    body: document.body,
+    panel: ncPanel,
+  });
+}
+
+function toggleNCSidebar(show, moveFocus = true) {
   if (!boardShell) return;
   const isOpen = boardShell.classList.contains('nc-open');
   const next = show !== undefined ? show : !isOpen;
+  if (next && !isOpen) ncReturnFocus = document.activeElement;
   boardShell.classList.toggle('nc-open', next);
-  if (ncPanel) ncPanel.inert = !next; // 收起时 0 宽面板不应进入 Tab 顺序
+  if (ncPanel) ncPanel.inert = !next;
   announcementAction?.setAttribute('aria-expanded', next ? 'true' : 'false');
+  updateNCMode();
+  if (next) announcementAction?.classList.remove('has-unread');
+  if (moveFocus && next && !isOpen) ncCloseBtn?.focus();
+  if (!next && isOpen && moveFocus) (ncReturnFocus?.isConnected ? ncReturnFocus : announcementAction)?.focus();
   try { localStorage.setItem('relayscope-nc-open', next ? '1' : '0'); } catch {}
 }
-announcementAction?.addEventListener('click', () => toggleNCSidebar());
+announcementAction?.addEventListener('click', () => {
+  if (boardShell.hidden) { window.location.hash = ''; applyRoute(); toggleNCSidebar(true); }
+  else toggleNCSidebar();
+});
 ncCloseBtn?.addEventListener('click', () => toggleNCSidebar(false));
+ncBackdrop.addEventListener('click', () => toggleNCSidebar(false));
+ncOverlayMedia.addEventListener('change', () => { updateNCMode(); if (!boardShell.hidden && ncOverlayMedia.matches && boardShell.classList.contains('nc-open')) ncCloseBtn.focus(); });
+document.addEventListener('keydown', event => {
+  if (!boardShell.classList.contains('nc-open')) return;
+  if (event.key === 'Escape') { event.preventDefault(); toggleNCSidebar(false); }
+  if (event.key === 'Tab' && ncOverlayMedia.matches) {
+    const items = [...ncPanel.querySelectorAll('button, a[href], input')].filter(el => !el.hidden && !el.disabled && el.getClientRects().length);
+    const first = items[0], last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  }
+});
+const filterToggle = document.querySelector('#filter-toggle');
+filterToggle.addEventListener('click', () => {
+  const expanded = filterToggle.getAttribute('aria-expanded') !== 'true';
+  filterToggle.setAttribute('aria-expanded', String(expanded));
+  document.querySelector('#filter-toggle-label').textContent = expanded ? '收起' : '展开';
+  filterToggle.closest('.filter-sidebar').classList.toggle('filters-expanded', expanded);
+});
 // Subscribe button → jump to customize notify tab
 const ncSubscribeBtn = document.querySelector('#nc-subscribe-btn');
 if (ncSubscribeBtn) {
@@ -1196,9 +1233,9 @@ if (ncSubscribeBtn) {
   });
 }
 // Restore sidebar state
-let ncRestoreOpen = true;
-try { ncRestoreOpen = localStorage.getItem('relayscope-nc-open') !== '0'; } catch {}
-toggleNCSidebar(ncRestoreOpen);
+let ncRestoreOpen = false;
+try { ncRestoreOpen = !ncOverlayMedia.matches && localStorage.getItem('relayscope-nc-open') !== '0'; } catch {}
+toggleNCSidebar(ncRestoreOpen, false);
 
 async function openDetails(rawModel, siteName) {
   detailTitle.textContent = rawModel;
@@ -1208,12 +1245,10 @@ async function openDetails(rawModel, siteName) {
   detailContent.innerHTML = '<p class="muted">正在读取分时健康度…</p>';
   detailDialog.showModal();
   const query = new URLSearchParams({ raw: rawModel, site: siteName, hours: '24' });
-  const response = await fetch(`/api/v1/public/details?${query}`, { cache: 'no-store' });
-  if (!response.ok) {
-    detailContent.innerHTML = '<p class="muted">详情暂不可用。</p>';
-    return;
-  }
-  const payload = await response.json();
+  let payload;
+  try { payload = await detailRequest.run(`/api/v1/public/details?${query}`); }
+  catch { detailContent.innerHTML = '<p class="muted">详情读取失败，请关闭后重试。</p>'; return; }
+  if (!payload || !detailDialog.open) return;
   const buckets = payload.buckets || [];
   const currentGroups = payload.groups || [];
   if (!buckets.length && !currentGroups.length) {
@@ -1265,6 +1300,8 @@ function initializeTheme() {
   applyTheme(preference);
 }
 
+detailDialog.addEventListener('close', () => detailRequest.cancel());
+detailDialog.addEventListener('cancel', () => detailRequest.cancel());
 detailClose.addEventListener('click', () => detailDialog.close());
 // 一键把筛选器改为"仅筛选本站"：清空全部条件后只保留该站点
 detailSiteFilter.addEventListener('click', () => {
@@ -2087,7 +2124,6 @@ document.addEventListener('click', (event) => {
 let currentUser = null;
 let membership = null;
 let cloudSynced = false;
-let cloudSaveTimer = null;
 let siteSettings = { membershipMonthlyPriceLdc: 15, wishDefaultTargetLdc: 30 };
 let siteSettingsLoaded = false;
 let pledgeCreditAvailable = 0;
@@ -2136,6 +2172,7 @@ function renderUserArea() {
 }
 
 async function loadUser() {
+  const previousUserId = currentUser?.id;
   try {
     const response = await fetch('/api/v1/auth/me', { cache: 'no-store' });
     if (!response.ok) {
@@ -2147,6 +2184,7 @@ async function loadUser() {
       membership = identity.membership || null;
     }
   } catch { /* 网络失败：保留现状 */ }
+  if (currentUser?.id !== previousUserId) { preferencesSync.cancel(); cloudSynced = false; }
   renderUserArea();
   updateCustomizeSubtitle();
   renderWishBanner();
@@ -2159,15 +2197,17 @@ async function loadUser() {
 // ---- 定制云同步：本地即时生效，800ms 防抖上云；首次合并云端优先 ----
 function scheduleCloudSave() {
   if (!cloudSynced || !currentUser) return;
-  clearTimeout(cloudSaveTimer);
-  cloudSaveTimer = setTimeout(pushPreferencesToCloud, 800);
+  preferencesSync.schedule(pushPreferencesToCloud);
 }
 
 async function pushPreferencesToCloud() {
   if (!cloudSynced || !currentUser) return;
+  const ownerId = currentUser.id;
   try {
-    const response = await fetch('/api/v1/me/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collectLocalPreferences()) });
-    if (response.status === 403) {
+    await preferencesSync.save(collectLocalPreferences());
+  } catch (error) {
+    if (error.name === 'AbortError' || currentUser?.id !== ownerId) return;
+    if (error.status === 403) {
       cloudSynced = false;
       membership = { expiresAt: membership?.expiresAt || null, active: false };
       renderUserArea();
@@ -2176,15 +2216,16 @@ async function pushPreferencesToCloud() {
       clearAppliedPreferences();
       showToast('会员已过期，定制已暂停生效，数据已保留');
     }
-  } catch { /* 离线：下次修改再试 */ }
+    else showToast('设置已保存在本机，云端同步失败，下次修改会重试', 'error');
+  }
 }
 
 async function syncPreferencesFromCloud() {
-  if (membershipIs() !== 'active') return;
+  if (membershipIs() !== 'active' || !currentUser) return;
+  const ownerId = currentUser.id;
   try {
-    const response = await fetch('/api/v1/me/preferences', { cache: 'no-store' });
-    if (!response.ok) return;
-    const cloud = await response.json();
+    const cloud = await preferencesSync.load();
+    if (currentUser?.id !== ownerId) return;
     const decision = mergePreferences(collectLocalPreferences(), cloud);
     if (decision.source === 'cloud') {
       const cloudHidden = cloud.hidden || {};
@@ -2281,11 +2322,10 @@ async function loadNotifySubscriptions() {
   const uid = currentUser?.id ?? 0;
   if (!currentUser) { notifySubscriptions = []; notifySubscriptionsLoadedFor = uid; return; }
   try {
-    const resp = await fetch('/api/v1/me/notification-subscriptions');
-    if (!resp.ok) { notifySubscriptions = []; notifySubscriptionsLoadedFor = uid; return; }
-    const data = await resp.json();
-    notifySubscriptions = data.subscriptions || [];
-  } catch { notifySubscriptions = []; }
+    const subscriptions = await subscriptionsAPI.list();
+    if ((currentUser?.id ?? 0) !== uid) return;
+    notifySubscriptions = subscriptions;
+  } catch { showToast('订阅列表更新失败，保留已有状态，请重试', 'error'); }
   notifySubscriptionsLoadedFor = uid;
 }
 
@@ -2511,18 +2551,7 @@ async function handleNotifyChannelSave(event) {
   if (!target) { showToast('请先填写推送目标', 'error'); return; }
   button.disabled = true;
   try {
-    const resp = await fetch('/api/v1/me/notification-subscriptions', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform, target })
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      showToast(err.message || '保存渠道失败', 'error');
-      updateNotifyChannelStatus();
-      return;
-    }
-    const data = await resp.json().catch(() => ({}));
+    const data = await subscriptionsAPI.updateChannel({ platform, target });
     notifyChannelDirty = false;
     await loadNotifySubscriptions();
     renderCustomizeNotify();
@@ -2574,14 +2603,14 @@ async function handleNotifySelectAll() {
     let removed = 0;
     for (const sub of [...notifySubscriptions]) {
       try {
-        const resp = await fetch(`/api/v1/me/notification-subscriptions/${sub.id}`, { method: 'DELETE' });
-        if (!resp.ok) break;
+        await subscriptionsAPI.remove(sub.id);
         removed += 1;
       } catch { break; }
     }
     await loadNotifySubscriptions();
     renderCustomizeNotify();
-    if (removed) showToast(`已取消 ${removed} 个订阅`);
+    if (notifySubscriptions.length) showToast(`已取消 ${removed} 个订阅，其余取消失败，请重试`, 'error');
+    else if (removed) showToast(`已取消 ${removed} 个订阅`);
     return;
   }
 
@@ -2606,12 +2635,8 @@ async function handleNotifySelectAll() {
       break;
     }
     try {
-      const resp = await fetch('/api/v1/me/notification-subscriptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteId, platform, target })
-      });
-      if (!resp.ok) { failed = true; break; }
+      await subscriptionsAPI.add({ siteId, platform, target });
+
       subscribed.add(siteId);
       added += 1;
     } catch { failed = true; break; }
@@ -2654,12 +2679,8 @@ async function handleSiteToggle(siteId, checked) {
       }
     }
     try {
-      const resp = await fetch('/api/v1/me/notification-subscriptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteId, platform, target })
-      });
-      if (!resp.ok) { const err = await resp.json().catch(() => ({})); showToast(err.message || '订阅失败', 'error'); renderCustomizeNotify(); return; }
+      await subscriptionsAPI.add({ siteId, platform, target });
+
       showToast(`已订阅 · 推送到 ${platformLabel(platform)}（${maskNotifyTarget(target)}）`, 'success');
       await loadNotifySubscriptions();
       renderCustomizeNotify();
@@ -2668,7 +2689,7 @@ async function handleSiteToggle(siteId, checked) {
     const sub = notifySubscriptions.find(s => s.siteId === siteId);
     if (!sub) return;
     try {
-      await fetch(`/api/v1/me/notification-subscriptions/${sub.id}`, { method: 'DELETE' });
+      await subscriptionsAPI.remove(sub.id);
       showToast('已取消订阅');
       await loadNotifySubscriptions();
       renderCustomizeNotify();
@@ -2751,6 +2772,7 @@ userMenu.addEventListener('click', async (event) => {
     feedbackMessage.dataset.state = '';
     feedbackDialog.showModal();
   } else if (action === 'logout') {
+    preferencesSync.cancel();
     try { await fetch('/api/v1/auth/logout', { method: 'POST' }); } catch { /* 忽略网络错误 */ }
     currentUser = null;
     membership = null;
@@ -2886,6 +2908,7 @@ customizePage.addEventListener('click', (event) => {
 
 // ---- 许愿池页面 ----
 function applyRoute() {
+  if (window.location.hash && boardShell.classList.contains('nc-open')) toggleNCSidebar(false, false);
   const hash = window.location.hash;
   const wishView = hash === '#wishes';
   const customizeView = hash === '#customize';
@@ -3175,30 +3198,3 @@ loadUser().finally(applyRoute);
   if (paidOrder) pollOrderStatus(paidOrder);
 }
 setInterval(loadRows, 60000);
-
-/* ---------- 站点公告 ---------- */
-
-let siteAnnouncementCache = {};
-
-async function showSiteAnnouncements(siteId, siteName) {
-  // Open sidebar filtered to a specific site
-  const titleEl = document.querySelector('.nc-sidebar-title');
-  if (titleEl) titleEl.textContent = siteName;
-  toggleNCSidebar(true);
-  try {
-    const resp = await fetch(`/api/v1/public/site-announcements?site_id=${siteId}&limit=20`);
-    if (!resp.ok) { announcementContent.innerHTML = '<div class="nc-empty"><div class="nc-empty-icon">📭</div><p class="nc-empty-title">加载失败</p></div>'; return; }
-    const data = await resp.json();
-    const anns = (data.announcements || []).map(a => ({
-      type: 'site', siteId, siteName,
-      title: a.title, content: a.content,
-      annType: a.annType || 'default',
-      time: a.publishedAt ? new Date(a.publishedAt) : null,
-    }));
-    const prevItems = ncAllItems;
-    ncAllItems = anns.sort((a, b) => (b.time || 0) - (a.time || 0));
-    ncRange = '30d';
-    renderNotificationCenter();
-    ncAllItems = prevItems;
-  } catch { announcementContent.innerHTML = '<div class="nc-empty"><div class="nc-empty-icon">📭</div><p class="nc-empty-title">加载失败</p></div>'; }
-}

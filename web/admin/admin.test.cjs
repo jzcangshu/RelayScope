@@ -31,6 +31,25 @@ test('admin client wires destructive and filtered workflows to protected API cal
 });
 
 const normalizedScript = script.replace(/\r\n/g, '\n');
+
+test('refund recovery requires confirmation and never calls the payment platform again', async () => {
+  const requests = [];
+  const prompts = [];
+  let approved = false;
+  const submit = Function('window', 'saveRequest', `${declaration('submitOrderRefund')}; return submitOrderRefund;`)(
+    { confirm(message) { prompts.push(message); return approved; } },
+    async (...args) => requests.push(args)
+  );
+  assert.equal(await submit('42', true), false);
+  assert.equal(requests.length, 0);
+  approved = true;
+  assert.equal(await submit('42', true), true);
+  assert.deepEqual(requests[0], ['/api/v1/admin/orders/42/refund', 'POST', { platform: false }]);
+  assert.match(prompts[1], /确认平台已经完成退款/);
+  await submit('43', false);
+  assert.deepEqual(requests[1], ['/api/v1/admin/orders/43/refund', 'POST', { platform: true }]);
+});
+
 function declaration(name) {
   const start = normalizedScript.search(new RegExp(`(?:async )?function ${name}\\(`));
   assert.notEqual(start, -1, `${name} is missing`);

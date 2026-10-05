@@ -56,9 +56,15 @@
             <div class="sort-dropdown" id="sort-dropdown" role="listbox" aria-label="排序方式" hidden></div>
           </div>
         </section>
+        <div id="data-status" class="data-status" role="status" hidden><span></span><button id="retry-data" type="button">重试</button></div>
         <section class="summary" id="summary" aria-live="polite"></section>
         <div class="filter-layout">
           <aside class="filter-sidebar" aria-label="组合筛选">
+            <button id="filter-toggle" type="button" aria-expanded="false" aria-controls="filter-panel">
+              <svg class="filter-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--surface)"/><circle cx="15" cy="17" r="3" fill="var(--surface)"/></svg>
+              <span class="filter-toggle-copy"><strong>筛选条件</strong><span id="filter-count">按站点、模型等缩小范围</span></span>
+              <span class="filter-toggle-action"><span id="filter-toggle-label">展开</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
+            </button>
             <div class="filter-heading"><div><strong>筛选</strong><span>条件可叠加</span></div><button id="clear-filters" type="button">清空</button></div>
             <div id="filter-panel" class="filter-panel"></div>
           </aside>
@@ -67,7 +73,8 @@
           </section>
         </div>
       </div>
-      <aside class="nc-sidebar" id="nc-sidebar" aria-label="通知中心">
+      <button id="nc-backdrop" class="nc-backdrop" type="button" tabindex="-1" aria-label="关闭通知" hidden></button>
+<aside class="nc-sidebar" id="nc-sidebar" aria-label="通知中心">
         <div class="nc-sidebar-head">
           <button class="nc-close-btn" id="nc-close-btn" type="button" title="收起通知栏" aria-label="收起通知栏"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="m9 18 6-6-6-6"/></svg></button>
           <h2 class="nc-sidebar-title">通知</h2>
@@ -198,6 +205,9 @@
     <span>RelayScope · 中转站健康监测</span>
     <a href="/admin/">管理控制台</a>
   </footer>
+  <script src="/assets/dashboard-state.js" defer></script>
+  <script src="/assets/preferences-sync.js" defer></script>
+  <script src="/assets/subscriptions.js" defer></script>
   <script src="/assets/dashboard.js" defer></script>
 </body>
 </html>

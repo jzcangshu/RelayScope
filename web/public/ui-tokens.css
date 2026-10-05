@@ -1,0 +1,12 @@
+/* Shared scale and interaction semantics; health/status colors remain page-owned. */
+:root {
+  --control-height: 40px;
+  --control-radius: 8px;
+  --panel-radius: 12px;
+  --ui-body: 14px;
+  --ui-small: 12px;
+  --ui-heading: 17px;
+  --ui-accent: #176f63;
+  --ui-focus: #2879c7;
+}
+:root[data-theme="dark"] { --ui-accent: #70c4b0; --ui-focus: #7fb6ef; }

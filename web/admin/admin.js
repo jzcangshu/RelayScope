@@ -915,7 +915,8 @@ function renderOrders() {
       '<td>' + order.amountLdc + '</td>' +
       '<td><span class="chip status-order-' + order.status + '">' + (ORDER_STATUS_LABELS[order.status] || order.status) + '</span></td>' +
       '<td>' + escapeHTML(formatRunTime(order.createdAt)) + '</td>' +
-      '<td>' + (order.status === 'paid' ? '<button type="button" class="btn btn-ghost" data-order-refund="' + order.id + '">退款</button>' : '<span class="muted">—</span>') + '</td>' +
+      '<td>' + (order.status === 'paid' ? '<button type="button" class="btn btn-ghost" data-order-refund="' + order.id + '">退款</button>' +
+        (order.funding === 'credit' ? '' : '<button type="button" class="btn btn-ghost" data-order-refund-local="' + order.id + '" title="仅在已确认平台完成退款后使用，不会再次退钱">登记已退款</button>') : '<span class="muted">—</span>') + '</td>' +
       '</tr>';
   }).join('') : '<tr><td colspan="8"><div class="empty-state"><p>还没有 LDC 订单。</p></div></td></tr>';
 }
@@ -1016,12 +1017,21 @@ $('#wish-admin-list').addEventListener('click', (event) => {
   }
 });
 
+async function submitOrderRefund(orderID, localOnly) {
+  const message = localOnly
+    ? '请确认平台已经完成退款。此操作仅登记本地退款状态，不会再次退钱；会员订单撤销对应剩余时长，许愿助力进度回落。'
+    : '确认发起全额退款？会员订单将撤销该订单尚未使用的时长，保留其他续费和赠送；许愿订单的助力进度会回落。';
+  if (!window.confirm(message)) return false;
+  await saveRequest('/api/v1/admin/orders/' + encodeURIComponent(orderID) + '/refund', 'POST', { platform: !localOnly });
+  return true;
+}
+
 $('#order-list').addEventListener('click', (event) => {
-  const refund = event.target.closest('[data-order-refund]');
+  const refund = event.target.closest('[data-order-refund], [data-order-refund-local]');
   if (!refund) return;
-  if (!window.confirm('确认对该订单发起平台全额退款？退款后许愿进度会同步回落。')) return;
+  const localOnly = refund.hasAttribute('data-order-refund-local');
   runAction(refund, async () => {
-    await saveRequest('/api/v1/admin/orders/' + refund.dataset.orderRefund + '/refund', 'POST', {});
+    if (!await submitOrderRefund(localOnly ? refund.dataset.orderRefundLocal : refund.dataset.orderRefund, localOnly)) return;
     toast('退款已完成登记', 'success');
     await Promise.allSettled([loadOrders(), loadWishesAdmin()]);
   });
