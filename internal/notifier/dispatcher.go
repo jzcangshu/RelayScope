@@ -298,12 +298,36 @@ func renderMessage(ann store.SiteAnnouncement) Message {
 	}
 }
 
-// renewalReminderWindow 会员到期前多久开始发续费提醒（提前 3 天）。
+// renewalReminderWindow 会员到期前多久开始发第一档续费提醒（提前 3 天）。
 const renewalReminderWindow = 72 * time.Hour
 
-// StartRenewalReminders 启动会员续费提醒循环：每次 tick 检查到期前 3 天内、且拥有
-// 活跃推送渠道的会员，向其所有渠道发一次提醒。按 (user_id, 到期时间) 落库去重，
-// 同一有效期绝不重复发送；全部渠道发送失败则下轮重试。
+// expiryDayReminderGrace 到期当天提醒的补发窗口：错过到期日（如整天宕机）后仍可补发一天。
+const expiryDayReminderGrace = 48 * time.Hour
+
+// membershipLocation 判断「到期当天」所用时区：用户均为国内用户，按东八区日历日。
+var membershipLocation = time.FixedZone("UTC+8", 8*3600)
+
+// renewalReminderKinds 返回该候选此刻应发的提醒档位。
+func renewalReminderKinds(candidate store.RenewalReminderCandidate, now time.Time) []string {
+	var kinds []string
+	if candidate.ExpiresAt.After(now) {
+		kinds = append(kinds, store.RenewalReminderKindExpiring)
+	}
+	expiryDayStart := dayStartIn(candidate.ExpiresAt, membershipLocation)
+	if !now.Before(expiryDayStart) && now.Before(expiryDayStart.Add(expiryDayReminderGrace)) {
+		kinds = append(kinds, store.RenewalReminderKindExpiryDay)
+	}
+	return kinds
+}
+
+func dayStartIn(t time.Time, loc *time.Location) time.Time {
+	local := t.In(loc)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+}
+
+// StartRenewalReminders 启动会员续费提醒循环：到期前 3 天内发一次、到期当天再发一次。
+// 每档按 (user_id, 到期时间, 档位) 先落库占位再发送，同一有效期每档绝不重复发送；
+// 全部渠道发送失败则撤销占位，下轮重试。
 func (d *Dispatcher) StartRenewalReminders(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Hour
@@ -328,61 +352,89 @@ func (d *Dispatcher) StartRenewalReminders(ctx context.Context, interval time.Du
 }
 
 func (d *Dispatcher) runRenewalReminders(ctx context.Context) {
-	candidates, err := d.store.ListRenewalReminderCandidates(ctx, time.Now().UTC().Add(renewalReminderWindow))
+	now := time.Now().UTC()
+	// 下界回溯 48h：覆盖到期当天提醒的补发窗口。
+	candidates, err := d.store.ListRenewalReminderCandidates(ctx, now.Add(-expiryDayReminderGrace), now.Add(renewalReminderWindow))
 	if err != nil {
 		d.logger.Warn("list renewal reminder candidates failed", "error", err)
 		return
 	}
 	for _, candidate := range candidates {
-		subs, err := d.store.ListUserSubscriptions(ctx, candidate.UserID)
-		if err != nil {
-			d.logger.Warn("list subscriptions for renewal reminder failed", "user_id", candidate.UserID, "error", err)
-			continue
-		}
-		seen := map[string]struct{}{}
-		sentAny := false
-		for _, sub := range subs {
-			if !sub.Enabled {
-				continue
-			}
-			key := sub.Platform + "|" + sub.Target
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			sender, ok := d.senders[sub.Platform]
-			if !ok {
-				continue
-			}
-			sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			err := sender.Send(sendCtx, sub.Target, d.renewalMessage(candidate))
-			cancel()
-			if err != nil {
-				d.logger.Warn("renewal reminder send failed", "user_id", candidate.UserID, "platform", sub.Platform, "error", err)
-				continue
-			}
-			sentAny = true
-		}
-		if !sentAny {
-			continue
-		}
-		marked, err := d.store.MarkRenewalReminderSent(ctx, candidate.UserID, candidate.ExpiresAt, time.Now().UTC())
-		if err != nil {
-			d.logger.Error("mark renewal reminder sent failed", "user_id", candidate.UserID, "error", err)
-		} else if marked {
-			d.logger.Info("renewal reminder sent", "user_id", candidate.UserID, "expires_at", candidate.ExpiresAt.Format("2006-01-02"))
+		for _, kind := range renewalReminderKinds(candidate, now) {
+			d.sendRenewalReminder(ctx, candidate, kind)
 		}
 	}
 }
 
-func (d *Dispatcher) renewalMessage(candidate store.RenewalReminderCandidate) Message {
-	days := int(time.Until(candidate.ExpiresAt).Hours()/24) + 1
-	if days < 0 {
-		days = 0
+func (d *Dispatcher) sendRenewalReminder(ctx context.Context, candidate store.RenewalReminderCandidate, kind string) {
+	claimed, err := d.store.ClaimRenewalReminder(ctx, candidate.UserID, candidate.ExpiresAt, kind, time.Now().UTC())
+	if err != nil {
+		d.logger.Warn("claim renewal reminder failed", "user_id", candidate.UserID, "kind", kind, "error", err)
+		return
 	}
-	body := fmt.Sprintf("你的会员将于 %s 到期（约剩 %d 天）。到期后定制功能暂停、超出免费额度（3 个站点）的订阅推送将暂停，续费后全部自动恢复。", candidate.ExpiresAt.Format("2006-01-02"), days)
+	if !claimed {
+		return // 该档此前已提醒过
+	}
+	subs, err := d.store.ListUserSubscriptions(ctx, candidate.UserID)
+	if err != nil {
+		d.logger.Warn("list subscriptions for renewal reminder failed", "user_id", candidate.UserID, "error", err)
+		d.releaseRenewalReminder(ctx, candidate, kind)
+		return
+	}
+	seen := map[string]struct{}{}
+	sentAny := false
+	for _, sub := range subs {
+		if !sub.Enabled {
+			continue
+		}
+		key := sub.Platform + "|" + sub.Target
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		sender, ok := d.senders[sub.Platform]
+		if !ok {
+			continue
+		}
+		sendCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		err := sender.Send(sendCtx, sub.Target, d.renewalMessage(candidate, kind))
+		cancel()
+		if err != nil {
+			d.logger.Warn("renewal reminder send failed", "user_id", candidate.UserID, "platform", sub.Platform, "error", err)
+			continue
+		}
+		sentAny = true
+	}
+	if !sentAny {
+		// 一条都没发出去：撤销占位，下一轮重试。
+		d.releaseRenewalReminder(ctx, candidate, kind)
+		return
+	}
+	d.logger.Info("renewal reminder sent", "user_id", candidate.UserID, "kind", kind, "expires_at", candidate.ExpiresAt.Format("2006-01-02"))
+}
+
+func (d *Dispatcher) releaseRenewalReminder(ctx context.Context, candidate store.RenewalReminderCandidate, kind string) {
+	if err := d.store.ReleaseRenewalReminder(ctx, candidate.UserID, candidate.ExpiresAt, kind); err != nil {
+		d.logger.Error("release renewal reminder failed", "user_id", candidate.UserID, "kind", kind, "error", err)
+	}
+}
+
+func (d *Dispatcher) renewalMessage(candidate store.RenewalReminderCandidate, kind string) Message {
+	var body string
+	var title string
+	if kind == store.RenewalReminderKindExpiryDay {
+		title = "⏳ RelayScope 会员今日到期"
+		body = fmt.Sprintf("你的会员今日到期（%s）。到期后定制功能暂停、超出免费额度（3 个站点）的订阅推送将暂停，续费后全部自动恢复。", candidate.ExpiresAt.In(membershipLocation).Format("2006-01-02"))
+	} else {
+		days := int(time.Until(candidate.ExpiresAt).Hours()/24) + 1
+		if days < 0 {
+			days = 0
+		}
+		title = "⏳ RelayScope 会员即将到期"
+		body = fmt.Sprintf("你的会员将于 %s 到期（约剩 %d 天）。到期后定制功能暂停、超出免费额度（3 个站点）的订阅推送将暂停，续费后全部自动恢复。", candidate.ExpiresAt.Format("2006-01-02"), days)
+	}
 	if d.siteURL != "" {
 		body += "\n\n续费入口：" + d.siteURL
 	}
-	return Message{Title: "⏳ RelayScope 会员即将到期", Body: body}
+	return Message{Title: title, Body: body}
 }
