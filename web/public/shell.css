@@ -363,14 +363,9 @@
 .board-main {
   container: dashboard / inline-size;
 }
-.board-shell,
-.board-shell.nc-open {
-  max-width: 1750px;
-  --nc-width: 340px;
-  --nc-gap: 18px;
+.board-shell {
   transition: none;
 }
-body:has(.board-shell:not([hidden])),
 body:has(.board-shell:not([hidden]).nc-open) {
   --page-max: 1798px;
 }
@@ -433,6 +428,9 @@ body:has(.board-shell:not([hidden]).nc-open) {
 }
 .site-home-link:active {
   transform: scale(0.97);
+}
+.announcement-action {
+  position: relative;
 }
 .announcement-action.has-unread::after {
   content: "";
